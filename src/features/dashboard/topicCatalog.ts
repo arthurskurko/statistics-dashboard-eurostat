@@ -74,6 +74,23 @@ export const TOPICS: TopicDefinition[] = [
       'https://ec.europa.eu/eurostat/databrowser/view/migr_imm1ctz/default/table?lang=en',
   },
   {
+    id: 'induced-abortions',
+    title: 'Induced abortions',
+    description: 'Number of legally induced abortions, Estonia compared with the EU aggregate.',
+    datasetCode: 'DEMO_FABORTORD',
+    filters: {
+      freq: 'A',
+      unit: 'NR',
+      age: 'TOTAL',
+      ord_brth: 'TOTAL',
+    },
+    geoValues: ['EE', 'EU27_2020'],
+    decimals: 0,
+    chartVariant: 'line',
+    sourceUrl:
+      'https://ec.europa.eu/eurostat/databrowser/view/DEMO_FABORTORD/default/table?lang=en',
+  },
+  {
     id: 'gdp-per-capita',
     title: 'GDP per capita',
     description:

@@ -15,6 +15,7 @@ A Docker-ready React + TypeScript dashboard that lets you choose a Eurostat topi
 
 - Population (the card now uses two y‑axes when Estonia is plotted against the EU so the smaller line isn’t squashed)
 - Immigration (total flows into Estonia and EU)
+- Induced abortions (legal terminations, Estonia vs EU)
 - Unemployment rate
 - Inflation (HICP annual rate)
 - GDP per capita

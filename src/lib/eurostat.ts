@@ -128,6 +128,13 @@ function formatPeriodLabel(periodCode: string): string {
   return periodCode;
 }
 
+// List of current EU‑27 coding values used for synthesised aggregates.
+// These match the geo codes supplied in the DEMO_FABORTORD dimension above.
+const EU27_CODES = [
+  'BE','BG','CZ','DK','DE','EE','IE','ES','FR','HR','IT','CY','LV','LT','LU',
+  'HU','MT','NL','AT','PL','PT','RO','SI','SK','FI','SE',
+];
+
 function parseSeries(dataset: JsonStatDataset, fallbackLabel: string): { series: DataSeries[]; periods: string[] } {
   const dimensions = getDimensionInfo(dataset);
   const timeDimension = dimensions.find((dimension) => /time/i.test(dimension.id)) ?? dimensions.at(-1);
@@ -187,6 +194,44 @@ function parseSeries(dataset: JsonStatDataset, fallbackLabel: string): { series:
   return { series, periods };
 }
 
+/**
+ * Build an aggregate series summing the specified geo codes from a full dataset.
+ */
+function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label: string): DataSeries {
+  const dimensions = getDimensionInfo(dataset);
+  const timeDimension = dimensions.find((d) => /time/i.test(d.id)) ?? dimensions.at(-1);
+  const geoDimension = dimensions.find((d) => d.id.toLowerCase() === 'geo');
+  if (!timeDimension || !geoDimension) {
+    throw new Error('Cannot build aggregate without time and geo dimensions');
+  }
+
+  const timeIndex = dimensions.findIndex((d) => d.id === timeDimension.id);
+  const geoIndex = dimensions.findIndex((d) => d.id === geoDimension.id);
+
+  const periods = [...timeDimension.codes];
+  const points: DataPoint[] = periods.map((code) => ({
+    periodCode: code,
+    label: formatPeriodLabel(code),
+    sortKey: inferSortKey(code),
+    value: 0,
+  }));
+
+  const values = Array.isArray(dataset.value)
+    ? dataset.value.map((v, i) => [i, v] as const)
+    : Object.entries(dataset.value).map(([i, v]) => [Number(i), v] as const);
+
+  for (const [flatIndex, rawValue] of values) {
+    if (rawValue == null || Number.isNaN(Number(rawValue))) continue;
+    const pos = unravelIndex(flatIndex, dataset.size);
+    const geoCode = geoDimension.codes[pos[geoIndex]];
+    if (!includeCodes.includes(geoCode)) continue;
+    const periodCode = timeDimension.codes[pos[timeIndex]];
+    const pt = points.find((p) => p.periodCode === periodCode);
+    if (pt) pt.value += Number(rawValue);
+  }
+
+  return { id: label, label, points: points.filter((p) => p.value !== 0) };
+}
 export async function fetchTopicData(topicId: string): Promise<TopicData> {
   const topic = TOPIC_MAP[topicId];
 
@@ -202,7 +247,47 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
   }
 
   const dataset = (await response.json()) as JsonStatDataset;
-  const { series, periods } = parseSeries(dataset, topic.title);
+  let { series, periods } = parseSeries(dataset, topic.title);
+
+  // if the topic requests the EU27 aggregate but the response didn't include it
+  // (e.g. many health tables only publish individual countries), fetch the
+  // full dataset without a geo filter and build a synthetic EU series.
+  if (
+    topic.geoValues?.includes('EU27_2020') &&
+    (() => {
+      const idx = dataset.dimension.geo?.category.index;
+      if (!idx) return false;
+      return Array.isArray(idx) ? !idx.includes('EU27_2020') : idx['EU27_2020'] === undefined;
+    })()
+  ) {
+    // ask again without geo restrictions to get all countries
+    const fullUrl = new URL(`${EUROSTAT_BASE}/${topic.datasetCode}`);
+    fullUrl.searchParams.set('lang', 'en');
+    for (const [key, value] of Object.entries(topic.filters)) {
+      const values = Array.isArray(value) ? value : [value];
+      for (const entry of values) {
+        fullUrl.searchParams.append(key, entry);
+      }
+    }
+
+    const fullResponse = await fetch(fullUrl.toString());
+    if (!fullResponse.ok) {
+      throw new Error(`Eurostat request failed with status ${fullResponse.status}.`);
+    }
+    const fullDataset = (await fullResponse.json()) as JsonStatDataset;
+    const fullResult = parseSeries(fullDataset, topic.title);
+
+    // compute aggregate over EU27 member codes
+    const euAggregate = buildAggregate(fullDataset, EU27_CODES, 'European Union - 27 countries (from 2020)');
+    series = fullResult.series.filter((s) => s.id === topic.title || s.id === 'Estonia');
+    // ensure Estonia is included if requested
+    if (!series.find((s) => s.label === 'Estonia')) {
+      const est = fullResult.series.find((s) => s.label === 'Estonia');
+      if (est) series.push(est);
+    }
+    series.push(euAggregate);
+    periods = fullResult.periods;
+  }
 
   if (series.length === 0) {
     // include the request URL to aid debugging if the dataset structure changes
