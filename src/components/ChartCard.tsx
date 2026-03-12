@@ -45,6 +45,11 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     if (!query.data) {
       return undefined;
     }
+    // debug: print period/series info when showing induced abortions
+    if (topicId === 'induced-abortions') {
+      // eslint-disable-next-line no-console
+      console.log('DEBUG induced:', query.data.periods, query.data.series.map(s => ({label: s.label, points: s.points.slice(-3)})));
+    }
 
     // use the full list of periods returned by the query to ensure earlier
     // years appear even if one of the series has no observation for them.
@@ -52,71 +57,86 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
     const twoSeries = query.data.series.length === 2;
 
-    return {
+    const color =
+      topicId === 'induced-abortions'
+        ? query.data.series.map((s) => (s.label === 'Estonia' ? '#00e676' : '#4c9aff'))
+        : undefined;
+
+    const option: any = {
       animationDuration: 400,
       backgroundColor: 'transparent',
-      tooltip: {
-        trigger: 'axis',
-        valueFormatter: (value: number) => formatValue(value, query.data.decimals, query.data.unitSuffix),
+    };
+    if (color) {
+      option.color = color;
+    }
+
+    option.tooltip = {
+      trigger: 'axis',
+      valueFormatter: (value: number) => formatValue(value, query.data.decimals, query.data.unitSuffix),
+    };
+    option.legend = {
+      top: 0,
+      textStyle: {
+        color: '#cbd5e1',
       },
-      legend: {
-        top: 0,
-        textStyle: {
-          color: '#cbd5e1',
+    };
+    option.grid = {
+      left: 16,
+      right: 16,
+      top: 56,
+      bottom: 8,
+      containLabel: true,
+    };
+    option.xAxis = {
+      type: 'category',
+      data: xAxis,
+      axisLabel: {
+        color: '#94a3b8',
+      },
+      axisLine: {
+        lineStyle: {
+          color: 'rgba(148, 163, 184, 0.2)',
         },
       },
-      grid: {
-        left: 16,
-        right: 16,
-        top: 56,
-        bottom: 8,
-        containLabel: true,
-      },
-      xAxis: {
-        type: 'category',
-        data: xAxis,
-        axisLabel: {
-          color: '#94a3b8',
-        },
-        axisLine: {
-          lineStyle: {
-            color: 'rgba(148, 163, 184, 0.2)',
-          },
-        },
-      },
-      yAxis: twoSeries && dualAxis
-        ? [
-            {
-              type: 'value',
-              axisLabel: { color: '#94a3b8' },
-              splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
-            },
-            {
-              type: 'value',
-              axisLabel: { color: '#94a3b8' },
-              splitLine: { show: false },
-            },
-          ]
-        : {
+    };
+    option.yAxis = twoSeries && dualAxis
+      ? [
+          {
             type: 'value',
             axisLabel: { color: '#94a3b8' },
             splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
           },
-      series: query.data.series.map((series, index) => ({
-        name: series.label,
-        type: topic.chartVariant ?? 'line',
-        smooth: true,
-        showSymbol: false,
-        emphasis: { focus: 'series' },
-        areaStyle: index === 0 ? { opacity: 0.12 } : undefined,
-        lineStyle: { width: 3 },
-        yAxisIndex: twoSeries && dualAxis ? index : 0,
-        data: xAxis.map((label) => {
-          const point = series.points.find((item) => item.label === label);
-          return point?.value ?? null;
-        }),
-      })),
-    };
+          {
+            type: 'value',
+            axisLabel: { color: '#94a3b8' },
+            splitLine: { show: false },
+          },
+        ]
+      : {
+          type: 'value',
+          axisLabel: { color: '#94a3b8' },
+          splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
+        };
+    option.series = query.data.series.map((series, index) => ({
+      name: series.label,
+      type: topic.chartVariant ?? 'line',
+      smooth: true,
+      showSymbol: false,
+      emphasis: { focus: 'series' },
+      areaStyle: index === 0 ? { opacity: 0.12 } : undefined,
+      yAxisIndex: twoSeries && dualAxis ? index : 0,
+      data: xAxis.map((label) => {
+        const point = series.points.find((item) => item.label === label);
+        return point?.value ?? null;
+      }),
+      lineStyle: {
+        width: 3,
+        type: series.points.some((p) => p.predicted) ? 'dashed' : 'solid',
+      },
+    }));
+
+    // return the fully built option for useMemo
+    return option;
   }, [query.data, topic.chartVariant, dualAxis]);
 
   const latestValues = useMemo(() => {

@@ -16,6 +16,35 @@ A Docker-ready React + TypeScript dashboard that lets you choose a Eurostat topi
 - Population (the card now uses two y‑axes when Estonia is plotted against the EU so the smaller line isn’t squashed)
 - Immigration (total flows into Estonia and EU)
 - Induced abortions (legal terminations, Estonia vs EU)
+
+
+## Forecasting missing values
+
+Some topics (e.g. abortion counts) may lack the latest EU aggregate because
+not all countries have reported yet.  The app can automatically generate a
+short‑term forecast for any trailing gap using a small Python model.
+
+To enable this feature you need a Python 3 installation and the package
+`statsmodels` (used for forecasting).  The helper script uses only the
+standard library for downloading; no third‑party network libraries are
+required.
+
+Install statsmodels with:
+
+```sh
+pip install statsmodels
+```
+
+A helper script lives in `scripts/forecast.py` and is invoked by the
+frontend when it detects missing periods.  Forecast points are drawn with a
+**dashed line** and are marked `predicted` in the tooltip.
+
+You can run the script manually for debugging:
+
+```sh
+echo '{"history":[100,90,80],"steps":2}' | python scripts/forecast.py
+``` 
+
 - Unemployment rate
 - Inflation (HICP annual rate)
 - GDP per capita
