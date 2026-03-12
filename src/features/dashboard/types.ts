@@ -1,0 +1,48 @@
+export type ChartVariant = 'line' | 'bar';
+
+export type TopicDefinition = {
+  id: string;
+  title: string;
+  description: string;
+  datasetCode: string;
+  filters: Record<string, string | string[]>;
+  geoValues?: string[];
+  unitSuffix?: string;
+  decimals?: number;
+  chartVariant?: ChartVariant;
+  sourceUrl: string;
+};
+
+export type DashboardCard = {
+  id: string;
+  topicId: string;
+  createdAt: number;
+};
+
+export type DataPoint = {
+  label: string;
+  periodCode: string;
+  sortKey: number;
+  value: number;
+};
+
+export type DataSeries = {
+  id: string;
+  label: string;
+  points: DataPoint[];
+};
+
+export type TopicData = {
+  title: string;
+  subtitle: string;
+  unitSuffix?: string;
+  decimals: number;
+  sourceUrl: string;
+  series: DataSeries[];
+  /**
+   * All available period labels (formatted) in the dataset's time dimension.
+   * This list is used as the x‑axis categories so gaps appear for missing
+   * observations instead of simply dropping early years entirely.
+   */
+  periods: string[];
+};

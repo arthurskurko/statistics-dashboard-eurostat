@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/chartcard.tsx","./src/components/emptystate.tsx","./src/components/statchip.tsx","./src/components/topicpicker.tsx","./src/features/dashboard/topiccatalog.ts","./src/features/dashboard/types.ts","./src/hooks/uselocalstorage.ts","./src/lib/eurostat.ts"],"version":"5.7.3"}
