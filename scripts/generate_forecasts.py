@@ -125,12 +125,16 @@ def main():
             last -= 1
         # drop trailing partial years (often a partial current year)
         while last > 0 and history[last] < history[last - 1] * 0.25:
-            history.pop()
             last -= 1
+
+        # Trim the history/periods to the last valid year so we don't keep
+        # placeholder zeros for missing future data.
+        history = history[: last + 1]
+        periods = periods[: last + 1]
 
         # forecast twenty years ahead
         steps = 20
-        preds = forecast(history[: last+1 ], steps)
+        preds = forecast(history, steps)
         preds = [max(0, p) for p in preds]
         if len(preds) > 0 and preds[0] <= 0:
             last_val = history[last] if last >= 0 else 0

@@ -179,10 +179,14 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
     return query.data.series
       .filter((series) => !series.label.includes('(forecast)'))
-      .map((series) => ({
-        label: series.label,
-        point: series.points.at(-1),
-      }))
+      .map((series) => {
+        const nonForecastPoints = series.points.filter((p) => !p.predicted);
+        return {
+          label: series.label,
+          // Prefer the last real point; fallback to last point if none are marked.
+          point: nonForecastPoints.at(-1) ?? series.points.at(-1),
+        };
+      })
       .filter(
         (entry): entry is { label: string; point: DataSeries['points'][number] } => Boolean(entry.point),
       );

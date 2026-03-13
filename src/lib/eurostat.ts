@@ -196,7 +196,7 @@ function parseSeries(dataset: JsonStatDataset, fallbackLabel: string): { series:
     : -1;
 
   // always expose all period codes, sorted by inferred sort key
-  const periods = [...timeDimension.codes]
+  let periods = [...timeDimension.codes]
     .map((code) => ({ code, sortKey: inferSortKey(code) }))
     .sort((a, b) => a.sortKey - b.sortKey)
     .map((entry) => formatPeriodLabel(entry.code));
@@ -237,6 +237,36 @@ function parseSeries(dataset: JsonStatDataset, fallbackLabel: string): { series:
     }))
     .filter((series) => series.points.length > 0);
 
+  // Drop trailing time periods that have no data points for any series. Eurostat
+  // sometimes publishes a time label (e.g. next year) without any values yet.
+  const allPointSortKeys = series.flatMap((s) => s.points.map((p) => p.sortKey));
+  if (allPointSortKeys.length > 0) {
+    const maxSortKey = Math.max(...allPointSortKeys);
+    periods = periods.filter((p) => inferSortKey(p) <= maxSortKey);
+  }
+
+  // Some datasets (notably EU aggregates) can show a partially-reported new year
+  // with a value far below the previous year. Treat these as incomplete and drop
+  // them so they don't anchor the “latest” value or ruin the forecast.
+  for (const s of series) {
+    if (!/european union|eu27/i.test(s.label)) continue;
+    while (s.points.length > 1) {
+      const last = s.points[s.points.length - 1];
+      const prev = s.points[s.points.length - 2];
+      if (last.value === 0) {
+        s.points.pop();
+        continue;
+      }
+      // If the final point is dramatically smaller than the prior year, assume it
+      // is a partial reporting artifact rather than a real drop.
+      if (last.value < prev.value * 0.35) {
+        s.points.pop();
+        continue;
+      }
+      break;
+    }
+  }
+
   return { series, periods };
 }
 
@@ -257,7 +287,7 @@ function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label:
   const periods = [...timeDimension.codes];
 
   // Keep track of how many countries contributed to each period so that we can
-  // avoid emitting zero-valued points when the dataset simply lacks data.
+  // detect partial / incomplete years (where only a few countries have reported).
   const points: Array<{
     periodCode: string;
     label: string;
@@ -289,10 +319,20 @@ function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label:
     }
   }
 
+  // Drop trailing years that are clearly incomplete (few countries reported).
+  const maxCount = Math.max(...points.map((p) => p.count));
+  const minAcceptableCount = Math.max(1, Math.floor(maxCount * 0.7));
+  let lastValid = points.length - 1;
+  while (lastValid >= 0 && points[lastValid].count < minAcceptableCount) {
+    lastValid -= 1;
+  }
+
+  const trimmed = points.slice(0, lastValid + 1);
+
   return {
     id: label,
     label,
-    points: points
+    points: trimmed
       .filter((p) => p.count > 0)
       .map(({ count, ...p }) => p),
   };
@@ -322,6 +362,31 @@ export async function fetchTopicData(topicId: string, options?: { forecastHorizo
       s.points.pop();
     }
   }
+
+  // Sometimes the dataset includes a partial new year (e.g., 2024) where only a few
+  // countries have reported. Treat these as incomplete series, so they don't
+  // become the "latest" value or anchor the forecast.
+  const trimIncomplete = (s: DataSeries) => {
+    if (!/european union|eu27/i.test(s.label)) return;
+
+    while (s.points.length > 1) {
+      const last = s.points[s.points.length - 1];
+      const prev = s.points[s.points.length - 2];
+      if (last.value === 0 || last.value < prev.value * 0.35) {
+        s.points.pop();
+        continue;
+      }
+      break;
+    }
+  };
+
+  for (const s of series) {
+    trimIncomplete(s);
+  }
+
+  // Align x-axis periods with the last available point across all series.
+  const maxSortKey = Math.max(...series.flatMap((s) => s.points.map((p) => p.sortKey)));
+  periods = periods.filter((p) => inferSortKey(p) <= maxSortKey);
 
   // if the topic requests the EU27 aggregate but the response didn't include it
   // (e.g. many health tables only publish individual countries), fetch the
@@ -361,8 +426,31 @@ export async function fetchTopicData(topicId: string, options?: { forecastHorizo
     }
     series.push(euAggregate);
     periods = fullResult.periods;
-  }
 
+    // Trim any trailing incomplete years from series (especially in the EU aggregate).
+    // Eurostat sometimes publishes a new year label before most countries have reported.
+    for (const s of series) {
+      while (s.points.length > 0 && s.points[s.points.length - 1].value === 0) {
+        s.points.pop();
+      }
+
+      if (/european union|eu27/i.test(s.label)) {
+        while (s.points.length > 1) {
+          const last = s.points[s.points.length - 1];
+          const prev = s.points[s.points.length - 2];
+          if (last.value === 0 || last.value < prev.value * 0.35) {
+            s.points.pop();
+            continue;
+          }
+          break;
+        }
+      }
+    }
+
+    // Ensure the x-axis periods do not include years beyond the last available point.
+    const maxSortKey = Math.max(...series.flatMap((s) => s.points.map((p) => p.sortKey)));
+    periods = periods.filter((p) => inferSortKey(p) <= maxSortKey);
+  }
 
 
   const baseSeries = series.filter((s) => !s.label.includes('(forecast)'));
@@ -453,11 +541,25 @@ export async function fetchTopicData(topicId: string, options?: { forecastHorizo
       label.toLowerCase().includes('european union') || label.toLowerCase().includes('eu27');
 
     let forecastValues: number[];
+    const basePoints = base.points.map((p) => ({ periodCode: p.periodCode, value: p.value }));
+
     if (isEu(base.label) && precomputedForecast && precomputedForecast.length > 0) {
       // apply precomputed forecast only to EU series
       forecastValues = precomputedForecast.slice(0, years.length);
+
+      // If the precomputed forecast collapses quickly (often due to a short-term data dip),
+      // fall back to the built-in extrapolation so we don't show a misleading 0/near-zero trend.
+      const lastReal = basePoints[basePoints.length - 1]?.value ?? 0;
+      const firstForecast = forecastValues[0] ?? 0;
+      const dangerouslyLow = firstForecast <= 0 || firstForecast < lastReal * 0.35;
+      const containsZero = forecastValues.some((v) => v <= 0);
+      if (dangerouslyLow || containsZero) {
+        // eslint-disable-next-line no-console
+        console.log('Ignoring precomputed forecast for', topicId, 'because it collapses; using built-in extrapolation instead');
+        forecastValues = computeForecast(basePoints);
+      }
     } else {
-      forecastValues = computeForecast(base.points.map((p) => ({ periodCode: p.periodCode, value: p.value })));
+      forecastValues = computeForecast(basePoints);
     }
 
     // Ensure we always have enough forecast points; if precomputed data is shorter
@@ -502,7 +604,8 @@ export async function fetchTopicData(topicId: string, options?: { forecastHorizo
       series: series.map((s) => ({
         label: s.label,
         lastPoint: s.points.at(-1),
-        points: s.points.slice(-3),
+        length: s.points.length,
+        lastThree: s.points.slice(-3),
       })),
     });
 
