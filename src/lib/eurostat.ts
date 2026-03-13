@@ -125,7 +125,52 @@ function formatPeriodLabel(periodCode: string): string {
     return `${halfYearMatch[1]} H${halfYearMatch[2]}`;
   }
 
+  const quarterlyMatch = periodCode.match(/^(\d{4})-?Q(\d)$/i);
+  if (quarterlyMatch) {
+    return `${quarterlyMatch[1]} Q${quarterlyMatch[2]}`;
+  }
+
   return periodCode;
+}
+
+function getNextPeriodCode(periodCode: string): string | null {
+  const annual = /^\d{4}$/;
+  const monthly = /^(\d{4})M(\d{2})$/;
+  const quarterly = /^(\d{4})-?Q(\d)$/i;
+  const halfYear = /^(\d{4})S(\d)$/i;
+
+  if (annual.test(periodCode)) {
+    return String(Number(periodCode) + 1);
+  }
+
+  const monthlyMatch = periodCode.match(monthly);
+  if (monthlyMatch) {
+    const year = Number(monthlyMatch[1]);
+    const month = Number(monthlyMatch[2]);
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    return `${nextYear}M${String(nextMonth).padStart(2, '0')}`;
+  }
+
+  const quarterlyMatch = periodCode.match(quarterly);
+  if (quarterlyMatch) {
+    const year = Number(quarterlyMatch[1]);
+    const quarter = Number(quarterlyMatch[2]);
+    const nextQuarter = quarter === 4 ? 1 : quarter + 1;
+    const nextYear = quarter === 4 ? year + 1 : year;
+    return `${nextYear}Q${nextQuarter}`;
+  }
+
+  const halfYearMatch = periodCode.match(halfYear);
+  if (halfYearMatch) {
+    const year = Number(halfYearMatch[1]);
+    const half = Number(halfYearMatch[2]);
+    const nextHalf = half === 2 ? 1 : 2;
+    const nextYear = half === 2 ? year + 1 : year;
+    return `${nextYear}S${nextHalf}`;
+  }
+
+  return null;
 }
 
 // List of current EU‑27 coding values used for synthesised aggregates.
@@ -322,6 +367,20 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
 
   const forecastHorizon = 5;
 
+  // Try to load precomputed forecasts from /public/forecasts/<dataset>.json (Python/R output).
+  let precomputedForecast: number[] | null = null;
+  try {
+    const resp = await fetch(`/forecasts/${topic.datasetCode}.json`);
+    if (resp.ok) {
+      const fc = (await resp.json()) as { forecast?: number[] };
+      if (Array.isArray(fc.forecast) && fc.forecast.length > 0) {
+        precomputedForecast = fc.forecast;
+      }
+    }
+  } catch {
+    // ignore and fall back to computed forecast
+  }
+
   // Forecast function: estimate future values from recent year-on-year ratios.
   // This avoids huge spikes/drops when the last two points are anomalous.
   const median = (arr: number[]) => {
@@ -335,7 +394,7 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
   const computeForecast = (points: { periodCode: string; value: number }[]) => {
     if (points.length < 2) return Array(forecastHorizon).fill(points[points.length - 1]?.value ?? 0);
 
-    const recent = points.slice(-4); // use up to last 4 years to smooth
+    const recent = points.slice(-4); // use up to last 4 points to smooth
     const ratios: number[] = [];
     for (let i = 1; i < recent.length; i += 1) {
       const prev = recent[i - 1].value;
@@ -354,26 +413,37 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
     const lastPoint = base.points[base.points.length - 1];
     if (!lastPoint) continue;
 
-    const baseLastYear = Number(lastPoint.periodCode);
-    if (Number.isNaN(baseLastYear)) continue;
-
-    const years = Array.from({ length: forecastHorizon }, (_, idx) => String(baseLastYear + idx + 1));
-    for (const y of years) {
-      if (!periods.includes(y)) periods.push(y);
+    const years: string[] = [];
+    let nextCode = getNextPeriodCode(lastPoint.periodCode);
+    for (let i = 0; i < forecastHorizon; i += 1) {
+      if (!nextCode) break;
+      years.push(nextCode);
+      nextCode = getNextPeriodCode(nextCode);
     }
 
-    const forecastValues = computeForecast(base.points.map((p) => ({ periodCode: p.periodCode, value: p.value })));
+    const yearLabels = years.map((year) => formatPeriodLabel(year));
+    for (const label of yearLabels) {
+      if (!periods.includes(label)) periods.push(label);
+    }
+
+    // Keep the period list sorted and unique.
+    periods = Array.from(new Set(periods)).sort((a, b) => inferSortKey(a) - inferSortKey(b));
+
+    const forecastValues =
+      precomputedForecast && precomputedForecast.length > 0
+        ? precomputedForecast.slice(0, years.length)
+        : computeForecast(base.points.map((p) => ({ periodCode: p.periodCode, value: p.value })));
 
     const points = [
       { ...lastPoint, predicted: true },
       ...years.map((year, idx) => ({
         periodCode: year,
-        label: year,
+        label: yearLabels[idx],
         sortKey: inferSortKey(year),
         value: forecastValues[idx],
         predicted: true,
       })),
-    ];
+    ].sort((a, b) => a.sortKey - b.sortKey);
 
     series.push({
       id: `${base.id}-forecast`,
@@ -391,12 +461,21 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
   }
 
   // debug: show final state for induced abortions (should include forecast year)
-  if (topicId === 'induced-abortions') {
+  if (topicId === 'induced-abortions' || topicId === 'inflation') {
     // eslint-disable-next-line no-console
     console.log('DEBUG fetchTopicData final', {
+      topicId,
       periods,
-      series: series.map((s) => ({ label: s.label, points: s.points.slice(-3) })),
+      series: series.map((s) => ({
+        label: s.label,
+        lastPoint: s.points.at(-1),
+        points: s.points.slice(-3),
+      })),
     });
+
+    // Log which series are considered forecast series
+    // eslint-disable-next-line no-console
+    console.log('DEBUG forecast-series', series.filter((s) => s.label.includes('(forecast)')).map((s) => s.label));
   }
 
   return {

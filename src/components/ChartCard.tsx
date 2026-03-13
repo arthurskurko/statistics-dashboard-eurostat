@@ -39,7 +39,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   // toggle to enable dual‑axis plotting when there are two series; users can
   // switch it on/off via a button in the card header.  Defaults to off so that
   // the existing behaviour remains unless the user explicitly enables it.
-  const [dualAxis, setDualAxis] = React.useState(false);
+  const [dualAxis, setDualAxis] = React.useState(true);
 
   const baseSeries = query.data?.series.filter((s) => !s.label.includes('(forecast)')) ?? [];
   const showDualAxisButton = baseSeries.length === 2;
@@ -100,16 +100,20 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         },
       },
     };
+    const axisColors = baseSeries.map((s) => baseColors.get(s.label) ?? '#4c9aff');
+
     option.yAxis = twoSeries && dualAxis
       ? [
           {
             type: 'value',
-            axisLabel: { color: '#94a3b8' },
+            axisLabel: { color: axisColors[0] ?? '#94a3b8' },
+            axisLine: { lineStyle: { color: axisColors[0] ?? '#94a3b8' } },
             splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
           },
           {
             type: 'value',
-            axisLabel: { color: '#94a3b8' },
+            axisLabel: { color: axisColors[1] ?? '#94a3b8' },
+            axisLine: { lineStyle: { color: axisColors[1] ?? '#94a3b8' } },
             splitLine: { show: false },
           },
         ]
