@@ -32,6 +32,10 @@ export default function App() {
     setCards((currentCards) => [...currentCards, createCard(selectedTopicId)]);
   }
 
+  function addCardForTopicId(topicId: string) {
+    setCards((currentCards) => [...currentCards, createCard(topicId)]);
+  }
+
   function removeCard(cardId: string) {
     setCards((currentCards) => currentCards.filter((card) => card.id !== cardId));
   }
@@ -47,6 +51,7 @@ export default function App() {
           selectedTopicId={selectedTopicId}
           onSelectedTopicIdChange={setSelectedTopicId}
           onAddTopic={addCard}
+          onAddTopicById={addCardForTopicId}
           onClear={clearCards}
           chartCount={cards.length}
         />

@@ -27,13 +27,7 @@ type DimensionInfo = {
 const EUROSTAT_BASE =
   'https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data';
 
-function buildUrl(topicId: string): string {
-  const topic = TOPIC_MAP[topicId];
-
-  if (!topic) {
-    throw new Error(`Unknown topic: ${topicId}`);
-  }
-
+function buildUrlForTopic(topic: { datasetCode: string; filters: Record<string, string | string[]>; geoValues?: string[] }): string {
   const url = new URL(`${EUROSTAT_BASE}/${topic.datasetCode}`);
   url.searchParams.set('lang', 'en');
 
@@ -338,15 +332,24 @@ function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label:
   };
 }
 export async function fetchTopicData(topicId: string, options?: { forecastHorizon?: number }): Promise<TopicData> {
-  const topic = TOPIC_MAP[topicId];
-
-  if (!topic) {
-    throw new Error(`Unknown topic: ${topicId}`);
-  }
-
+  let topic = TOPIC_MAP[topicId];
   const forecastHorizon = options?.forecastHorizon ?? 20;
 
-  const url = buildUrl(topicId);
+  if (!topic) {
+    // Allow fetching by dataset code directly (custom topics).
+    topic = {
+      id: topicId,
+      title: topicId,
+      description: `Eurostat dataset ${topicId}`,
+      datasetCode: topicId,
+      filters: {},
+      geoValues: ['EE', 'EU27_2020'],
+      decimals: 0,
+      sourceUrl: `https://ec.europa.eu/eurostat/databrowser/view/${topicId}/default/table?lang=en`,
+    };
+  }
+
+  const url = buildUrlForTopic(topic);
   const response = await fetch(url);
 
   if (!response.ok) {

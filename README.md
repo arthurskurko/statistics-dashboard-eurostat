@@ -41,6 +41,12 @@ Then generate (or regenerate) the forecast JSON files with:
 npm run generate-forecasts
 ```
 
+You can also build a searchable dataset catalog (used for custom topic discovery) using:
+
+```sh
+npm run generate-catalog
+```
+
 By default the script processes a small built‑in list of datasets
 (abortions, migration, inflation); you can also specify additional
 Eurostat dataset codes on the command line:

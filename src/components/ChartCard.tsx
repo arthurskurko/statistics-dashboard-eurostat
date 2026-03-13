@@ -27,11 +27,17 @@ function formatValue(value: number, decimals: number, unitSuffix?: string) {
 }
 
 export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
-  const topic = TOPIC_MAP[topicId];
+  const topic = TOPIC_MAP[topicId] ?? {
+    id: topicId,
+    title: topicId,
+    description: `Eurostat dataset ${topicId}`,
+    datasetCode: topicId,
+    filters: {},
+    geoValues: ['EE', 'EU27_2020'],
+    decimals: 0,
+    sourceUrl: `https://ec.europa.eu/eurostat/databrowser/view/${topicId}/default/table?lang=en`,
+  };
 
-  if (!topic) {
-    return null;
-  }
   const [forecastHorizon, setForecastHorizon] = useLocalStorage<number>('forecastHorizon', 20);
 
   const query = useQuery({
