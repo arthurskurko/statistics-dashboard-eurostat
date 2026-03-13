@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import ReactECharts from 'echarts-for-react';
 import { fetchTopicData } from '../lib/eurostat';
 import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { DataSeries } from '../features/dashboard/types';
 
 type ChartCardProps = {
@@ -31,9 +32,11 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   if (!topic) {
     return null;
   }
+  const [forecastHorizon, setForecastHorizon] = useLocalStorage<number>('forecastHorizon', 20);
+
   const query = useQuery({
-    queryKey: ['topic-data', topicId],
-    queryFn: () => fetchTopicData(topicId),
+    queryKey: ['topic-data', topicId, forecastHorizon],
+    queryFn: () => fetchTopicData(topicId, { forecastHorizon }),
   });
 
   // toggle to enable dual‑axis plotting when there are two series; users can
@@ -73,13 +76,26 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
     option.tooltip = {
       trigger: 'axis',
-      valueFormatter: (value: number) => formatValue(value, query.data.decimals, query.data.unitSuffix),
+      formatter: (params: any) => {
+        // remove forecast series from tooltip
+        const lines: string[] = [];
+        params.forEach((p: any) => {
+          if (!p.seriesName.includes('(forecast)')) {
+            const val = p.value == null ? 'n/a' : formatValue(p.value, query.data.decimals, query.data.unitSuffix);
+            lines.push(`${p.marker} ${p.seriesName}: ${val}`);
+          }
+        });
+        return lines.join('<br/>');
+      },
     };
     option.legend = {
       top: 0,
       textStyle: {
         color: '#cbd5e1',
       },
+      // only show base (non-forecast) series in legend
+      data: baseSeries.map((s) => s.label),
+      inactiveColor: '#999999',
     };
     option.grid = {
       left: 16,
@@ -190,6 +206,22 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
             >
               {dualAxis ? 'Dual axes: on' : 'Dual axes: off'}
             </button>
+          )}
+          {query.data && (
+            <label className="flex items-center gap-2 rounded-2xl border border-border bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10">
+              <span className="whitespace-nowrap">Forecast:</span>
+              <select
+                value={forecastHorizon}
+                onChange={(e) => setForecastHorizon(Number(e.target.value))}
+                className="rounded-xl bg-slate-900/80 px-2 py-1 text-xs text-white outline-none"
+              >
+                {[5, 10, 20, 30].map((n) => (
+                  <option key={n} value={n}>
+                    {n}y
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
           <button
             type="button"

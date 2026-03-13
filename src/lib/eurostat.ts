@@ -297,12 +297,14 @@ function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label:
       .map(({ count, ...p }) => p),
   };
 }
-export async function fetchTopicData(topicId: string): Promise<TopicData> {
+export async function fetchTopicData(topicId: string, options?: { forecastHorizon?: number }): Promise<TopicData> {
   const topic = TOPIC_MAP[topicId];
 
   if (!topic) {
     throw new Error(`Unknown topic: ${topicId}`);
   }
+
+  const forecastHorizon = options?.forecastHorizon ?? 20;
 
   const url = buildUrl(topicId);
   const response = await fetch(url);
@@ -365,8 +367,6 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
 
   const baseSeries = series.filter((s) => !s.label.includes('(forecast)'));
 
-  const forecastHorizon = 5;
-
   // Try to load precomputed forecasts from /public/forecasts/<dataset>.json (Python/R output).
   let precomputedForecast: number[] | null = null;
   try {
@@ -375,10 +375,17 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
       const fc = (await resp.json()) as { forecast?: number[] };
       if (Array.isArray(fc.forecast) && fc.forecast.length > 0) {
         precomputedForecast = fc.forecast;
+        // eslint-disable-next-line no-console
+        console.log('Using precomputed forecast for', topicId, 'len', precomputedForecast.length);
       }
     }
   } catch {
     // ignore and fall back to computed forecast
+  }
+
+  if (!precomputedForecast) {
+    // eslint-disable-next-line no-console
+    console.log('No precomputed forecast; using built-in extrapolation for', topicId);
   }
 
   // Forecast function: estimate future values from recent year-on-year ratios.
@@ -394,7 +401,8 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
   const computeForecast = (points: { periodCode: string; value: number }[]) => {
     if (points.length < 2) return Array(forecastHorizon).fill(points[points.length - 1]?.value ?? 0);
 
-    const recent = points.slice(-4); // use up to last 4 points to smooth
+    // Use a longer window to reduce the impact of short-term spikes/drops.
+    const recent = points.slice(-8); // use up to last 8 points to smooth
     const ratios: number[] = [];
     for (let i = 1; i < recent.length; i += 1) {
       const prev = recent[i - 1].value;
@@ -402,10 +410,22 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
       if (prev > 0) ratios.push(curr / prev);
     }
 
-    const ratio = clamp(median(ratios.length ? ratios : [1]), 0.7, 1.1);
+    // Use the median year-on-year ratio and dampen it toward 1 to avoid extreme extrapolations.
+    const rawRatio = median(ratios.length ? ratios : [1]);
+    const ratio = 1 + (clamp(rawRatio, 0.7, 1.1) - 1) * 0.5;
 
     const lastValue = recent[recent.length - 1].value;
-    return Array.from({ length: forecastHorizon }, (_, idx) => lastValue * ratio ** (idx + 1));
+    const rawForecast = Array.from({ length: forecastHorizon }, (_, idx) => lastValue * ratio ** (idx + 1));
+
+    // Smoothly ramp from the last observed value into the forecast so the
+    // predicted line doesn't jump abruptly when the first forecast point is
+    // materially different.
+    const rampYears = Math.min(3, forecastHorizon);
+    return rawForecast.map((val, idx) => {
+      if (idx >= rampYears) return val;
+      const t = (idx + 1) / (rampYears + 1);
+      return lastValue + (val - lastValue) * t;
+    });
   };
 
   // Create a forecast series for each real (non-forecast) series.
@@ -429,10 +449,23 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
     // Keep the period list sorted and unique.
     periods = Array.from(new Set(periods)).sort((a, b) => inferSortKey(a) - inferSortKey(b));
 
-    const forecastValues =
-      precomputedForecast && precomputedForecast.length > 0
-        ? precomputedForecast.slice(0, years.length)
-        : computeForecast(base.points.map((p) => ({ periodCode: p.periodCode, value: p.value })));
+    const isEu = (label: string) =>
+      label.toLowerCase().includes('european union') || label.toLowerCase().includes('eu27');
+
+    let forecastValues: number[];
+    if (isEu(base.label) && precomputedForecast && precomputedForecast.length > 0) {
+      // apply precomputed forecast only to EU series
+      forecastValues = precomputedForecast.slice(0, years.length);
+    } else {
+      forecastValues = computeForecast(base.points.map((p) => ({ periodCode: p.periodCode, value: p.value })));
+    }
+
+    // Ensure we always have enough forecast points; if precomputed data is shorter
+    // than the requested horizon, pad with the last available value.
+    if (forecastValues.length < years.length) {
+      const lastVal = forecastValues[forecastValues.length - 1] ?? lastPoint.value;
+      forecastValues = [...forecastValues, ...Array(years.length - forecastValues.length).fill(lastVal)];
+    }
 
     const points = [
       { ...lastPoint, predicted: true },

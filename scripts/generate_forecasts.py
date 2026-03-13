@@ -40,7 +40,7 @@ def fetch_dataset(code, params=""):
         return json.load(resp)
 
 
-def aggregate_eu(dataset):
+def extract_series(dataset, geo_code):
     dims = dataset['dimension']
     time_codes = list(dims['time']['category']['index'].keys())
     geo_codes = list(dims['geo']['category']['index'].keys())
@@ -56,22 +56,31 @@ def aggregate_eu(dataset):
             r //= size
         return pos
 
-    data_map = {}
     ids = dataset['id']
     geo_idx = ids.index('geo')
     time_idx = ids.index('time')
 
+    # If the dataset contains the requested geo code, pull that series directly.
+    if geo_code in geo_codes:
+        series = {}
+        for k, v in (values.items() if isinstance(values, dict) else enumerate(values)):
+            idx = int(k) if isinstance(k, str) else k
+            pos = unravel(idx)
+            if geo_codes[pos[geo_idx]] != geo_code:
+                continue
+            time = time_codes[pos[time_idx]]
+            series[time] = v
+        return time_codes, series
+
+    # Fallback: sum all EU27 members (when the dataset contains individual countries).
+    data_map = {}
     for k, v in (values.items() if isinstance(values, dict) else enumerate(values)):
-        if isinstance(k, str):
-            idx = int(k)
-        else:
-            idx = k
+        idx = int(k) if isinstance(k, str) else k
         pos = unravel(idx)
         geo = geo_codes[pos[geo_idx]]
         time = time_codes[pos[time_idx]]
         data_map.setdefault(geo, {})[time] = v
 
-    # sum over EU27 for each time
     eu_series = {}
     for t in time_codes:
         eu_series[t] = sum(data_map.get(g, {}).get(t, 0) for g in EU27)
@@ -82,7 +91,13 @@ def main():
     out_dir = os.path.join('public', 'forecasts')
     os.makedirs(out_dir, exist_ok=True)
 
-    codes = ['DEMO_FABORTORD', 'migr_imm1ctz']
+    # datasets to precompute forecasts for; add additional codes as needed.
+    # CLI arguments may supply extra dataset codes as well.
+    codes = ['DEMO_FABORTORD', 'migr_imm1ctz', 'prc_hicp_manr']
+    if len(sys.argv) > 1:
+        # allow user to specify specific datasets on the command line
+        codes = sys.argv[1:]
+
     for code in codes:
         # configure parameters for API call; always include both geos when
         # forecasting EU/Estonia pairs to keep payload small.
@@ -102,8 +117,9 @@ def main():
             continue
 
         # build history from the EU series in the filtered dataset
-        periods, eu_series = aggregate_eu(dataset)
-        history = [eu_series[p] for p in periods]
+        periods, eu_series = extract_series(dataset, 'EU27_2020')
+        history = [eu_series.get(p, 0) for p in periods]
+
         last = len(history) - 1
         while last >= 0 and history[last] == 0:
             last -= 1
@@ -112,8 +128,8 @@ def main():
             history.pop()
             last -= 1
 
-        # forecast five years ahead
-        steps = 5
+        # forecast twenty years ahead
+        steps = 20
         preds = forecast(history[: last+1 ], steps)
         preds = [max(0, p) for p in preds]
         if len(preds) > 0 and preds[0] <= 0:
