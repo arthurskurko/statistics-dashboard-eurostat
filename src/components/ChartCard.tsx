@@ -6,6 +6,35 @@ import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { DataSeries } from '../features/dashboard/types';
 
+const FRIENDLY_DIMENSION_LABELS: Record<string, string> = {
+  sex: 'Sex',
+  age: 'Age',
+  unit: 'Unit',
+  freq: 'Frequency',
+  agedef: 'Age definition',
+  c_birth: 'Birth cohort',
+  s_adj: 'Seasonal adjustment',
+  coicop: 'COICOP',
+  ord_brth: 'Order of birth',
+};
+
+function friendlyDimensionLabel(id: string): string {
+  if (FRIENDLY_DIMENSION_LABELS[id]) return FRIENDLY_DIMENSION_LABELS[id];
+  return id
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function findDimensionValueLabel(
+  dimensions: Array<{ id: string; values: Array<{ code: string; label: string }> }>,
+  dimId: string,
+  code: string,
+): string {
+  const dim = dimensions.find((d) => d.id === dimId);
+  if (!dim) return code;
+  return dim.values.find((v) => v.code === code)?.label ?? code;
+}
+
 type ChartCardProps = {
   cardId: string;
   topicId: string;
@@ -39,10 +68,32 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   };
 
   const [forecastHorizon, setForecastHorizon] = useLocalStorage<number>('forecastHorizon', 20);
+  const [dimensionFilters, setDimensionFilters] = React.useState<Record<string, string>>({});
+  const [availableDimensions, setAvailableDimensions] = React.useState<
+    Array<{ id: string; label: string; values: Array<{ code: string; label: string }> }>
+  >([]);
+  const [seriesDimension, setSeriesDimension] = React.useState<string>('');
+
+  // Reset any custom dimension filters when the selected topic changes.
+  React.useEffect(() => {
+    setDimensionFilters({});
+    setAvailableDimensions([]);
+    setSeriesDimension('');
+  }, [topicId]);
 
   const query = useQuery({
-    queryKey: ['topic-data', topicId, forecastHorizon],
-    queryFn: () => fetchTopicData(topicId, { forecastHorizon }),
+    queryKey: ['topic-data', topicId, forecastHorizon, dimensionFilters, seriesDimension],
+    queryFn: () => {
+      const activeFilters = Object.fromEntries(
+        Object.entries(dimensionFilters).filter(([key]) => key !== seriesDimension),
+      );
+
+      return fetchTopicData(topicId, {
+        forecastHorizon,
+        filters: activeFilters,
+        seriesDimension,
+      });
+    },
   });
 
   // toggle to enable dual‑axis plotting when there are two series; users can
@@ -52,6 +103,30 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
   const baseSeries = query.data?.series.filter((s) => !s.label.includes('(forecast)')) ?? [];
   const showDualAxisButton = baseSeries.length === 2;
+
+  React.useEffect(() => {
+    if (!query.data?.extraDimensions) return;
+
+    if (availableDimensions.length === 0) {
+      setAvailableDimensions(query.data.extraDimensions);
+    }
+
+    // Reset filters if the available dimensions change (e.g., because the selected topic changed).
+    // We don’t auto-select values: users can opt in to applying additional filters.
+    if (
+      Object.keys(dimensionFilters).length > 0 &&
+      !query.data.extraDimensions.some((dim) => Object.keys(dimensionFilters).includes(dim.id))
+    ) {
+      setDimensionFilters({});
+    }
+  }, [query.data, availableDimensions.length, dimensionFilters]);
+
+const activeFilterLabels = useMemo(() => {
+    if (!query.data) return [];
+    return Object.entries(dimensionFilters)
+      .filter(([, value]) => Boolean(value))
+      .map(([key, value]) => findDimensionValueLabel(availableDimensions, key, value));
+  }, [availableDimensions, dimensionFilters, query.data]);
 
   const chartOption = useMemo(() => {
     if (!query.data) {
@@ -74,6 +149,23 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
       ['Estonia', '#00e676'],
       ['European Union - 27 countries (from 2020)', '#4c9aff'],
     ]);
+
+    const palette = ['#00e676', '#4c9aff', '#f97316', '#a855f7', '#facc15', '#ec4899', '#22c55e', '#38bdf8', '#f43f5e'];
+    const colorMap = new Map<string, string>(baseColors);
+
+    // Ensure all base series (excluding forecast versions) have distinct colors.
+    let nextPaletteIndex = 0;
+    query.data.series
+      .map((s) => s.label.replace(/ \(forecast\)$/, ''))
+      .filter((label, index, arr) => arr.indexOf(label) === index)
+      .forEach((baseLabel) => {
+        if (!colorMap.has(baseLabel)) {
+          colorMap.set(baseLabel, palette[nextPaletteIndex % palette.length]);
+          nextPaletteIndex += 1;
+        }
+      });
+
+    const filterSuffix = activeFilterLabels.length > 0 ? ` (${activeFilterLabels.join(', ')})` : '';
 
     const option: any = {
       animationDuration: 400,
@@ -122,7 +214,10 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         },
       },
     };
-    const axisColors = baseSeries.map((s) => baseColors.get(s.label) ?? '#4c9aff');
+const axisColors = baseSeries.map((s) => {
+        const baseLabel = s.label.replace(/ \(forecast\)$/, '');
+        return colorMap.get(baseLabel) ?? '#4c9aff';
+      });
 
     option.yAxis = twoSeries && dualAxis
       ? [
@@ -149,10 +244,10 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
       const baseLabel = series.label.replace(/ \(forecast\)$/, '');
       const baseIndex = baseSeries.findIndex((s) => s.label === baseLabel);
       const yAxisIndex = twoSeries && dualAxis && baseIndex >= 0 ? baseIndex : 0;
-      const seriesColor = baseColors.get(baseLabel) ?? '#4c9aff';
+      const seriesColor = colorMap.get(baseLabel) ?? '#4c9aff';
 
       return {
-        name: series.label,
+        name: `${series.label}${filterSuffix}`,
         type: topic.chartVariant ?? 'line',
         smooth: true,
         showSymbol: false,
@@ -176,19 +271,21 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
     // return the fully built option for useMemo
     return option;
-  }, [query.data, topic.chartVariant, dualAxis, showDualAxisButton]);
+  }, [query.data, topic.chartVariant, dualAxis, showDualAxisButton, activeFilterLabels]);
 
   const latestValues = useMemo(() => {
     if (!query.data) {
       return [];
     }
 
+    const filterSuffix = activeFilterLabels.length > 0 ? ` (${activeFilterLabels.join(', ')})` : '';
+
     return query.data.series
       .filter((series) => !series.label.includes('(forecast)'))
       .map((series) => {
         const nonForecastPoints = series.points.filter((p) => !p.predicted);
         return {
-          label: series.label,
+          label: `${series.label}${filterSuffix}`,
           // Prefer the last real point; fallback to last point if none are marked.
           point: nonForecastPoints.at(-1) ?? series.points.at(-1),
         };
@@ -196,7 +293,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
       .filter(
         (entry): entry is { label: string; point: DataSeries['points'][number] } => Boolean(entry.point),
       );
-  }, [query.data]);
+  }, [query.data, activeFilterLabels]);
 
   const displayTitle = query.data?.title ?? topic.title;
   const displayDescription = query.data?.subtitle ?? topic.description;
@@ -208,6 +305,82 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{topic.datasetCode}</div>
           <h2 className="text-2xl font-semibold tracking-tight text-white">{displayTitle}</h2>
           <p className="max-w-3xl text-sm leading-6 text-slate-300">{displayDescription}</p>
+
+          {(seriesDimension || Object.values(dimensionFilters).some((v) => v)) ? (
+            <p className="mt-2 text-sm text-slate-400">
+              {seriesDimension ? (
+                <span>
+                  Split series by <strong>{friendlyDimensionLabel(seriesDimension)}</strong>.
+                  {Object.values(dimensionFilters).some((v) => v) && ' '}
+                </span>
+              ) : null}
+              {Object.entries(dimensionFilters)
+                .filter(([_, value]) => Boolean(value))
+                .map(([key, value], index) => (
+                  <span key={key}>
+                    {index > 0 && ', '}
+                    <strong>{friendlyDimensionLabel(key)}</strong>: {findDimensionValueLabel(availableDimensions, key, value)}
+                  </span>
+                ))}
+            </p>
+          ) : null}
+
+          {availableDimensions.filter((dim) => dim.values.length > 1).length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-3">
+              <label className="flex flex-col gap-1 text-xs text-slate-200">
+                <span className="text-slate-400">Split series by</span>
+                <div className="flex gap-2">
+                  <select
+                    value={seriesDimension}
+                    onChange={(e) => setSeriesDimension(e.target.value)}
+                    className="h-10 rounded-2xl border border-border bg-slate-950/80 px-3 text-sm text-white outline-none transition focus:border-sky-400"
+                  >
+                    <option value="">(none)</option>
+                    {availableDimensions.map((dim) => (
+                      <option key={dim.id} value={dim.id}>
+                        {friendlyDimensionLabel(dim.id)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSeriesDimension('');
+                      setDimensionFilters({});
+                    }}
+                    className="rounded-2xl border border-border bg-white/5 px-3 text-xs font-medium text-white transition hover:bg-white/10"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </label>
+
+              {availableDimensions
+                .filter((dim) => dim.values.length > 1 && dim.id !== seriesDimension)
+                .map((dim) => (
+                  <label key={dim.id} className="flex flex-col gap-1 text-xs text-slate-200">
+                    <span className="text-slate-400">{friendlyDimensionLabel(dim.id)}</span>
+                    <select
+                      value={dimensionFilters[dim.id] ?? ''}
+                      onChange={(e) =>
+                        setDimensionFilters((prev) => ({
+                          ...prev,
+                          [dim.id]: e.target.value,
+                        }))
+                      }
+                      className="h-10 rounded-2xl border border-border bg-slate-950/80 px-3 text-sm text-white outline-none transition focus:border-sky-400"
+                    >
+                      <option value="">(all)</option>
+                      {dim.values.map((value) => (
+                        <option key={value.code} value={value.code}>
+                          {value.label ?? value.code}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2">

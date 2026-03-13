@@ -27,7 +27,7 @@ type DimensionInfo = {
 const EUROSTAT_BASE =
   'https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data';
 
-function buildUrlForTopic(topic: { datasetCode: string; filters: Record<string, string | string[]>; geoValues?: string[] }): string {
+function buildUrlForTopic(topic: { datasetCode: string; filters: Record<string, string | string[]>; geoValues?: string[]; extraFilters?: Record<string, string> }): string {
   const url = new URL(`${EUROSTAT_BASE}/${topic.datasetCode}`);
   url.searchParams.set('lang', 'en');
 
@@ -36,6 +36,11 @@ function buildUrlForTopic(topic: { datasetCode: string; filters: Record<string, 
     for (const entry of values) {
       url.searchParams.append(key, entry);
     }
+  }
+
+  for (const [key, value] of Object.entries(topic.extraFilters ?? {})) {
+    if (!value) continue;
+    url.searchParams.set(key, value);
   }
 
   for (const geo of topic.geoValues ?? []) {
@@ -175,10 +180,20 @@ const EU27_CODES = [
 ];
 
 
-function parseSeries(dataset: JsonStatDataset, fallbackLabel: string): { series: DataSeries[]; periods: string[] } {
+function parseSeries(
+  dataset: JsonStatDataset,
+  fallbackLabel: string,
+  seriesDimensionId?: string,
+): { series: DataSeries[]; periods: string[] } {
   const dimensions = getDimensionInfo(dataset);
   const timeDimension = dimensions.find((dimension) => /time/i.test(dimension.id)) ?? dimensions.at(-1);
   const geoDimension = dimensions.find((dimension) => dimension.id.toLowerCase() === 'geo');
+  const seriesDimension = seriesDimensionId
+    ? dimensions.find((dimension) => dimension.id === seriesDimensionId)
+    : undefined;
+  const seriesDimensionIndex = seriesDimension
+    ? dimensions.findIndex((dimension) => dimension.id === seriesDimension.id)
+    : -1;
 
   if (!timeDimension) {
     throw new Error('Eurostat response did not include a time dimension.');
@@ -208,8 +223,16 @@ function parseSeries(dataset: JsonStatDataset, fallbackLabel: string): { series:
 
     const positions = unravelIndex(flatIndex, dataset.size);
     const periodCode = timeDimension.codes[positions[timeDimensionIndex]];
+
     const geoCode = geoDimension ? geoDimension.codes[positions[geoDimensionIndex]] : fallbackLabel;
     const geoLabel = geoDimension?.labels[geoCode] ?? fallbackLabel;
+
+    let seriesLabel = geoLabel;
+    if (seriesDimension && seriesDimensionIndex >= 0) {
+      const seriesCode = seriesDimension.codes[positions[seriesDimensionIndex]];
+      const seriesValueLabel = seriesDimension.labels[seriesCode] ?? seriesCode;
+      seriesLabel = `${geoLabel} — ${seriesValueLabel}`;
+    }
 
     const point: DataPoint = {
       periodCode,
@@ -218,9 +241,9 @@ function parseSeries(dataset: JsonStatDataset, fallbackLabel: string): { series:
       value: Number(rawValue),
     };
 
-    const existing = seriesMap.get(geoLabel) ?? [];
+    const existing = seriesMap.get(seriesLabel) ?? [];
     existing.push(point);
-    seriesMap.set(geoLabel, existing);
+    seriesMap.set(seriesLabel, existing);
   }
 
   const series = [...seriesMap.entries()]
@@ -331,9 +354,13 @@ function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label:
       .map(({ count, ...p }) => p),
   };
 }
-export async function fetchTopicData(topicId: string, options?: { forecastHorizon?: number }): Promise<TopicData> {
+export async function fetchTopicData(
+  topicId: string,
+  options?: { forecastHorizon?: number; filters?: Record<string, string>; seriesDimension?: string },
+): Promise<TopicData> {
   let topic = TOPIC_MAP[topicId];
   const forecastHorizon = options?.forecastHorizon ?? 20;
+  const extraFilters = options?.filters ?? {};
 
   if (!topic) {
     // Allow fetching by dataset code directly (custom topics).
@@ -366,7 +393,10 @@ export async function fetchTopicData(topicId: string, options?: { forecastHorizo
     };
   }
 
-  const url = buildUrlForTopic(topic);
+  const url = buildUrlForTopic({
+    ...topic,
+    extraFilters,
+  });
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -374,7 +404,23 @@ export async function fetchTopicData(topicId: string, options?: { forecastHorizo
   }
 
   const dataset = (await response.json()) as JsonStatDataset;
-  let { series, periods } = parseSeries(dataset, topic.title);
+  let { series, periods } = parseSeries(dataset, topic.title, options?.seriesDimension);
+
+  const extraDimensions = (() => {
+    const dimensions = getDimensionInfo(dataset);
+    const timeDimension = dimensions.find((d) => /time/i.test(d.id)) ?? dimensions.at(-1);
+    const geoDimension = dimensions.find((d) => d.id.toLowerCase() === 'geo');
+
+    const extra = dimensions
+      .filter((d) => d.id !== timeDimension?.id && d.id !== geoDimension?.id)
+      .map((d) => ({
+        id: d.id,
+        label: d.id,
+        values: d.codes.map((code) => ({ code, label: d.labels[code] ?? code })),
+      }));
+
+    return extra.length > 0 ? extra : undefined;
+  })();
 
   // Trim trailing zero values (often used as a placeholder for missing future data).
   for (const s of series) {
@@ -434,7 +480,7 @@ export async function fetchTopicData(topicId: string, options?: { forecastHorizo
       throw new Error(`Eurostat request failed with status ${fullResponse.status}.`);
     }
     const fullDataset = (await fullResponse.json()) as JsonStatDataset;
-    const fullResult = parseSeries(fullDataset, topic.title);
+    const fullResult = parseSeries(fullDataset, topic.title, options?.seriesDimension);
 
     // compute aggregate over EU27 member codes
     const euAggregate = buildAggregate(fullDataset, EU27_CODES, 'European Union - 27 countries (from 2020)');
@@ -642,5 +688,6 @@ export async function fetchTopicData(topicId: string, options?: { forecastHorizo
     sourceUrl: topic.sourceUrl,
     series,
     periods,
+    extraDimensions,
   };
 }

@@ -47,4 +47,14 @@ export type TopicData = {
    * observations instead of simply dropping early years entirely.
    */
   periods: string[];
+  /**
+   * If the dataset includes dimensions beyond `geo` and `time`, this lists
+   * the other dimensions and their available values so the UI can let the
+   * user choose how to slice the data.
+   */
+  extraDimensions?: Array<{
+    id: string;
+    label: string;
+    values: Array<{ code: string; label: string }>;
+  }>;
 };
