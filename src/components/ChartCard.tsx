@@ -41,6 +41,9 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   // the existing behaviour remains unless the user explicitly enables it.
   const [dualAxis, setDualAxis] = React.useState(false);
 
+  const baseSeries = query.data?.series.filter((s) => !s.label.includes('(forecast)')) ?? [];
+  const showDualAxisButton = baseSeries.length === 2;
+
   const chartOption = useMemo(() => {
     if (!query.data) {
       return undefined;
@@ -55,20 +58,18 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     // years appear even if one of the series has no observation for them.
     const xAxis = query.data.periods;
 
-    const twoSeries = query.data.series.length === 2;
+    // Only count non-forecast series when deciding if dual axes should be enabled.
+    const twoSeries = showDualAxisButton;
 
-    const color =
-      topicId === 'induced-abortions'
-        ? query.data.series.map((s) => (s.label === 'Estonia' ? '#00e676' : '#4c9aff'))
-        : undefined;
+    const baseColors = new Map<string, string>([
+      ['Estonia', '#00e676'],
+      ['European Union - 27 countries (from 2020)', '#4c9aff'],
+    ]);
 
     const option: any = {
       animationDuration: 400,
       backgroundColor: 'transparent',
     };
-    if (color) {
-      option.color = color;
-    }
 
     option.tooltip = {
       trigger: 'axis',
@@ -117,27 +118,39 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           axisLabel: { color: '#94a3b8' },
           splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
         };
-    option.series = query.data.series.map((series, index) => ({
-      name: series.label,
-      type: topic.chartVariant ?? 'line',
-      smooth: true,
-      showSymbol: false,
-      emphasis: { focus: 'series' },
-      areaStyle: index === 0 ? { opacity: 0.12 } : undefined,
-      yAxisIndex: twoSeries && dualAxis ? index : 0,
-      data: xAxis.map((label) => {
-        const point = series.points.find((item) => item.label === label);
-        return point?.value ?? null;
-      }),
-      lineStyle: {
-        width: 3,
-        type: series.points.some((p) => p.predicted) ? 'dashed' : 'solid',
-      },
-    }));
+    option.series = query.data.series.map((series) => {
+      const isForecast = series.label.includes('(forecast)');
+      const baseLabel = series.label.replace(/ \(forecast\)$/, '');
+      const baseIndex = baseSeries.findIndex((s) => s.label === baseLabel);
+      const yAxisIndex = twoSeries && dualAxis && baseIndex >= 0 ? baseIndex : 0;
+      const seriesColor = baseColors.get(baseLabel) ?? '#4c9aff';
+
+      return {
+        name: series.label,
+        type: topic.chartVariant ?? 'line',
+        smooth: true,
+        showSymbol: false,
+        emphasis: { focus: 'series' },
+        areaStyle: !isForecast && baseSeries[0]?.label === series.label ? { opacity: 0.12 } : undefined,
+        yAxisIndex,
+        data: xAxis.map((label) => {
+          const point = series.points.find((item) => item.label === label);
+          return point?.value ?? null;
+        }),
+        itemStyle: {
+          color: seriesColor,
+        },
+        lineStyle: {
+          width: 3,
+          type: isForecast ? 'dashed' : 'solid',
+          color: seriesColor,
+        },
+      };
+    });
 
     // return the fully built option for useMemo
     return option;
-  }, [query.data, topic.chartVariant, dualAxis]);
+  }, [query.data, topic.chartVariant, dualAxis, showDualAxisButton]);
 
   const latestValues = useMemo(() => {
     if (!query.data) {
@@ -145,6 +158,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     }
 
     return query.data.series
+      .filter((series) => !series.label.includes('(forecast)'))
       .map((series) => ({
         label: series.label,
         point: series.points.at(-1),
@@ -164,7 +178,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          {query.data && query.data.series.length === 2 && (
+          {query.data && showDualAxisButton && (
             <button
               type="button"
               onClick={() => setDualAxis((prev) => !prev)}

@@ -135,6 +135,7 @@ const EU27_CODES = [
   'HU','MT','NL','AT','PL','PT','RO','SI','SK','FI','SE',
 ];
 
+
 function parseSeries(dataset: JsonStatDataset, fallbackLabel: string): { series: DataSeries[]; periods: string[] } {
   const dimensions = getDimensionInfo(dataset);
   const timeDimension = dimensions.find((dimension) => /time/i.test(dimension.id)) ?? dimensions.at(-1);
@@ -209,11 +210,21 @@ function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label:
   const geoIndex = dimensions.findIndex((d) => d.id === geoDimension.id);
 
   const periods = [...timeDimension.codes];
-  const points: DataPoint[] = periods.map((code) => ({
+
+  // Keep track of how many countries contributed to each period so that we can
+  // avoid emitting zero-valued points when the dataset simply lacks data.
+  const points: Array<{
+    periodCode: string;
+    label: string;
+    sortKey: number;
+    value: number;
+    count: number;
+  }> = periods.map((code) => ({
     periodCode: code,
     label: formatPeriodLabel(code),
     sortKey: inferSortKey(code),
     value: 0,
+    count: 0,
   }));
 
   const values = Array.isArray(dataset.value)
@@ -227,10 +238,19 @@ function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label:
     if (!includeCodes.includes(geoCode)) continue;
     const periodCode = timeDimension.codes[pos[timeIndex]];
     const pt = points.find((p) => p.periodCode === periodCode);
-    if (pt) pt.value += Number(rawValue);
+    if (pt) {
+      pt.value += Number(rawValue);
+      pt.count += 1;
+    }
   }
 
-  return { id: label, label, points: points.filter((p) => p.value !== 0) };
+  return {
+    id: label,
+    label,
+    points: points
+      .filter((p) => p.count > 0)
+      .map(({ count, ...p }) => p),
+  };
 }
 export async function fetchTopicData(topicId: string): Promise<TopicData> {
   const topic = TOPIC_MAP[topicId];
@@ -248,6 +268,13 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
 
   const dataset = (await response.json()) as JsonStatDataset;
   let { series, periods } = parseSeries(dataset, topic.title);
+
+  // Trim trailing zero values (often used as a placeholder for missing future data).
+  for (const s of series) {
+    while (s.points.length > 0 && s.points[s.points.length - 1].value === 0) {
+      s.points.pop();
+    }
+  }
 
   // if the topic requests the EU27 aggregate but the response didn't include it
   // (e.g. many health tables only publish individual countries), fetch the
@@ -289,122 +316,70 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
     periods = fullResult.periods;
   }
 
-  // after we have final series/periods (including any synthetic EU) append
-  // predictions from precomputed JSON files.
-  try {
-    const url = `/forecasts/${topic.datasetCode}.json`;
-    const resp = await fetch(url);
 
-    if (!resp.ok) {
-      console.warn('forecast fetch not ok', url, resp.status);
-    } else {
-      const contentType = resp.headers.get('content-type') || '';
-      if (!/application\/json/.test(contentType)) {
-        console.warn('forecast endpoint did not return JSON, ignoring', url, contentType);
-      } else {
-        // read the body once as text
-        const text = await resp.text();
-        let fc: any | undefined;
-        try {
-          fc = JSON.parse(text);
-        } catch (parseErr) {
-          console.error('forecast JSON parse failed', url, parseErr, 'body:', text.substring(0, 200));
-          fc = undefined;
-        }
 
-        if (fc && Array.isArray(fc.forecast) && fc.forecast.length > 0) {
-          const lastYear = periods.length ? Number(periods[periods.length - 1]) : NaN;
-          if (!Number.isNaN(lastYear)) {
-            const nextYear = String(lastYear + 1);
-            periods = [...periods, nextYear];
-            const euSeries = series.find((s) => s.label.includes('European Union'));
-            if (euSeries) {
-              euSeries.points.push({
-                periodCode: nextYear,
-                label: nextYear,
-                sortKey: inferSortKey(nextYear),
-                value: Number(fc.forecast[0]),
-                predicted: true,
-              });
-            } else {
-              console.warn('no EU series to append forecast to', series.map((s) => s.label));
-            }
-          }
-        } else {
-          console.warn('forecast file missing data or empty', url);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('error fetching forecast', err);
-  }
+  const baseSeries = series.filter((s) => !s.label.includes('(forecast)'));
 
-  // forecast missing tail values for any series using a pre‑computed file
-  for (const s of series) {
-    const missing = periods.filter((p) => !s.points.some((pt) => pt.periodCode === p));
-    if (missing.length === 0) continue;
-    const lastReal = s.points.reduce((a, b) => (a.sortKey > b.sortKey ? a : b));
-    const tail = periods.filter((p) => inferSortKey(p) > lastReal.sortKey);
-    if (tail.length !== missing.length) continue;
+  const forecastHorizon = 5;
 
-    // try loading forecast JSON generated by `npm run generate-forecasts`
-    try {
-      const resp = await fetch(`/forecasts/${topic.datasetCode}.json`);
-      if (resp.ok) {
-        const file = await resp.json();
-        const preds: number[] = file.forecast ?? [];
-        preds.forEach((val, i) => {
-          s.points.push({
-            periodCode: missing[i],
-            label: missing[i],
-            sortKey: inferSortKey(missing[i]),
-            value: val,
-            predicted: true,
-          });
-        });
-        s.points.sort((a, b) => a.sortKey - b.sortKey);
-      }
-    } catch {
-      // ignore, just leave gaps
-    }
-  }
+  // Forecast function: estimate future values from recent year-on-year ratios.
+  // This avoids huge spikes/drops when the last two points are anomalous.
+  const median = (arr: number[]) => {
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  };
 
-  
-  if (
-    topic.geoValues?.includes('EU27_2020') &&
-    (() => {
-      const idx = dataset.dimension.geo?.category.index;
-      if (!idx) return false;
-      return Array.isArray(idx) ? !idx.includes('EU27_2020') : idx['EU27_2020'] === undefined;
-    })()
-  ) {
-    // ask again without geo restrictions to get all countries
-    const fullUrl = new URL(`${EUROSTAT_BASE}/${topic.datasetCode}`);
-    fullUrl.searchParams.set('lang', 'en');
-    for (const [key, value] of Object.entries(topic.filters)) {
-      const values = Array.isArray(value) ? value : [value];
-      for (const entry of values) {
-        fullUrl.searchParams.append(key, entry);
-      }
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+  const computeForecast = (points: { periodCode: string; value: number }[]) => {
+    if (points.length < 2) return Array(forecastHorizon).fill(points[points.length - 1]?.value ?? 0);
+
+    const recent = points.slice(-4); // use up to last 4 years to smooth
+    const ratios: number[] = [];
+    for (let i = 1; i < recent.length; i += 1) {
+      const prev = recent[i - 1].value;
+      const curr = recent[i].value;
+      if (prev > 0) ratios.push(curr / prev);
     }
 
-    const fullResponse = await fetch(fullUrl.toString());
-    if (!fullResponse.ok) {
-      throw new Error(`Eurostat request failed with status ${fullResponse.status}.`);
-    }
-    const fullDataset = (await fullResponse.json()) as JsonStatDataset;
-    const fullResult = parseSeries(fullDataset, topic.title);
+    const ratio = clamp(median(ratios.length ? ratios : [1]), 0.7, 1.1);
 
-    // compute aggregate over EU27 member codes
-    const euAggregate = buildAggregate(fullDataset, EU27_CODES, 'European Union - 27 countries (from 2020)');
-    series = fullResult.series.filter((s) => s.id === topic.title || s.id === 'Estonia');
-    // ensure Estonia is included if requested
-    if (!series.find((s) => s.label === 'Estonia')) {
-      const est = fullResult.series.find((s) => s.label === 'Estonia');
-      if (est) series.push(est);
+    const lastValue = recent[recent.length - 1].value;
+    return Array.from({ length: forecastHorizon }, (_, idx) => lastValue * ratio ** (idx + 1));
+  };
+
+  // Create a forecast series for each real (non-forecast) series.
+  for (const base of baseSeries) {
+    const lastPoint = base.points[base.points.length - 1];
+    if (!lastPoint) continue;
+
+    const baseLastYear = Number(lastPoint.periodCode);
+    if (Number.isNaN(baseLastYear)) continue;
+
+    const years = Array.from({ length: forecastHorizon }, (_, idx) => String(baseLastYear + idx + 1));
+    for (const y of years) {
+      if (!periods.includes(y)) periods.push(y);
     }
-    series.push(euAggregate);
-    periods = fullResult.periods;
+
+    const forecastValues = computeForecast(base.points.map((p) => ({ periodCode: p.periodCode, value: p.value })));
+
+    const points = [
+      { ...lastPoint, predicted: true },
+      ...years.map((year, idx) => ({
+        periodCode: year,
+        label: year,
+        sortKey: inferSortKey(year),
+        value: forecastValues[idx],
+        predicted: true,
+      })),
+    ];
+
+    series.push({
+      id: `${base.id}-forecast`,
+      label: `${base.label} (forecast)`,
+      points,
+    });
   }
 
   if (series.length === 0) {
@@ -413,6 +388,15 @@ export async function fetchTopicData(topicId: string): Promise<TopicData> {
       `Eurostat returned no observations for this topic (url: ${url}). ` +
         'This can happen if the dataset filters are out of date or the API is unavailable.',
     );
+  }
+
+  // debug: show final state for induced abortions (should include forecast year)
+  if (topicId === 'induced-abortions') {
+    // eslint-disable-next-line no-console
+    console.log('DEBUG fetchTopicData final', {
+      periods,
+      series: series.map((s) => ({ label: s.label, points: s.points.slice(-3) })),
+    });
   }
 
   return {
