@@ -337,10 +337,27 @@ export async function fetchTopicData(topicId: string, options?: { forecastHorizo
 
   if (!topic) {
     // Allow fetching by dataset code directly (custom topics).
+    // Try to look up some metadata from the catalog (title/description) when
+    // the topic is not a known predefined one.
+    let catalogTitle: string | undefined;
+    let catalogDescription: string | undefined;
+
+    try {
+      const catalogResp = await fetch('/catalog.json');
+      if (catalogResp.ok) {
+        const catalog = (await catalogResp.json()) as Array<{ code: string; title?: string; description?: string }>;
+        const match = catalog.find((entry) => entry.code?.toLowerCase() === topicId.toLowerCase());
+        catalogTitle = match?.title?.trim();
+        catalogDescription = match?.description?.trim();
+      }
+    } catch {
+      // ignore failures; fall back to dataset id
+    }
+
     topic = {
       id: topicId,
-      title: topicId,
-      description: `Eurostat dataset ${topicId}`,
+      title: catalogTitle ?? topicId,
+      description: catalogDescription ?? `Eurostat dataset ${topicId}`,
       datasetCode: topicId,
       filters: {},
       geoValues: ['EE', 'EU27_2020'],

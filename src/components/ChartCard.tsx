@@ -198,13 +198,16 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
       );
   }, [query.data]);
 
+  const displayTitle = query.data?.title ?? topic.title;
+  const displayDescription = query.data?.subtitle ?? topic.description;
+
   return (
     <article className="flex min-h-[30rem] flex-col rounded-3xl border border-border bg-slate-900/80 p-5 shadow-card backdrop-blur-xl">
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{topic.datasetCode}</div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">{topic.title}</h2>
-          <p className="max-w-3xl text-sm leading-6 text-slate-300">{topic.description}</p>
+          <h2 className="text-2xl font-semibold tracking-tight text-white">{displayTitle}</h2>
+          <p className="max-w-3xl text-sm leading-6 text-slate-300">{displayDescription}</p>
         </div>
 
         <div className="flex items-center gap-2">
