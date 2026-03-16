@@ -1,0 +1,286 @@
+import React from 'react';
+import { friendlyDimensionLabel, findDimensionValueLabel, KNOWN_GEOS, type DimensionOption } from './helpers';
+
+type ChartCardHeaderProps = {
+  topicId: string;
+  datasetCode: string;
+  title: string;
+  description: string;
+  forecastDisabledReason?: string;
+  warning?: string;
+  missingGeos: string[];
+  chartError: string | null;
+  geoValues: string[];
+  geoInput: string;
+  setGeoInput: (value: string) => void;
+  setGeoValues: React.Dispatch<React.SetStateAction<string[]>>;
+  seriesDimension: string;
+  setSeriesDimension: (value: string) => void;
+  dimensionFilters: Record<string, string>;
+  setDimensionFilters: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  availableDimensions: DimensionOption[];
+  queryHasData: boolean;
+  showDualAxisButton: boolean;
+  dualAxis: boolean;
+  setDualAxis: React.Dispatch<React.SetStateAction<boolean>>;
+  forecastHorizon: number;
+  setForecastHorizon: (value: number) => void;
+  onRemove: () => void;
+  isSeriesTruncated: boolean;
+  maxSeriesToRender: number;
+};
+
+export function ChartCardHeader({
+  topicId,
+  datasetCode,
+  title,
+  description,
+  forecastDisabledReason,
+  warning,
+  missingGeos,
+  chartError,
+  geoValues,
+  geoInput,
+  setGeoInput,
+  setGeoValues,
+  seriesDimension,
+  setSeriesDimension,
+  dimensionFilters,
+  setDimensionFilters,
+  availableDimensions,
+  queryHasData,
+  showDualAxisButton,
+  dualAxis,
+  setDualAxis,
+  forecastHorizon,
+  setForecastHorizon,
+  onRemove,
+  isSeriesTruncated,
+  maxSeriesToRender,
+}: ChartCardHeaderProps) {
+  const hasDimensionFilters = Object.values(dimensionFilters).some((value) => Boolean(value));
+
+  return (
+    <div className="mb-5 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{datasetCode}</div>
+          <h2 className="text-2xl font-semibold tracking-tight text-white">{title}</h2>
+          <p className="max-w-3xl text-sm leading-6 text-slate-300">{description}</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {queryHasData && showDualAxisButton ? (
+            <button
+              type="button"
+              onClick={() => setDualAxis((prev) => !prev)}
+              className="rounded-2xl border border-border bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10"
+            >
+              {dualAxis ? 'Dual axes: on' : 'Dual axes: off'}
+            </button>
+          ) : null}
+          {queryHasData ? (
+            <label className="flex items-center gap-2 rounded-2xl border border-border bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10">
+              <span className="whitespace-nowrap">Forecast:</span>
+              <select
+                value={forecastHorizon}
+                onChange={(event) => setForecastHorizon(Number(event.target.value))}
+                className="rounded-xl bg-slate-900/80 px-2 py-1 text-xs text-white outline-none"
+              >
+                {[5, 10, 20, 30].map((value) => (
+                  <option key={value} value={value}>
+                    {value}y
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-2xl border border-border bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+
+      {forecastDisabledReason ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          <strong className="font-semibold">No reliable forecast:</strong> {forecastDisabledReason}
+        </div>
+      ) : null}
+
+      {warning ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          <strong className="font-semibold">Notice:</strong> {warning}
+        </div>
+      ) : null}
+
+      {missingGeos.length > 0 ? (
+        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+          <strong className="font-semibold">No data for:</strong>{' '}
+          {missingGeos
+            .map((code) => KNOWN_GEOS.find((geo) => geo.code === code)?.label ?? code)
+            .join(', ')}
+        </div>
+      ) : null}
+
+      {chartError ? (
+        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+          <strong className="font-semibold">Rendering error:</strong> {chartError}
+        </div>
+      ) : null}
+
+      <div className="flex flex-col gap-2 text-sm text-slate-400">
+        <span>Compare geos:</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {geoValues.map((geo) => (
+            <span key={geo} className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-xs">
+              {geo}
+              <button
+                type="button"
+                onClick={() => setGeoValues((prev) => prev.filter((value) => value !== geo))}
+                className="rounded-full bg-white/20 px-1 text-xs"
+              >
+                x
+              </button>
+            </span>
+          ))}
+          <div className="relative">
+            <input
+              value={geoInput}
+              onChange={(event) => setGeoInput(event.target.value.toUpperCase())}
+              placeholder="Add geo (e.g. DE)"
+              className="h-9 w-40 rounded-2xl border border-border bg-slate-950/80 px-3 text-xs text-white outline-none transition focus:border-sky-400"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  const value = geoInput.trim().toUpperCase();
+                  if (value && !geoValues.includes(value)) {
+                    setGeoValues((prev) => [...prev, value]);
+                  }
+                  setGeoInput('');
+                }
+              }}
+            />
+            {geoInput ? (
+              <div className="absolute left-0 top-full z-10 mt-1 max-h-40 w-full overflow-auto rounded-xl border border-border bg-slate-950/90">
+                {KNOWN_GEOS
+                  .filter(
+                    (geo) =>
+                      geo.code.startsWith(geoInput) ||
+                      geo.label.toLowerCase().includes(geoInput.toLowerCase()),
+                  )
+                  .slice(0, 10)
+                  .map((geo) => (
+                    <button
+                      key={geo.code}
+                      type="button"
+                      className="block w-full px-3 py-2 text-left text-xs text-white hover:bg-white/10"
+                      onClick={() => {
+                        if (!geoValues.includes(geo.code)) {
+                          if (topicId === 'yth_demo_070') {
+                            setGeoValues([geo.code]);
+                          } else {
+                            setGeoValues((prev) => [...prev, geo.code]);
+                          }
+                        }
+                        setGeoInput('');
+                      }}
+                    >
+                      {geo.code} - {geo.label}
+                    </button>
+                  ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {seriesDimension || hasDimensionFilters ? (
+        <p className="text-sm text-slate-400">
+          {seriesDimension ? (
+            <span>
+              Split series by <strong>{friendlyDimensionLabel(seriesDimension)}</strong>.
+              {hasDimensionFilters ? ' ' : ''}
+            </span>
+          ) : null}
+          {Object.entries(dimensionFilters)
+            .filter(([, value]) => Boolean(value))
+            .map(([key, value], index) => (
+              <span key={key}>
+                {index > 0 ? ', ' : ''}
+                <strong>{friendlyDimensionLabel(key)}</strong>:{' '}
+                {findDimensionValueLabel(availableDimensions, key, value)}
+              </span>
+            ))}
+        </p>
+      ) : null}
+
+      {availableDimensions.filter((dim) => dim.values.length > 1).length > 0 ? (
+        <div className="flex flex-wrap gap-3">
+          <label className="flex flex-col gap-1 text-xs text-slate-200">
+            <span className="text-slate-400">Split series by</span>
+            <div className="flex gap-2">
+              <select
+                value={seriesDimension}
+                onChange={(event) => setSeriesDimension(event.target.value)}
+                className="h-10 rounded-2xl border border-border bg-slate-950/80 px-3 text-sm text-white outline-none transition focus:border-sky-400"
+              >
+                <option value="">(none)</option>
+                {availableDimensions.map((dim) => (
+                  <option key={dim.id} value={dim.id}>
+                    {friendlyDimensionLabel(dim.id)}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  setSeriesDimension('');
+                  setDimensionFilters({});
+                }}
+                className="rounded-2xl border border-border bg-white/5 px-3 text-xs font-medium text-white transition hover:bg-white/10"
+              >
+                Reset
+              </button>
+            </div>
+          </label>
+
+          {availableDimensions
+            .filter((dim) => dim.values.length > 1 && dim.id !== seriesDimension)
+            .map((dim) => (
+              <label key={dim.id} className="flex flex-col gap-1 text-xs text-slate-200">
+                <span className="text-slate-400">{friendlyDimensionLabel(dim.id)}</span>
+                <select
+                  value={dimensionFilters[dim.id] ?? ''}
+                  onChange={(event) =>
+                    setDimensionFilters((prev) => ({
+                      ...prev,
+                      [dim.id]: event.target.value,
+                    }))
+                  }
+                  className="h-10 rounded-2xl border border-border bg-slate-950/80 px-3 text-sm text-white outline-none transition focus:border-sky-400"
+                >
+                  <option value="">(all)</option>
+                  {dim.values.map((value) => (
+                    <option key={value.code} value={value.code}>
+                      {value.label ?? value.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+        </div>
+      ) : null}
+
+      {isSeriesTruncated ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          <strong className="font-semibold">Showing first {maxSeriesToRender} series.</strong>{' '}
+          Reduce the number of selected countries or split dimensions to improve performance.
+        </div>
+      ) : null}
+    </div>
+  );
+}
