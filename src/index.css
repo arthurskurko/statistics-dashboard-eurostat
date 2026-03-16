@@ -1,13 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: dark;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    sans-serif;
+  font-family: 'Rajdhani', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #08111f;
+  --bat-bg: #05080f;
+  --bat-panel: rgba(7, 15, 33, 0.88);
+  --bat-border: rgba(85, 150, 255, 0.22);
+  --bat-cyan: #49d2ff;
+  --bat-blue: #6ea0ff;
+  --bat-yellow: #f4d45a;
 }
 
 html,
@@ -19,9 +25,17 @@ body,
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 25%),
-    radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 25%),
-    #08111f;
+    radial-gradient(circle at 18% 8%, rgba(72, 154, 255, 0.2), transparent 30%),
+    radial-gradient(circle at 80% -10%, rgba(43, 74, 158, 0.26), transparent 36%),
+    radial-gradient(circle at 50% 120%, rgba(18, 38, 96, 0.55), transparent 40%),
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.015) 0,
+      rgba(255, 255, 255, 0.015) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    var(--bat-bg);
   color: #e2e8f0;
 }
 
@@ -42,4 +56,146 @@ select {
 ::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.24);
   border-radius: 999px;
+}
+
+.batcave-page {
+  position: relative;
+}
+
+.batcave-page::before {
+  content: '';
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(73, 210, 255, 0.05), transparent 28%, rgba(110, 160, 255, 0.06));
+  mix-blend-mode: screen;
+}
+
+.batcave-panel {
+  border: 1px solid var(--bat-border);
+  background: var(--bat-panel);
+  box-shadow:
+    inset 0 0 0 1px rgba(73, 210, 255, 0.08),
+    0 0 0 1px rgba(8, 12, 24, 0.7),
+    0 20px 45px rgba(2, 6, 20, 0.5);
+}
+
+.bat-title {
+  font-family: 'Press Start 2P', monospace;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  text-shadow:
+    0 0 14px rgba(73, 210, 255, 0.22),
+    0 0 3px rgba(73, 210, 255, 0.2);
+}
+
+.pixel-badge {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  border-color: rgba(73, 210, 255, 0.45);
+  background: rgba(37, 86, 162, 0.22);
+  color: #9adfff;
+  text-shadow: 0 0 10px rgba(73, 210, 255, 0.35);
+}
+
+.bat-input {
+  border: 1px solid rgba(87, 139, 221, 0.35);
+  background: rgba(3, 8, 22, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(73, 210, 255, 0.05);
+}
+
+.bat-input:focus {
+  border-color: var(--bat-cyan);
+  box-shadow:
+    0 0 0 1px rgba(73, 210, 255, 0.35),
+    0 0 15px rgba(73, 210, 255, 0.2);
+}
+
+@keyframes batPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(73, 210, 255, 0);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(73, 210, 255, 0.24);
+  }
+}
+
+@keyframes batShimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+.bat-btn {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(91, 139, 223, 0.45);
+  background: rgba(18, 28, 54, 0.85);
+  color: #dce9ff;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  animation: batPulse 2.8s ease-in-out infinite;
+}
+
+.bat-btn.absolute {
+  position: absolute;
+}
+
+.bat-btn::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(120deg, transparent 35%, rgba(255, 255, 255, 0.22) 50%, transparent 65%);
+  transform: translateX(-120%);
+}
+
+.bat-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--bat-cyan);
+  box-shadow: 0 0 20px rgba(73, 210, 255, 0.25);
+}
+
+.bat-btn:hover::after {
+  animation: batShimmer 0.75s ease;
+}
+
+.bat-btn-primary {
+  background: linear-gradient(180deg, #52d5ff, #2f9ac8);
+  color: #031320;
+  border-color: rgba(110, 226, 255, 0.8);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.bat-btn-danger {
+  border-color: rgba(244, 212, 90, 0.45);
+  background: rgba(56, 45, 16, 0.66);
+  color: #ffe9a4;
+}
+
+.bat-stat {
+  border: 1px solid rgba(86, 141, 216, 0.26);
+  background: linear-gradient(180deg, rgba(20, 33, 59, 0.72), rgba(11, 19, 39, 0.84));
+  box-shadow: inset 0 0 0 1px rgba(73, 210, 255, 0.06);
+}
+
+.bat-empty {
+  border-color: rgba(86, 141, 216, 0.4);
+  background: rgba(9, 16, 33, 0.7);
+}
+
+.bat-suggestions {
+  border: 1px solid rgba(89, 139, 220, 0.4);
+  background: rgba(4, 9, 25, 0.95);
+  box-shadow: 0 16px 30px rgba(2, 4, 14, 0.7);
+}
+
+.bat-chart-toolbar {
+  border: 1px solid rgba(88, 136, 210, 0.32);
+  background: rgba(8, 15, 31, 0.68);
 }

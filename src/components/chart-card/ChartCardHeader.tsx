@@ -90,7 +90,7 @@ export function ChartCardHeader({
               <button
                 type="button"
                 onClick={() => setGeoValues((prev) => prev.filter((value) => value !== geo))}
-                className="rounded-full bg-white/20 px-1 text-xs"
+                className="bat-btn rounded-full px-1 text-xs"
               >
                 x
               </button>
@@ -101,7 +101,7 @@ export function ChartCardHeader({
               value={geoInput}
               onChange={(event) => setGeoInput(event.target.value.toUpperCase())}
               placeholder="Add geo (e.g. DE)"
-              className="h-9 w-40 rounded-2xl border border-border bg-slate-950/80 px-3 text-xs text-white outline-none transition focus:border-sky-400"
+              className="bat-input h-9 w-40 rounded-2xl px-3 text-xs text-white outline-none transition"
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
@@ -114,7 +114,7 @@ export function ChartCardHeader({
               }}
             />
             {geoInput ? (
-              <div className="absolute left-0 top-full z-10 mt-1 max-h-40 w-full overflow-auto rounded-xl border border-border bg-slate-950/90">
+              <div className="bat-suggestions absolute left-0 top-full z-10 mt-1 max-h-40 w-full overflow-auto rounded-xl">
                 {KNOWN_GEOS
                   .filter(
                     (geo) =>
@@ -126,7 +126,7 @@ export function ChartCardHeader({
                     <button
                       key={geo.code}
                       type="button"
-                      className="block w-full px-3 py-2 text-left text-xs text-white hover:bg-white/10"
+                      className="block w-full rounded-lg px-3 py-2 text-left text-xs text-white transition hover:bg-white/10"
                       onClick={() => {
                         if (!geoValues.includes(geo.code)) {
                           if (topicId === 'yth_demo_070') {
@@ -175,7 +175,7 @@ export function ChartCardHeader({
               <select
                 value={seriesDimension}
                 onChange={(event) => setSeriesDimension(event.target.value)}
-                className="h-10 rounded-2xl border border-border bg-slate-950/80 px-3 text-sm text-white outline-none transition focus:border-sky-400"
+                className="bat-input h-10 rounded-2xl px-3 text-sm text-white outline-none transition"
               >
                 <option value="">(none)</option>
                 {availableDimensions.map((dim) => (
@@ -190,7 +190,7 @@ export function ChartCardHeader({
                   setSeriesDimension('');
                   setDimensionFilters({});
                 }}
-                className="rounded-2xl border border-border bg-white/5 px-3 text-xs font-medium text-white transition hover:bg-white/10"
+                className="bat-btn rounded-2xl px-3 text-xs font-medium"
               >
                 Reset
               </button>
@@ -210,7 +210,7 @@ export function ChartCardHeader({
                       [dim.id]: event.target.value,
                     }))
                   }
-                  className="h-10 rounded-2xl border border-border bg-slate-950/80 px-3 text-sm text-white outline-none transition focus:border-sky-400"
+                  className="bat-input h-10 rounded-2xl px-3 text-sm text-white outline-none transition"
                 >
                   <option value="">(all)</option>
                   {dim.values.map((value) => (

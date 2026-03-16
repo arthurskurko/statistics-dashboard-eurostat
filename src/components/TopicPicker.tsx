@@ -50,13 +50,13 @@ export function TopicPicker({
   }, []);
 
   return (
-    <section className="relative z-30 rounded-3xl border border-border bg-slate-900/80 p-6 shadow-card backdrop-blur-xl">
+    <section className="batcave-panel relative z-30 rounded-3xl p-6 shadow-card backdrop-blur-xl">
       <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
         <div className="max-w-2xl space-y-2">
-          <div className="inline-flex rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-sky-200">
+          <div className="pixel-badge inline-flex rounded-full px-3 py-1 text-xs font-medium uppercase tracking-[0.24em]">
             Eurostat dashboard builder
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+          <h1 className="bat-title text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Estonia statistics dashboard
           </h1>
           <p className="text-sm leading-7 text-slate-300 sm:text-base">
@@ -73,7 +73,7 @@ export function TopicPicker({
                 <select
                   value={selectedTopicId}
                   onChange={(event) => onSelectedTopicIdChange(event.target.value)}
-                  className="h-12 rounded-2xl border border-border bg-slate-950/80 px-4 text-white outline-none transition focus:border-sky-400"
+                  className="bat-input h-12 rounded-2xl px-4 text-white outline-none transition"
                 >
                   {TOPICS.map((topic) => (
                     <option key={topic.id} value={topic.id}>
@@ -86,7 +86,7 @@ export function TopicPicker({
               <button
                 type="button"
                 onClick={onAddTopic}
-                className="h-12 rounded-2xl bg-sky-400 px-6 font-medium text-slate-950 transition hover:bg-sky-300"
+                className="bat-btn bat-btn-primary h-12 rounded-2xl px-6 font-medium"
               >
                 Add chart
               </button>
@@ -100,11 +100,11 @@ export function TopicPicker({
                     value={customCode}
                     onChange={(event) => setCustomCode(event.target.value)}
                     placeholder="Search catalog or enter code"
-                    className="h-12 w-full rounded-2xl border border-border bg-slate-950/80 px-4 text-white outline-none transition focus:border-sky-400"
+                    className="bat-input h-12 w-full rounded-2xl px-4 text-white outline-none transition"
                   />
 
                   {suggestions.length > 0 ? (
-                    <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-auto rounded-2xl border border-border bg-slate-950/95 p-3 text-sm text-slate-200 shadow-2xl backdrop-blur">
+                    <div className="bat-suggestions absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-auto rounded-2xl p-3 text-sm text-slate-200 backdrop-blur">
                       <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Suggestions</div>
                       <ul className="space-y-1">
                         {suggestions.map((entry) => (
@@ -116,7 +116,7 @@ export function TopicPicker({
                                 onSelectedTopicIdChange(entry.code);
                                 onAddTopicById(entry.code);
                               }}
-                              className="w-full rounded-lg px-2 py-1 text-left text-xs transition hover:bg-white/5 hover:text-white"
+                              className="w-full rounded-lg px-2 py-1 text-left text-xs transition hover:bg-white/10 hover:text-white"
                             >
                               <span className="font-semibold">{entry.code}</span> - {entry.title}
                             </button>
@@ -136,7 +136,7 @@ export function TopicPicker({
                     onAddTopicById(code);
                     setCustomCode('');
                   }}
-                  className="h-12 rounded-2xl bg-slate-700 px-5 font-medium text-white transition hover:bg-slate-600"
+                  className="bat-btn h-12 rounded-2xl px-5 font-medium"
                 >
                   Add by code
                 </button>
@@ -144,7 +144,7 @@ export function TopicPicker({
                   type="button"
                   onClick={onClear}
                   disabled={chartCount === 0}
-                  className="h-12 rounded-2xl border border-border bg-white/5 px-5 font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="bat-btn h-12 rounded-2xl px-5 font-medium disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Clear all
                 </button>

@@ -164,12 +164,12 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const displayDescription = query.data?.subtitle ?? topic.description;
 
   return (
-    <article className="relative flex min-h-[30rem] flex-col rounded-3xl border border-border bg-slate-900/80 p-5 shadow-card backdrop-blur-xl">
+    <article className="batcave-panel relative flex min-h-[30rem] flex-col rounded-3xl p-5 shadow-card backdrop-blur-xl">
       <button
         type="button"
         onClick={() => onRemove(cardId)}
         aria-label="Remove chart"
-        className="absolute right-4 top-4 z-10 grid h-8 w-8 place-items-center rounded-full border border-border bg-white/5 text-sm font-semibold text-white transition hover:bg-white/15"
+        className="bat-btn bat-btn-danger absolute right-4 top-4 z-10 grid h-8 w-8 place-items-center rounded-full text-sm font-semibold"
       >
         x
       </button>
@@ -248,23 +248,23 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
             unitSuffix={query.data.unitSuffix}
           />
 
-          <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+          <div className="bat-chart-toolbar mb-3 flex flex-wrap items-center justify-end gap-2 rounded-2xl px-3 py-2">
             {showDualAxisButton ? (
               <button
                 type="button"
                 onClick={() => setDualAxis((prev) => !prev)}
-                className="rounded-2xl border border-border bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10"
+                className="bat-btn rounded-2xl px-3 py-1 text-xs font-medium"
               >
                 {dualAxis ? 'Dual axes: on' : 'Dual axes: off'}
               </button>
             ) : null}
 
-            <label className="flex items-center gap-2 rounded-2xl border border-border bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10">
+            <label className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium">
               <span className="whitespace-nowrap">Forecast:</span>
               <select
                 value={forecastHorizon}
                 onChange={(event) => setForecastHorizon(Number(event.target.value))}
-                className="rounded-xl bg-slate-900/80 px-2 py-1 text-xs text-white outline-none"
+                className="bat-input rounded-xl px-2 py-1 text-xs text-white outline-none"
               >
                 {[5, 10, 20, 30].map((value) => (
                   <option key={value} value={value}>
