@@ -50,6 +50,8 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const [musicOctaveShift, setMusicOctaveShift] = React.useState(0);
   const [musicInstrument, setMusicInstrument] = React.useState<OscillatorType | 'auto'>('auto');
   const [musicArpeggiate, setMusicArpeggiate] = React.useState(false);
+  const [musicSpread, setMusicSpread] = React.useState(0.4);
+  const [musicSwing, setMusicSwing] = React.useState(0.08);
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
 
   const defaultGeoValues = useMemo(() => topic.geoValues ?? ['EE', 'EU27_2020'], [topic.geoValues]);
@@ -171,12 +173,16 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         octaveShift: musicOctaveShift,
         instrumentOverride: musicInstrument,
         arpeggiate: musicArpeggiate,
+        spread: musicSpread,
+        swing: musicSwing,
       });
       return;
     }
 
     musicPlayerRef.current.setSeries(effectiveSeries);
     musicPlayerRef.current.setTempo(musicTempo);
+    musicPlayerRef.current.setSwing(musicSwing);
+    musicPlayerRef.current.setSpread(musicSpread);
     musicPlayerRef.current.setScale(musicScale);
     musicPlayerRef.current.setOctaveShift(musicOctaveShift);
     musicPlayerRef.current.setInstrumentOverride(musicInstrument);
@@ -185,7 +191,17 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     if (effectiveSeries.length === 0 && musicPlaying) {
       setMusicPlaying(false);
     }
-  }, [effectiveSeries, musicPlaying, musicTempo, musicScale, musicOctaveShift, musicInstrument, musicArpeggiate]);
+  }, [
+    effectiveSeries,
+    musicPlaying,
+    musicTempo,
+    musicSwing,
+    musicScale,
+    musicOctaveShift,
+    musicInstrument,
+    musicArpeggiate,
+    musicSpread,
+  ]);
 
   React.useEffect(() => () => {
     musicPlayerRef.current?.dispose();
@@ -197,17 +213,6 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
   return (
     <article className="batcave-panel relative flex min-h-[30rem] flex-col rounded-3xl p-5 shadow-card backdrop-blur-xl">
-      {musicPlaying ? (
-        <button
-          type="button"
-          onClick={() => setMusicModalOpen(true)}
-          className="fixed left-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-slate-950/80 text-lg text-emerald-300 shadow-lg backdrop-blur"
-          aria-label="Open music controls"
-          title="Music controls"
-        >
-          🎶
-        </button>
-      ) : null}
 
       {musicModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
@@ -239,6 +244,38 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
                     className="h-2 w-full cursor-pointer accent-emerald-400"
                   />
                   <span className="w-14 text-right text-xs text-slate-200">{musicTempo} bpm</span>
+                </div>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="font-medium text-slate-100">Swing</span>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={0.5}
+                    step={0.01}
+                    value={musicSwing}
+                    onChange={(event) => setMusicSwing(Number(event.target.value))}
+                    className="h-2 w-full cursor-pointer accent-emerald-400"
+                  />
+                  <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicSwing * 100)}%</span>
+                </div>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="font-medium text-slate-100">Spread</span>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={musicSpread}
+                    onChange={(event) => setMusicSpread(Number(event.target.value))}
+                    className="h-2 w-full cursor-pointer accent-emerald-400"
+                  />
+                  <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicSpread * 100)}%</span>
                 </div>
               </label>
 
@@ -396,6 +433,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
                 try {
                   const playing = await player.toggle();
                   setMusicPlaying(playing);
+                  if (!playing) setMusicModalOpen(false);
                 } catch (error) {
                   console.error('Could not start data music:', error);
                   setMusicPlaying(false);
@@ -405,6 +443,16 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
             >
               {musicPlaying ? 'Data music: on' : 'Data music: off'}
             </button>
+
+            {musicPlaying ? (
+              <button
+                type="button"
+                onClick={() => setMusicModalOpen(true)}
+                className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium"
+              >
+                🎵 Music settings
+              </button>
+            ) : null}
 
             {showDualAxisButton ? (
               <button

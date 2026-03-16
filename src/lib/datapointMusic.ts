@@ -7,8 +7,29 @@ type PreparedSeries = {
   waveform: OscillatorType;
 };
 
+export type MusicScale = 'chromatic' | 'major' | 'minor' | 'pentatonic';
+
+export type MusicSettings = {
+  tempoBpm: number;
+  scale: MusicScale;
+  octaveShift: number;
+  instrumentOverride: OscillatorType | 'auto';
+  arpeggiate: boolean;
+  spread: number; // 0–1
+  swing: number; // 0–0.5
+};
+
 const INSTRUMENTS: OscillatorType[] = ['sine', 'triangle', 'square', 'sawtooth'];
 const MAX_SIMULTANEOUS_SERIES = 6;
+
+const BASE_MIDI = 48; // C3
+
+const SCALE_DEGREES: Record<MusicScale, number[]> = {
+  chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  major: [0, 2, 4, 5, 7, 9, 11, 12],
+  minor: [0, 2, 3, 5, 7, 8, 10, 12],
+  pentatonic: [0, 2, 4, 7, 9, 12],
+};
 
 function hashString(value: string): number {
   let hash = 0;
@@ -17,6 +38,81 @@ function hashString(value: string): number {
   }
   return hash;
 }
+
+// Global clock for syncing tempo across multiple charts.
+class MusicClock {
+  private tempoBpm = 120;
+  private swing = 0; // 0–0.5
+  private subscribers = new Set<() => void>();
+  private timerId: number | null = null;
+  private stepIndex = 0;
+
+  getTempo(): number {
+    return this.tempoBpm;
+  }
+
+  getSwing(): number {
+    return this.swing;
+  }
+
+  setTempo(bpm: number): void {
+    this.tempoBpm = Math.max(10, Math.min(240, bpm));
+    this.restart();
+  }
+
+  setSwing(swing: number): void {
+    this.swing = Math.max(0, Math.min(0.5, swing));
+    this.restart();
+  }
+
+  subscribe(cb: () => void): () => void {
+    this.subscribers.add(cb);
+    if (this.subscribers.size === 1) {
+      this.start();
+    }
+    return () => {
+      this.subscribers.delete(cb);
+      if (this.subscribers.size === 0) {
+        this.stop();
+      }
+    };
+  }
+
+  private start(): void {
+    if (this.timerId !== null) return;
+    this.stepIndex = 0;
+    this.scheduleNext();
+  }
+
+  private stop(): void {
+    if (this.timerId !== null) {
+      window.clearTimeout(this.timerId);
+      this.timerId = null;
+    }
+  }
+
+  private restart(): void {
+    if (this.timerId !== null) {
+      this.stop();
+      this.start();
+    }
+  }
+
+  private scheduleNext(): void {
+    const baseMs = 60000 / this.tempoBpm;
+    const swingFactor = this.swing;
+    const isOdd = this.stepIndex % 2 === 1;
+    const stepMs = baseMs * (1 + (isOdd ? swingFactor : -swingFactor));
+
+    this.timerId = window.setTimeout(() => {
+      this.stepIndex += 1;
+      this.subscribers.forEach((cb) => cb());
+      this.scheduleNext();
+    }, stepMs);
+  }
+}
+
+export const musicClock = new MusicClock();
 
 function extractInstrumentKey(label: string): string {
   const parts = label.split(/\s*[—-]\s*/);
@@ -51,29 +147,10 @@ function buildPreparedSeries(series: DataSeries[], settings: MusicSettings): Pre
     });
 }
 
-export type MusicScale = 'chromatic' | 'major' | 'minor' | 'pentatonic';
-
-export type MusicSettings = {
-  tempoBpm: number;
-  scale: MusicScale;
-  octaveShift: number;
-  instrumentOverride: OscillatorType | 'auto';
-  arpeggiate: boolean;
-};
-
-const SCALE_DEGREES: Record<MusicScale, number[]> = {
-  chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-  major: [0, 2, 4, 5, 7, 9, 11, 12],
-  minor: [0, 2, 3, 5, 7, 8, 10, 12],
-  pentatonic: [0, 2, 4, 7, 9, 12],
-};
-
-const BASE_MIDI = 48; // C3
-
 export class DataPointMusicPlayer {
   private audioContext: AudioContext | null = null;
 
-  private timerId: number | null = null;
+  private unsubscribe: (() => void) | null = null;
 
   private stepIndex = 0;
 
@@ -88,6 +165,8 @@ export class DataPointMusicPlayer {
     octaveShift: 0,
     instrumentOverride: 'auto',
     arpeggiate: false,
+    spread: 0.4,
+    swing: 0.08,
   };
 
   constructor(series: DataSeries[], settings?: Partial<MusicSettings>) {
@@ -113,9 +192,12 @@ export class DataPointMusicPlayer {
 
   setTempo(bpm: number): void {
     this.settings.tempoBpm = Math.max(10, Math.min(240, bpm));
-    if (this.running) {
-      this.restartTimer();
-    }
+    musicClock.setTempo(this.settings.tempoBpm);
+  }
+
+  setSwing(swing: number): void {
+    this.settings.swing = Math.max(0, Math.min(0.5, swing));
+    musicClock.setSwing(this.settings.swing);
   }
 
   setScale(scale: MusicScale): void {
@@ -129,6 +211,10 @@ export class DataPointMusicPlayer {
   setInstrumentOverride(instrument: OscillatorType | 'auto'): void {
     this.settings.instrumentOverride = instrument;
     this.preparedSeries = buildPreparedSeries(this.sourceSeries, this.settings);
+  }
+
+  setSpread(spread: number): void {
+    this.settings.spread = Math.max(0, Math.min(1, spread));
   }
 
   setArpeggiate(arpeggiate: boolean): void {
@@ -158,26 +244,14 @@ export class DataPointMusicPlayer {
     }
 
     this.running = true;
-    this.restartTimer();
+    this.unsubscribe = musicClock.subscribe(() => this.playStep());
     this.playStep();
   }
 
-  private restartTimer(): void {
-    if (this.timerId !== null) {
-      window.clearInterval(this.timerId);
-      this.timerId = null;
-    }
-
-    const stepMs = 60000 / this.settings.tempoBpm;
-    this.timerId = window.setInterval(() => {
-      this.playStep();
-    }, stepMs);
-  }
-
   stop(): void {
-    if (this.timerId !== null) {
-      window.clearInterval(this.timerId);
-      this.timerId = null;
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
     }
     this.running = false;
   }
@@ -215,6 +289,8 @@ export class DataPointMusicPlayer {
       ? [this.preparedSeries[this.stepIndex % this.preparedSeries.length]]
       : this.preparedSeries;
 
+    const spreadMultiplier = this.settings.spread;
+
     seriesToPlay.forEach((entry, index) => {
       if (entry.points.length === 0) return;
 
@@ -224,7 +300,9 @@ export class DataPointMusicPlayer {
       const scale = SCALE_DEGREES[this.settings.scale];
       const degree = scale[Math.floor(normalized * (scale.length - 1))];
       const octaveOffset = this.settings.octaveShift * 12;
-      const midi = BASE_MIDI + octaveOffset + degree + (index % 3) * 3;
+
+      const spreadSemitones = Math.round(spreadMultiplier * index * 4);
+      const midi = BASE_MIDI + octaveOffset + degree + spreadSemitones;
       const frequency = midiToFrequency(midi);
 
       const oscillator = context.createOscillator();
@@ -248,3 +326,4 @@ export class DataPointMusicPlayer {
     this.stepIndex += 1;
   }
 }
+
