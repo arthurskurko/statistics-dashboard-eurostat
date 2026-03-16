@@ -42,10 +42,8 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const [seriesDimension, setSeriesDimension] = React.useState('');
   const [geoValues, setGeoValues] = React.useState<string[]>(topic.geoValues ?? ['EE', 'EU27_2020']);
   const [geoInput, setGeoInput] = React.useState('');
-  const [missingGeos, setMissingGeos] = React.useState<string[]>([]);
   const [dualAxis, setDualAxis] = React.useState(true);
   const [musicPlaying, setMusicPlaying] = React.useState(false);
-  const [chartError, setChartError] = React.useState<string | null>(null);
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
 
   const defaultGeoValues = useMemo(() => topic.geoValues ?? ['EE', 'EU27_2020'], [topic.geoValues]);
@@ -104,11 +102,11 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     }
   }, [query.data, availableDimensions.length, dimensionFilters]);
 
-  React.useEffect(() => {
-    if (!query.data) return;
+  const missingGeos = useMemo(() => {
+    if (!query.data) return [];
     const responseGeoCodes = new Set(query.data.availableGeos?.map((geo) => geo.code));
-    setMissingGeos(geoValues.filter((geo) => !responseGeoCodes.has(geo)));
-  }, [query.data, geoValues]);
+    return geoValues.filter((geo) => !responseGeoCodes.has(geo));
+  }, [geoValues, query.data]);
 
   const activeFilterLabels = useMemo(() => {
     if (!query.data) return [];
@@ -154,10 +152,6 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     topicId,
   ]);
 
-  React.useEffect(() => {
-    setChartError(chartBuild.error);
-  }, [chartBuild.error]);
-
   const latestValues = useMemo(
     () => computeLatestValues(effectiveSeries, activeFilterLabels),
     [activeFilterLabels, effectiveSeries],
@@ -202,7 +196,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         forecastDisabledReason={query.data?.forecastDisabledReason}
         warning={query.data?.warning}
         missingGeos={missingGeos}
-        chartError={chartError}
+        chartError={chartBuild.error}
         geoValues={geoValues}
         geoInput={geoInput}
         setGeoInput={setGeoInput}

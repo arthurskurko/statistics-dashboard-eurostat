@@ -129,7 +129,7 @@ select {
   position: fixed;
   inset: 0;
   background: linear-gradient(120deg, var(--page-overlay-1), transparent 28%, var(--page-overlay-2));
-  mix-blend-mode: screen;
+  opacity: 0.6;
 }
 
 .batcave-panel {
@@ -201,7 +201,6 @@ select {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-  animation: batPulse 2.8s ease-in-out infinite;
 }
 
 .bat-btn.absolute {
@@ -220,6 +219,7 @@ select {
   transform: translateY(-1px);
   border-color: var(--bat-cyan);
   box-shadow: 0 0 20px color-mix(in srgb, var(--bat-cyan) 36%, transparent);
+  animation: batPulse 1.4s ease-in-out;
 }
 
 .bat-btn:hover::after {
@@ -263,4 +263,12 @@ select {
 .bat-chart-toolbar {
   border: 1px solid color-mix(in srgb, var(--bat-blue) 35%, transparent);
   background: rgba(8, 15, 31, 0.68);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bat-btn,
+  .bat-btn::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
