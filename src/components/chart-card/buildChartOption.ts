@@ -9,7 +9,6 @@ type BuildChartOptionArgs = {
   effectiveSeries: DataSeries[];
   baseSeries: DataSeries[];
   largeSeries: string[];
-  smallSeries: string[];
   dualAxis: boolean;
   showDualAxisButton: boolean;
   activeFilterLabels: string[];
@@ -22,7 +21,6 @@ export function buildChartOption({
   effectiveSeries,
   baseSeries,
   largeSeries,
-  smallSeries,
   dualAxis,
   showDualAxisButton,
   activeFilterLabels,
@@ -105,14 +103,6 @@ export function buildChartOption({
 
   const filterSuffix = activeFilterLabels.length > 0 ? ` (${activeFilterLabels.join(', ')})` : '';
 
-  const axisColors = baseSeries.map((series) => {
-    const baseLabel = normalizeSeriesLabel(series.label.replace(/ \(forecast\)$/, ''));
-    return colorMap.get(baseLabel) ?? '#4c9aff';
-  });
-
-  const smallSeriesColor = colorMap.get(normalizeSeriesLabel(smallSeries[0] ?? '')) ?? '#4c9aff';
-  const largeSeriesColor = colorMap.get(normalizeSeriesLabel(largeSeries[0] ?? '')) ?? '#f97316';
-
   const formatAxisValue = (value: number): string => {
     const abs = Math.abs(value);
     if (abs >= 1_000_000_000) {
@@ -126,6 +116,38 @@ export function buildChartOption({
     }
     return value.toString();
   };
+
+  const seriesWithAxis = effectiveSeries.map((series) => {
+    const isForecast = series.label.includes('(forecast)');
+    const normalizedLabel = normalizeSeriesLabel(series.label.replace(/ \(forecast\)$/, ''));
+    const isLarge = largeSeries.includes(normalizedLabel) || largeSeries.includes(series.label);
+    const yAxisIndex = twoSeries && dualAxis ? (isLarge ? 1 : 0) : 0;
+    const seriesColor = colorMap.get(normalizedLabel) ?? '#4c9aff';
+
+    return {
+      baseSeries: series,
+      yAxisIndex,
+      seriesColor,
+      isForecast,
+      normalizedLabel,
+    };
+  });
+
+  const seriesByAxis = seriesWithAxis.reduce<Record<number, string[]>>((acc, item) => {
+    acc[item.yAxisIndex] = acc[item.yAxisIndex] ?? [];
+    if (!acc[item.yAxisIndex].includes(item.seriesColor)) {
+      acc[item.yAxisIndex].push(item.seriesColor);
+    }
+    return acc;
+  }, {});
+
+  const axisName = (axisIndex: number, label: string) => {
+    const dots = (seriesByAxis[axisIndex] ?? []).slice(0, 2).map((_, idx) => `\n{dot${idx}|●}`).join('');
+    return `${label}${dots}`;
+  };
+
+  const smallSeriesColor = seriesByAxis[0]?.[0] ?? '#4c9aff';
+  const largeSeriesColor = seriesByAxis[1]?.[0] ?? '#f97316';
 
   return {
     animationDuration: 400,
@@ -190,40 +212,50 @@ export function buildChartOption({
         ? [
             {
               type: 'value',
-              name: '{dot|●} Small values',
+              name: axisName(0, 'Small values'),
               nameGap: 18,
               nameTextStyle: {
                 rich: {
                   dot: {
-                    color: smallSeriesColor,
                     fontSize: 14,
+                  },
+                  dot0: {
+                    color: seriesByAxis[0]?.[0] ?? smallSeriesColor,
+                  },
+                  dot1: {
+                    color: seriesByAxis[0]?.[1] ?? smallSeriesColor,
                   },
                 },
               },
               axisLabel: {
-                color: axisColors[0] ?? '#94a3b8',
+                color: smallSeriesColor,
                 formatter: (value: number) => formatAxisValue(Number(value)),
               },
-              axisLine: { lineStyle: { color: axisColors[0] ?? '#94a3b8' } },
+              axisLine: { lineStyle: { color: smallSeriesColor } },
               splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
             },
             {
               type: 'value',
-              name: '{dot|●} Large values',
+              name: axisName(1, 'Large values'),
               nameGap: 18,
               nameTextStyle: {
                 rich: {
                   dot: {
-                    color: largeSeriesColor,
                     fontSize: 14,
+                  },
+                  dot0: {
+                    color: seriesByAxis[1]?.[0] ?? largeSeriesColor,
+                  },
+                  dot1: {
+                    color: seriesByAxis[1]?.[1] ?? largeSeriesColor,
                   },
                 },
               },
               axisLabel: {
-                color: axisColors[1] ?? '#94a3b8',
+                color: largeSeriesColor,
                 formatter: (value: number) => formatAxisValue(Number(value)),
               },
-              axisLine: { lineStyle: { color: axisColors[1] ?? '#94a3b8' } },
+              axisLine: { lineStyle: { color: largeSeriesColor } },
               splitLine: { show: false },
             },
           ]
@@ -235,34 +267,26 @@ export function buildChartOption({
             },
             splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
           },
-    series: effectiveSeries.map((series) => {
-      const isForecast = series.label.includes('(forecast)');
-      const normalizedLabel = normalizeSeriesLabel(series.label.replace(/ \(forecast\)$/, ''));
-      const isLarge = largeSeries.includes(normalizedLabel) || largeSeries.includes(series.label);
-      const yAxisIndex = twoSeries && dualAxis ? (isLarge ? 1 : 0) : 0;
-      const seriesColor = colorMap.get(normalizedLabel) ?? '#4c9aff';
-
-      return {
-        name: `${series.label}${filterSuffix}`,
-        type: topic.chartVariant ?? 'line',
-        smooth: true,
-        showSymbol: false,
-        emphasis: { focus: 'series' },
-        areaStyle: !isForecast && baseSeries[0]?.label === series.label ? { opacity: 0.12 } : undefined,
-        yAxisIndex,
-        data: xAxis.map((label) => {
-          const point = series.points.find((item) => item.label === label);
-          return point?.value ?? null;
-        }),
-        itemStyle: {
-          color: seriesColor,
-        },
-        lineStyle: {
-          width: 3,
-          type: isForecast ? 'dashed' : 'solid',
-          color: seriesColor,
-        },
-      };
-    }),
+    series: seriesWithAxis.map(({ baseSeries, yAxisIndex, seriesColor, isForecast }) => ({
+      name: `${baseSeries.label}${filterSuffix}`,
+      type: topic.chartVariant ?? 'line',
+      smooth: true,
+      showSymbol: false,
+      emphasis: { focus: 'series' },
+      areaStyle: !isForecast && baseSeries.label === baseSeries.label ? { opacity: 0.12 } : undefined,
+      yAxisIndex,
+      data: xAxis.map((label) => {
+        const point = baseSeries.points.find((item) => item.label === label);
+        return point?.value ?? null;
+      }),
+      itemStyle: {
+        color: seriesColor,
+      },
+      lineStyle: {
+        width: 3,
+        type: isForecast ? 'dashed' : 'solid',
+        color: seriesColor,
+      },
+    })),
   };
 }

@@ -129,7 +129,6 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           effectiveSeries,
           baseSeries,
           largeSeries,
-          smallSeries,
           dualAxis,
           showDualAxisButton,
           activeFilterLabels,
@@ -309,7 +308,12 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           </div>
 
           <div className="min-h-[22rem] flex-1 rounded-3xl border border-border bg-slate-950/60 p-3">
-            <ReactECharts option={chartBuild.option} style={{ height: '100%', minHeight: '22rem' }} />
+            <ReactECharts
+            option={chartBuild.option}
+            notMerge
+            lazyUpdate
+            style={{ height: '100%', minHeight: '22rem' }}
+          />
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
