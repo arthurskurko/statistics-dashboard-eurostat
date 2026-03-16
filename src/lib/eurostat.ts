@@ -185,6 +185,36 @@ function getNextPeriodCode(periodCode: string): string | null {
   return null;
 }
 
+export type FetchStats = Record<
+  string,
+  {
+    lastFetch: string;
+    lastForecast?: string;
+    forecastHorizon?: number;
+    forecastDisabledReason?: string;
+  }
+>;
+
+const STATS_STORAGE_KEY = 'estonia-statistics-dashboard.stats';
+
+function recordFetchStats(
+  topicId: string,
+  update: Partial<FetchStats[string]>,
+): void {
+  try {
+    const raw = window.localStorage.getItem(STATS_STORAGE_KEY);
+    const stats = raw ? (JSON.parse(raw) as FetchStats) : ({} as FetchStats);
+    stats[topicId] = {
+      ...(stats[topicId] ?? {}),
+      ...update,
+    };
+    window.localStorage.setItem(STATS_STORAGE_KEY, JSON.stringify(stats));
+    window.dispatchEvent(new CustomEvent('dashboard:stats-updated'));
+  } catch {
+    // ignore storage failures
+  }
+}
+
 function parseSeries(
   dataset: JsonStatDataset,
   fallbackLabel: string,
@@ -831,6 +861,13 @@ export async function fetchTopicData(
     // eslint-disable-next-line no-console
     console.log('DEBUG forecast-series', series.filter((s) => s.label.includes('(forecast)')).map((s) => s.label));
   }
+
+  recordFetchStats(topicId, {
+    lastFetch: new Date().toISOString(),
+    forecastHorizon,
+    lastForecast: forecastSeries.length > 0 ? new Date().toISOString() : undefined,
+    forecastDisabledReason,
+  });
 
   return {
     title: topic.title,

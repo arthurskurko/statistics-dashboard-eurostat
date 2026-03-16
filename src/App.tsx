@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { AdminPanel } from './components/AdminPanel';
 import { ChartCard } from './components/ChartCard';
 import { EmptyState } from './components/EmptyState';
 import { StatChip } from './components/StatChip';
@@ -8,7 +9,10 @@ import type { DashboardCard } from './features/dashboard/types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
 const STORAGE_KEY = 'estonia-statistics-dashboard.cards';
+const DEFAULT_CHARTS_KEY = 'estonia-statistics-dashboard.defaultCharts';
 const THEME_STORAGE_KEY = 'estonia-statistics-dashboard.theme';
+
+const DEFAULT_CHART_TOPIC_IDS = ['population', 'unemployment-rate', 'inflation'];
 
 const THEMES = [
   { id: 'batcave', label: 'Batcave Pixel' },
@@ -35,13 +39,25 @@ function createCard(topicId: string): DashboardCard {
 export default function App() {
   const [selectedTopicId, setSelectedTopicId] = useState<string>(TOPICS[0].id);
   const [cards, setCards] = useLocalStorage<DashboardCard[]>(STORAGE_KEY, []);
+  const [defaultTopicIds, setDefaultTopicIds] = useLocalStorage<string[]>(
+    DEFAULT_CHARTS_KEY,
+    DEFAULT_CHART_TOPIC_IDS,
+  );
   const [themeId, setThemeId] = useLocalStorage<ThemeId>(THEME_STORAGE_KEY, 'batcave');
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   const activeTopics = useMemo(() => new Set(cards.map((card) => card.topicId)), [cards]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', themeId);
   }, [themeId]);
+
+  useEffect(() => {
+    // If the dashboard is empty, automatically load the user's default charts.
+    if (cards.length === 0 && defaultTopicIds.length > 0) {
+      setCards(defaultTopicIds.map((topicId) => createCard(topicId)));
+    }
+  }, [cards.length, defaultTopicIds, setCards]);
 
   function addCard() {
     setCards((currentCards) => [...currentCards, createCard(selectedTopicId)]);
@@ -51,12 +67,31 @@ export default function App() {
     setCards((currentCards) => [...currentCards, createCard(topicId)]);
   }
 
+  function addDefaultCards() {
+    setCards((currentCards) => {
+      if (currentCards.length > 0) return currentCards;
+      return [...defaultTopicIds.map((topicId) => createCard(topicId))];
+    });
+  }
+
   function removeCard(cardId: string) {
     setCards((currentCards) => currentCards.filter((card) => card.id !== cardId));
   }
 
   function clearCards() {
     setCards([]);
+  }
+
+  if (isAdminOpen) {
+    return (
+      <AdminPanel
+        defaultTopicIds={defaultTopicIds}
+        setDefaultTopicIds={setDefaultTopicIds}
+        onLoadDefaults={addDefaultCards}
+        onClearDashboard={clearCards}
+        onClose={() => setIsAdminOpen(false)}
+      />
+    );
   }
 
   return (
@@ -78,6 +113,13 @@ export default function App() {
               ))}
             </select>
           </label>
+          <button
+            type="button"
+            onClick={() => setIsAdminOpen(true)}
+            className="bat-btn rounded-2xl px-3 py-1 text-xs font-medium"
+          >
+            Admin
+          </button>
         </section>
 
         <TopicPicker
