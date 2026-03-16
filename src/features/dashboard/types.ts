@@ -58,6 +58,10 @@ export type TopicData = {
     values: Array<{ code: string; label: string }>;
   }>;
   /**
+   * Available geo (country) values in the dataset, used for user selection.
+   */
+  availableGeos?: Array<{ code: string; label: string }>;
+  /**
    * When a reliable forecast cannot be computed (e.g., values are too small),
    * this provides a message to explain why (and the UI can choose not to show a forecast).
    */

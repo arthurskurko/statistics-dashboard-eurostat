@@ -356,11 +356,31 @@ function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label:
 }
 export async function fetchTopicData(
   topicId: string,
-  options?: { forecastHorizon?: number; filters?: Record<string, string>; seriesDimension?: string },
+  options?: {
+    forecastHorizon?: number;
+    filters?: Record<string, string>;
+    seriesDimension?: string;
+    geoValues?: string[];
+  },
 ): Promise<TopicData> {
   let topic = TOPIC_MAP[topicId];
   const forecastHorizon = options?.forecastHorizon ?? 20;
   const extraFilters = options?.filters ?? {};
+  // Default to EE + EU27 for topics that don’t explicitly specify a geo list.
+  // Treat an empty array as unset (so it doesn't cause an unfiltered download).
+  let geoValues =
+    options?.geoValues && options.geoValues.length > 0
+      ? options.geoValues
+      : topic?.geoValues?.length
+      ? topic.geoValues
+      : ['EE', 'EU27_2020'];
+
+  // Safety guard: never request the full dataset without at least one geo filter.
+  if (geoValues.length === 0) {
+    // eslint-disable-next-line no-console
+    console.warn('fetchTopicData: geoValues empty, defaulting to EE to avoid huge download');
+    geoValues = ['EE'];
+  }
 
   if (!topic) {
     // Allow fetching by dataset code directly (custom topics).
@@ -387,7 +407,8 @@ export async function fetchTopicData(
       description: catalogDescription ?? `Eurostat dataset ${topicId}`,
       datasetCode: topicId,
       filters: {},
-      geoValues: ['EE', 'EU27_2020'],
+      // Default to not fetching the full world: only Estonia.
+      geoValues: ['EE'],
       decimals: 0,
       sourceUrl: `https://ec.europa.eu/eurostat/databrowser/view/${topicId}/default/table?lang=en`,
     };
@@ -396,7 +417,11 @@ export async function fetchTopicData(
   const url = buildUrlForTopic({
     ...topic,
     extraFilters,
+    geoValues,
   });
+  // Debug: log the full URL being requested to validate which geos are being queried.
+  // eslint-disable-next-line no-console
+  console.log('fetchTopicData url', url);
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -405,6 +430,7 @@ export async function fetchTopicData(
 
   const dataset = (await response.json()) as JsonStatDataset;
   let { series, periods } = parseSeries(dataset, topic.title, options?.seriesDimension);
+
 
   // If the topic doesn't explicitly specify a unit suffix (e.g. '%'), and
   // the dataset defines a single unit, use that as a display suffix so the UI
@@ -510,13 +536,28 @@ export async function fetchTopicData(
 
     // compute aggregate over EU27 member codes
     const euAggregate = buildAggregate(fullDataset, EU27_CODES, 'European Union - 27 countries (from 2020)');
-    series = fullResult.series.filter((s) => s.id === topic.title || s.id === 'Estonia');
-    // ensure Estonia is included if requested
-    if (!series.find((s) => s.label === 'Estonia')) {
+
+    // Determine which geos were requested (including any custom ones passed in).
+    const requestedGeos = [...new Set([...(geoValues ?? topic.geoValues ?? [])])];
+
+    const geoLabels = (fullDataset.dimension.geo?.category.label ?? {}) as Record<string, string>;
+    const requestedGeoLabels = requestedGeos
+      .map((code) => geoLabels[code] ?? code)
+      .filter(Boolean);
+
+    series = fullResult.series.filter((s) => requestedGeoLabels.includes(s.label));
+
+    // Ensure Estonia is included if it was requested or part of the original topic.
+    if (requestedGeos.includes('EE') && !series.find((s) => s.label === 'Estonia')) {
       const est = fullResult.series.find((s) => s.label === 'Estonia');
       if (est) series.push(est);
     }
-    series.push(euAggregate);
+
+    // Always include the EU aggregate when it is requested.
+    if (requestedGeos.includes('EU27_2020')) {
+      series.push(euAggregate);
+    }
+
     periods = fullResult.periods;
 
     // Trim any trailing incomplete years from series (especially in the EU aggregate).
@@ -738,6 +779,19 @@ export async function fetchTopicData(
     console.log('DEBUG forecast-series', series.filter((s) => s.label.includes('(forecast)')).map((s) => s.label));
   }
 
+  const availableGeos = (() => {
+    const geoDim = dataset.dimension.geo;
+    if (!geoDim) return undefined;
+    const index = geoDim.category.index;
+    const labels = geoDim.category.label ?? {};
+
+    const codes = Array.isArray(index)
+      ? index
+      : Object.entries(index).sort((a, b) => a[1] - b[1]).map(([code]) => code);
+
+    return codes.map((code) => ({ code, label: labels[code] ?? code }));
+  })();
+
   return {
     title: topic.title,
     subtitle: topic.description,
@@ -747,6 +801,7 @@ export async function fetchTopicData(
     series,
     periods,
     extraDimensions,
+    availableGeos,
     forecastDisabledReason,
   };
 }

@@ -55,6 +55,24 @@ function formatValue(value: number, decimals: number, unitSuffix?: string) {
   return unitSuffix ? `${formatter.format(value)}${unitSuffix}` : formatter.format(value);
 }
 
+const KNOWN_GEOS: Array<{ code: string; label: string }> = [
+  { code: 'EE', label: 'Estonia' },
+  { code: 'EU27_2020', label: 'European Union - 27 countries (from 2020)' },
+  { code: 'DE', label: 'Germany' },
+  { code: 'FR', label: 'France' },
+  { code: 'IT', label: 'Italy' },
+  { code: 'ES', label: 'Spain' },
+  { code: 'NL', label: 'Netherlands' },
+  { code: 'PL', label: 'Poland' },
+  { code: 'SE', label: 'Sweden' },
+  { code: 'FI', label: 'Finland' },
+  { code: 'LV', label: 'Latvia' },
+  { code: 'LT', label: 'Lithuania' },
+  { code: 'UA', label: 'Ukraine' },
+  { code: 'GB', label: 'United Kingdom' },
+  { code: 'CH', label: 'Switzerland' },
+];
+
 export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const topic = TOPIC_MAP[topicId] ?? {
     id: topicId,
@@ -73,16 +91,20 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     Array<{ id: string; label: string; values: Array<{ code: string; label: string }> }>
   >([]);
   const [seriesDimension, setSeriesDimension] = React.useState<string>('');
+  const [geoValues, setGeoValues] = React.useState<string[]>(topic.geoValues ?? ['EE', 'EU27_2020']);
+  const [geoInput, setGeoInput] = React.useState('');
+  const [missingGeos, setMissingGeos] = React.useState<string[]>([]);
 
   // Reset any custom dimension filters when the selected topic changes.
   React.useEffect(() => {
     setDimensionFilters({});
     setAvailableDimensions([]);
     setSeriesDimension('');
+    setGeoValues(topic.geoValues ?? ['EE']);
   }, [topicId]);
 
   const query = useQuery({
-    queryKey: ['topic-data', topicId, forecastHorizon, dimensionFilters, seriesDimension],
+    queryKey: ['topic-data', topicId, forecastHorizon, dimensionFilters, seriesDimension, geoValues],
     queryFn: () => {
       const activeFilters = Object.fromEntries(
         Object.entries(dimensionFilters).filter(([key]) => key !== seriesDimension),
@@ -92,6 +114,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         forecastHorizon,
         filters: activeFilters,
         seriesDimension,
+        geoValues,
       });
     },
   });
@@ -102,7 +125,20 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const [dualAxis, setDualAxis] = React.useState(true);
 
   const baseSeries = query.data?.series.filter((s) => !s.label.includes('(forecast)')) ?? [];
-  const showDualAxisButton = baseSeries.length === 2;
+
+  // Decide split between "large" and "small" series by comparing maximum values.
+  const seriesMax = baseSeries.map((s) => ({
+    label: s.label,
+    max: Math.max(...s.points.map((p) => p.value), 0),
+  }));
+
+  const overallMax = Math.max(...seriesMax.map((s) => s.max), 0);
+  const largeThreshold = overallMax * 0.25; // top ~25% of scale are "large" series
+
+  const largeSeries = seriesMax.filter((s) => s.max >= largeThreshold).map((s) => s.label);
+  const smallSeries = seriesMax.filter((s) => s.max < largeThreshold).map((s) => s.label);
+
+  const showDualAxisButton = largeSeries.length > 0 && smallSeries.length > 0;
 
   React.useEffect(() => {
     if (!query.data?.extraDimensions) return;
@@ -120,6 +156,23 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
       setDimensionFilters({});
     }
   }, [query.data, availableDimensions.length, dimensionFilters]);
+
+  React.useEffect(() => {
+    if (!query.data) return;
+
+    const present = new Set(
+      query.data.series
+        .map((s) => s.label.replace(/ \(forecast\)$/, ''))
+        .filter(Boolean),
+    );
+
+    const missing = geoValues.filter((geo) => {
+      const label = KNOWN_GEOS.find((g) => g.code === geo)?.label ?? geo;
+      return !present.has(label);
+    });
+
+    setMissingGeos(missing);
+  }, [query.data, geoValues]);
 
 const activeFilterLabels = useMemo(() => {
     if (!query.data) return [];
@@ -154,13 +207,20 @@ const activeFilterLabels = useMemo(() => {
     const colorMap = new Map<string, string>(baseColors);
 
     // Ensure all base series (excluding forecast versions) have distinct colors.
+    const usedColors = new Set<string>(colorMap.values());
     let nextPaletteIndex = 0;
     query.data.series
       .map((s) => s.label.replace(/ \(forecast\)$/, ''))
       .filter((label, index, arr) => arr.indexOf(label) === index)
       .forEach((baseLabel) => {
         if (!colorMap.has(baseLabel)) {
-          colorMap.set(baseLabel, palette[nextPaletteIndex % palette.length]);
+          // Find next palette color that isn't already in use.
+          while (usedColors.has(palette[nextPaletteIndex % palette.length])) {
+            nextPaletteIndex += 1;
+          }
+          const color = palette[nextPaletteIndex % palette.length];
+          usedColors.add(color);
+          colorMap.set(baseLabel, color);
           nextPaletteIndex += 1;
         }
       });
@@ -242,8 +302,8 @@ const axisColors = baseSeries.map((s) => {
     option.series = query.data.series.map((series) => {
       const isForecast = series.label.includes('(forecast)');
       const baseLabel = series.label.replace(/ \(forecast\)$/, '');
-      const baseIndex = baseSeries.findIndex((s) => s.label === baseLabel);
-      const yAxisIndex = twoSeries && dualAxis && baseIndex >= 0 ? baseIndex : 0;
+      const isLarge = largeSeries.includes(baseLabel);
+      const yAxisIndex = twoSeries && dualAxis ? (isLarge ? 1 : 0) : 0;
       const seriesColor = colorMap.get(baseLabel) ?? '#4c9aff';
 
       return {
@@ -311,6 +371,73 @@ const axisColors = baseSeries.map((s) => {
               <strong className="font-semibold">No reliable forecast:</strong> {query.data.forecastDisabledReason}
             </div>
           ) : null}
+
+          {missingGeos.length > 0 ? (
+            <div className="mt-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              <strong className="font-semibold">No data for:</strong> {missingGeos.join(', ')}
+            </div>
+          ) : null}
+
+          <div className="mt-2 flex flex-col gap-2 text-sm text-slate-400">
+            <span>Compare geos:</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {geoValues.map((geo) => (
+                <span
+                  key={geo}
+                  className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-xs"
+                >
+                  {geo}
+                  <button
+                    type="button"
+                    onClick={() => setGeoValues((prev) => prev.filter((g) => g !== geo))}
+                    className="rounded-full bg-white/20 px-1 text-xs"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <div className="relative">
+                <input
+                  value={geoInput}
+                  onChange={(e) => setGeoInput(e.target.value.toUpperCase())}
+                  placeholder="Add geo (e.g. DE)"
+                  className="h-9 w-40 rounded-2xl border border-border bg-slate-950/80 px-3 text-xs text-white outline-none transition focus:border-sky-400"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const value = geoInput.trim().toUpperCase();
+                      if (value && !geoValues.includes(value)) {
+                        setGeoValues((prev) => [...prev, value]);
+                      }
+                      setGeoInput('');
+                    }
+                  }}
+                />
+                {geoInput ? (
+                  <div className="absolute left-0 top-full z-10 mt-1 max-h-40 w-full overflow-auto rounded-xl border border-border bg-slate-950/90">
+                    {KNOWN_GEOS
+                      .filter((g) => g.code.startsWith(geoInput) || g.label.toLowerCase().includes(geoInput.toLowerCase()))
+                      .slice(0, 10)
+                      .map((g) => (
+                        <button
+                          key={g.code}
+                          type="button"
+                          className="block w-full px-3 py-2 text-left text-xs text-white hover:bg-white/10"
+                          onClick={() => {
+                            if (!geoValues.includes(g.code)) {
+                              setGeoValues((prev) => [...prev, g.code]);
+                            }
+                            setGeoInput('');
+                          }}
+                        >
+                          {g.code} — {g.label}
+                        </button>
+                      ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
 
           {(seriesDimension || Object.values(dimensionFilters).some((v) => v)) ? (
             <p className="mt-2 text-sm text-slate-400">
