@@ -66,4 +66,9 @@ export type TopicData = {
    * this provides a message to explain why (and the UI can choose not to show a forecast).
    */
   forecastDisabledReason?: string;
+  /**
+   * When a dataset is too large to fetch/render without filters, this provides a
+   * user-friendly explanation and prompts the user to apply additional filters.
+   */
+  warning?: string;
 };

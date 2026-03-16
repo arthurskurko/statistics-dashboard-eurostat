@@ -122,9 +122,13 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   // toggle to enable dual‑axis plotting when there are two series; users can
   // switch it on/off via a button in the card header.  Defaults to off so that
   // the existing behaviour remains unless the user explicitly enables it.
-  const [dualAxis, setDualAxis] = React.useState(true);
+  const [dualAxis, setDualAxis] = React.useState(false);
+  const [chartError, setChartError] = React.useState<string | null>(null);
 
-  const baseSeries = query.data?.series.filter((s) => !s.label.includes('(forecast)')) ?? [];
+  const MAX_RENDER_SERIES = 40;
+  const effectiveSeries = query.data?.series.slice(0, MAX_RENDER_SERIES) ?? [];
+
+  const baseSeries = effectiveSeries.filter((s) => !s.label.includes('(forecast)'));
 
   // Decide split between "large" and "small" series by comparing maximum values.
   const seriesMax = baseSeries.map((s) => ({
@@ -160,19 +164,16 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   React.useEffect(() => {
     if (!query.data) return;
 
-    const present = new Set(
-      query.data.series
-        .map((s) => s.label.replace(/ \(forecast\)$/, ''))
-        .filter(Boolean),
-    );
-
-    const missing = geoValues.filter((geo) => {
-      const label = KNOWN_GEOS.find((g) => g.code === geo)?.label ?? geo;
-      return !present.has(label);
-    });
+    const responseGeoCodes = new Set(query.data.availableGeos?.map((g) => g.code));
+    const missing = geoValues.filter((geo) => !responseGeoCodes.has(geo));
 
     setMissingGeos(missing);
   }, [query.data, geoValues]);
+
+  React.useEffect(() => {
+    // Clear any chart-level error whenever the underlying query changes.
+    setChartError(null);
+  }, [query.data, query.error]);
 
 const activeFilterLabels = useMemo(() => {
     if (!query.data) return [];
@@ -181,17 +182,27 @@ const activeFilterLabels = useMemo(() => {
       .map(([key, value]) => findDimensionValueLabel(availableDimensions, key, value));
   }, [availableDimensions, dimensionFilters, query.data]);
 
+  const MAX_SERIES_TO_RENDER = 16;
+
   const chartOption = useMemo(() => {
     if (!query.data) {
       return undefined;
     }
-    // debug: print period/series info when showing induced abortions
-    if (topicId === 'induced-abortions') {
-      // eslint-disable-next-line no-console
-      console.log('DEBUG induced:', query.data.periods, query.data.series.map(s => ({label: s.label, points: s.points.slice(-3)})));
+    if (query.data.series.length === 0) {
+      return undefined;
     }
 
-    // use the full list of periods returned by the query to ensure earlier
+    try {
+      // debug: print period/series info when showing induced abortions
+      if (topicId === 'induced-abortions') {
+        // eslint-disable-next-line no-console
+        console.log(
+          'DEBUG induced:',
+          query.data.periods,
+          effectiveSeries.map((s) => ({ label: s.label, points: s.points.slice(-3) })),
+        );
+      }
+
     // years appear even if one of the series has no observation for them.
     const xAxis = query.data.periods;
 
@@ -200,8 +211,27 @@ const activeFilterLabels = useMemo(() => {
 
     const baseColors = new Map<string, string>([
       ['Estonia', '#00e676'],
+      ['Estonia — Total', '#00e676'],
+      ['Estonia — Males', '#a855f7'],
+      ['Estonia — Females', '#facc15'],
       ['European Union - 27 countries (from 2020)', '#4c9aff'],
     ]);
+
+    const normalizeSeriesLabel = (label: string) => {
+      const est = /Estonia/i.test(label);
+      if (!est) return label;
+
+      // Only normalise to the canonical "Total" label when the series is clearly
+      // the overall total (or contains no further segmentation beyond Estonia).
+      if (/\bTotal\b/i.test(label) || /^Estonia\s*$/i.test(label)) return 'Estonia — Total';
+
+      // Keep sex-series canonical so they always map to the same colour.
+      if (/\bMales?\b/i.test(label)) return 'Estonia — Males';
+      if (/\bFemales?\b/i.test(label)) return 'Estonia — Females';
+
+      // Otherwise preserve the full label so different age / cohort groups get distinct colours.
+      return label;
+    };
 
     const palette = ['#00e676', '#4c9aff', '#f97316', '#a855f7', '#facc15', '#ec4899', '#22c55e', '#38bdf8', '#f43f5e'];
     const colorMap = new Map<string, string>(baseColors);
@@ -209,8 +239,8 @@ const activeFilterLabels = useMemo(() => {
     // Ensure all base series (excluding forecast versions) have distinct colors.
     const usedColors = new Set<string>(colorMap.values());
     let nextPaletteIndex = 0;
-    query.data.series
-      .map((s) => s.label.replace(/ \(forecast\)$/, ''))
+    effectiveSeries
+      .map((s) => normalizeSeriesLabel(s.label.replace(/ \(forecast\)$/, '')))
       .filter((label, index, arr) => arr.indexOf(label) === index)
       .forEach((baseLabel) => {
         if (!colorMap.has(baseLabel)) {
@@ -224,6 +254,40 @@ const activeFilterLabels = useMemo(() => {
           nextPaletteIndex += 1;
         }
       });
+
+    // If everything ended up the same colour (which can happen if all series
+    // share the same normalized label), force a more distinct palette.
+    // This helps avoid situations where the chart looks like a single colour
+    // even though there are multiple series.
+    const distinctColorCount = new Set(colorMap.values()).size;
+    const uniqueLabels = effectiveSeries
+      .map((s) => normalizeSeriesLabel(s.label.replace(/ \(forecast\)$/, '')))
+      .filter((label, index, arr) => arr.indexOf(label) === index);
+
+    if (distinctColorCount === 1 && uniqueLabels.length > 1) {
+      uniqueLabels.forEach((label, idx) => {
+        const color = palette[idx % palette.length];
+        colorMap.set(label, color);
+      });
+      if (process.env.NODE_ENV === 'development') {
+        // eslint-disable-next-line no-console
+        console.warn('All series were assigned the same colour; overriding with palette for distinct series.');
+      }
+    }
+
+    // Debug: log label -> color mapping when colors look wrong.
+    if (process.env.NODE_ENV === 'development' && topicId === 'yth_demo_070') {
+      // eslint-disable-next-line no-console
+      console.log('colorMap entries', Array.from(colorMap.entries()));
+      // eslint-disable-next-line no-console
+      console.log(
+        'series color lookup',
+        effectiveSeries.map((s) => {
+          const normalized = normalizeSeriesLabel(s.label.replace(/ \(forecast\)$/, ''));
+          return { label: s.label, normalized, color: colorMap.get(normalized) };
+        }),
+      );
+    }
 
     const filterSuffix = activeFilterLabels.length > 0 ? ` (${activeFilterLabels.join(', ')})` : '';
 
@@ -252,7 +316,7 @@ const activeFilterLabels = useMemo(() => {
         color: '#cbd5e1',
       },
       // only show base (non-forecast) series in legend
-      data: baseSeries.map((s) => s.label),
+      data: baseSeries.map((s) => normalizeSeriesLabel(s.label)),
       inactiveColor: '#999999',
     };
     option.grid = {
@@ -299,12 +363,13 @@ const axisColors = baseSeries.map((s) => {
           axisLabel: { color: '#94a3b8' },
           splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
         };
-    option.series = query.data.series.map((series) => {
+
+    option.series = effectiveSeries.map((series) => {
       const isForecast = series.label.includes('(forecast)');
-      const baseLabel = series.label.replace(/ \(forecast\)$/, '');
-      const isLarge = largeSeries.includes(baseLabel);
+      const normalizedLabel = normalizeSeriesLabel(series.label.replace(/ \(forecast\)$/, ''));
+      const isLarge = largeSeries.includes(normalizedLabel);
       const yAxisIndex = twoSeries && dualAxis ? (isLarge ? 1 : 0) : 0;
-      const seriesColor = colorMap.get(baseLabel) ?? '#4c9aff';
+      const seriesColor = colorMap.get(normalizedLabel) ?? '#4c9aff';
 
       return {
         name: `${series.label}${filterSuffix}`,
@@ -331,6 +396,13 @@ const axisColors = baseSeries.map((s) => {
 
     // return the fully built option for useMemo
     return option;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // eslint-disable-next-line no-console
+    console.error('Chart option build failed:', err);
+    setChartError(message);
+    return undefined;
+  }
   }, [query.data, topic.chartVariant, dualAxis, showDualAxisButton, activeFilterLabels]);
 
   const latestValues = useMemo(() => {
@@ -340,7 +412,7 @@ const axisColors = baseSeries.map((s) => {
 
     const filterSuffix = activeFilterLabels.length > 0 ? ` (${activeFilterLabels.join(', ')})` : '';
 
-    return query.data.series
+    return effectiveSeries
       .filter((series) => !series.label.includes('(forecast)'))
       .map((series) => {
         const nonForecastPoints = series.points.filter((p) => !p.predicted);
@@ -372,9 +444,24 @@ const axisColors = baseSeries.map((s) => {
             </div>
           ) : null}
 
+          {query.data?.warning ? (
+            <div className="mt-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              <strong className="font-semibold">Notice:</strong> {query.data.warning}
+            </div>
+          ) : null}
+
           {missingGeos.length > 0 ? (
             <div className="mt-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-              <strong className="font-semibold">No data for:</strong> {missingGeos.join(', ')}
+              <strong className="font-semibold">No data for:</strong>{' '}
+              {missingGeos
+                .map((code) => KNOWN_GEOS.find((g) => g.code === code)?.label ?? code)
+                .join(', ')}
+            </div>
+          ) : null}
+
+          {chartError ? (
+            <div className="mt-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              <strong className="font-semibold">Rendering error:</strong> {chartError}
             </div>
           ) : null}
 
@@ -425,7 +512,12 @@ const axisColors = baseSeries.map((s) => {
                           className="block w-full px-3 py-2 text-left text-xs text-white hover:bg-white/10"
                           onClick={() => {
                             if (!geoValues.includes(g.code)) {
-                              setGeoValues((prev) => [...prev, g.code]);
+                              if (topicId === 'yth_demo_070') {
+                                // yth_demo_070 is too heavy to request multiple countries simultaneously.
+                                setGeoValues([g.code]);
+                              } else {
+                                setGeoValues((prev) => [...prev, g.code]);
+                              }
                             }
                             setGeoInput('');
                           }}
@@ -550,6 +642,13 @@ const axisColors = baseSeries.map((s) => {
             Remove
           </button>
         </div>
+
+        {(query.data?.series?.length ?? 0) > MAX_SERIES_TO_RENDER ? (
+          <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            <strong className="font-semibold">Showing first {MAX_SERIES_TO_RENDER} series.</strong>{' '}
+            Reduce the number of selected countries or split dimensions to improve performance.
+          </div>
+        ) : null}
       </div>
 
       {query.isLoading ? (
@@ -589,7 +688,14 @@ const axisColors = baseSeries.map((s) => {
         </div>
       ) : null}
 
-      {query.data && chartOption ? (
+      {query.data && query.data.series.length === 0 ? (
+        <div className="flex flex-1 flex-col items-start justify-center gap-4 rounded-3xl border border-rose-400/20 bg-rose-400/10 p-6 text-rose-100">
+          <div className="text-lg font-semibold">No data is available for the selected filters.</div>
+          <p className="max-w-2xl text-sm leading-6 text-rose-100/90">
+            {query.data.warning ?? 'Try changing the selected countries, time range, or dimension filters.'}
+          </p>
+        </div>
+      ) : query.data && chartOption ? (
         <>
           <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {latestValues.map(({ label, point }) => (

@@ -27,6 +27,19 @@ type DimensionInfo = {
 const EUROSTAT_BASE =
   'https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data';
 
+// Some Eurostat datasets are enormous unless you narrow them by a common filter.
+// When users request these datasets without additional filtering, apply a sane
+// default so the app doesn't try to download & parse a multi‑million‑point payload.
+const DEFAULT_FILTERS_FOR_LARGE_DATASETS: Record<string, Record<string, string>> = {
+  // Young immigrants by sex and country of birth (this table is extremely large).
+  // Default to raw counts (NR) so the numbers match the previous view.
+  // Do NOT force age or sex here, because those splits are essential for the chart.
+  yth_demo_070: {
+    unit: 'NR',
+    c_birth: 'TOTAL',
+  },
+};
+
 function buildUrlForTopic(topic: { datasetCode: string; filters: Record<string, string | string[]>; geoValues?: string[]; extraFilters?: Record<string, string> }): string {
   const url = new URL(`${EUROSTAT_BASE}/${topic.datasetCode}`);
   url.searchParams.set('lang', 'en');
@@ -172,14 +185,6 @@ function getNextPeriodCode(periodCode: string): string | null {
   return null;
 }
 
-// List of current EU‑27 coding values used for synthesised aggregates.
-// These match the geo codes supplied in the DEMO_FABORTORD dimension above.
-const EU27_CODES = [
-  'BE','BG','CZ','DK','DE','EE','IE','ES','FR','HR','IT','CY','LV','LT','LU',
-  'HU','MT','NL','AT','PL','PT','RO','SI','SK','FI','SE',
-];
-
-
 function parseSeries(
   dataset: JsonStatDataset,
   fallbackLabel: string,
@@ -287,73 +292,6 @@ function parseSeries(
   return { series, periods };
 }
 
-/**
- * Build an aggregate series summing the specified geo codes from a full dataset.
- */
-function buildAggregate(dataset: JsonStatDataset, includeCodes: string[], label: string): DataSeries {
-  const dimensions = getDimensionInfo(dataset);
-  const timeDimension = dimensions.find((d) => /time/i.test(d.id)) ?? dimensions.at(-1);
-  const geoDimension = dimensions.find((d) => d.id.toLowerCase() === 'geo');
-  if (!timeDimension || !geoDimension) {
-    throw new Error('Cannot build aggregate without time and geo dimensions');
-  }
-
-  const timeIndex = dimensions.findIndex((d) => d.id === timeDimension.id);
-  const geoIndex = dimensions.findIndex((d) => d.id === geoDimension.id);
-
-  const periods = [...timeDimension.codes];
-
-  // Keep track of how many countries contributed to each period so that we can
-  // detect partial / incomplete years (where only a few countries have reported).
-  const points: Array<{
-    periodCode: string;
-    label: string;
-    sortKey: number;
-    value: number;
-    count: number;
-  }> = periods.map((code) => ({
-    periodCode: code,
-    label: formatPeriodLabel(code),
-    sortKey: inferSortKey(code),
-    value: 0,
-    count: 0,
-  }));
-
-  const values = Array.isArray(dataset.value)
-    ? dataset.value.map((v, i) => [i, v] as const)
-    : Object.entries(dataset.value).map(([i, v]) => [Number(i), v] as const);
-
-  for (const [flatIndex, rawValue] of values) {
-    if (rawValue == null || Number.isNaN(Number(rawValue))) continue;
-    const pos = unravelIndex(flatIndex, dataset.size);
-    const geoCode = geoDimension.codes[pos[geoIndex]];
-    if (!includeCodes.includes(geoCode)) continue;
-    const periodCode = timeDimension.codes[pos[timeIndex]];
-    const pt = points.find((p) => p.periodCode === periodCode);
-    if (pt) {
-      pt.value += Number(rawValue);
-      pt.count += 1;
-    }
-  }
-
-  // Drop trailing years that are clearly incomplete (few countries reported).
-  const maxCount = Math.max(...points.map((p) => p.count));
-  const minAcceptableCount = Math.max(1, Math.floor(maxCount * 0.7));
-  let lastValid = points.length - 1;
-  while (lastValid >= 0 && points[lastValid].count < minAcceptableCount) {
-    lastValid -= 1;
-  }
-
-  const trimmed = points.slice(0, lastValid + 1);
-
-  return {
-    id: label,
-    label,
-    points: trimmed
-      .filter((p) => p.count > 0)
-      .map(({ count, ...p }) => p),
-  };
-}
 export async function fetchTopicData(
   topicId: string,
   options?: {
@@ -365,7 +303,20 @@ export async function fetchTopicData(
 ): Promise<TopicData> {
   let topic = TOPIC_MAP[topicId];
   const forecastHorizon = options?.forecastHorizon ?? 20;
-  const extraFilters = options?.filters ?? {};
+  const extraFilters = { ...(options?.filters ?? {}) };
+
+  // Apply dataset-specific default filters for known huge tables.
+  // These defaults are only applied if the user has not already specified the filter.
+  const datasetCode = topic?.datasetCode ?? topicId;
+  const defaultFilters = DEFAULT_FILTERS_FOR_LARGE_DATASETS[datasetCode];
+  if (defaultFilters) {
+    for (const [key, value] of Object.entries(defaultFilters)) {
+      if (!(key in extraFilters) && !(key in (topic?.filters ?? {}))) {
+        extraFilters[key] = value;
+      }
+    }
+  }
+
   // Default to EE + EU27 for topics that don’t explicitly specify a geo list.
   // Treat an empty array as unset (so it doesn't cause an unfiltered download).
   let geoValues =
@@ -414,30 +365,214 @@ export async function fetchTopicData(
     };
   }
 
-  const url = buildUrlForTopic({
-    ...topic,
-    extraFilters,
-    geoValues,
-  });
-  // Debug: log the full URL being requested to validate which geos are being queried.
-  // eslint-disable-next-line no-console
-  console.log('fetchTopicData url', url);
-  const response = await fetch(url);
+  const attemptFetch = async (filters: Record<string, string>, overrideGeoValues?: string[]) => {
+    const url = buildUrlForTopic({
+      ...topic,
+      extraFilters: filters,
+      geoValues: overrideGeoValues ?? geoValues,
+    });
+    // eslint-disable-next-line no-console
+    console.log('fetchTopicData url', url);
 
-  if (!response.ok) {
-    throw new Error(`Eurostat request failed with status ${response.status}.`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Eurostat request failed with status ${response.status}.`);
+    }
+    const dataset = (await response.json()) as JsonStatDataset;
+    return { dataset, filters };
+  };
+
+  const buildEuAggregate = (dataset: JsonStatDataset): DataSeries | null => {
+    const dimensions = getDimensionInfo(dataset);
+    const timeDim = dimensions.find((d) => /time/i.test(d.id)) ?? dimensions.at(-1);
+    const geoDim = dimensions.find((d) => d.id.toLowerCase() === 'geo');
+    if (!timeDim || !geoDim) return null;
+
+    const timeIndex = dimensions.findIndex((d) => d.id === timeDim.id);
+    const geoIndex = dimensions.findIndex((d) => d.id === geoDim.id);
+
+    const periods = timeDim.codes;
+
+    const points = periods.map((code) => ({
+      periodCode: code,
+      label: formatPeriodLabel(code),
+      sortKey: inferSortKey(code),
+      value: 0,
+    }));
+
+    const values = Array.isArray(dataset.value)
+      ? dataset.value.map((v, i) => [i, v] as const)
+      : Object.entries(dataset.value).map(([i, v]) => [Number(i), v] as const);
+
+    for (const [flatIndex, rawValue] of values) {
+      if (rawValue == null || Number.isNaN(Number(rawValue))) continue;
+      const pos = unravelIndex(flatIndex, dataset.size);
+      const geoCode = geoDim.codes[pos[geoIndex]];
+      // Do not include any existing EU aggregates in the sum.
+      if (/^EU/i.test(geoCode) && geoCode !== 'EU27_2020') continue;
+
+      const periodCode = timeDim.codes[pos[timeIndex]];
+      const point = points.find((p) => p.periodCode === periodCode);
+      if (point) {
+        point.value += Number(rawValue);
+      }
+    }
+
+    return {
+      id: 'EU27_2020-aggregate',
+      label: 'European Union - 27 countries (from 2020)',
+      points,
+    };
+  };
+
+  const { dataset: initialDataset } = await attemptFetch(extraFilters);
+
+  const valueCount = Array.isArray(initialDataset.value)
+    ? initialDataset.value.length
+    : Object.keys(initialDataset.value).length;
+  const maxAllowedValues = 250_000;
+  const tooLarge = valueCount > maxAllowedValues;
+
+  const extraDimensions = (() => {
+    const dimensions = getDimensionInfo(initialDataset);
+    const timeDimension = dimensions.find((d) => /time/i.test(d.id)) ?? dimensions.at(-1);
+    const geoDimension = dimensions.find((d) => d.id.toLowerCase() === 'geo');
+
+    const extra = dimensions
+      .filter((d) => d.id !== timeDimension?.id && d.id !== geoDimension?.id)
+      .map((d) => ({
+        id: d.id,
+        label: d.id,
+        values: d.codes.map((code) => ({ code, label: d.labels[code] ?? code })),
+      }));
+
+    return extra.length > 0 ? extra : undefined;
+  })();
+
+  const availableGeos = (() => {
+    const geoDim = initialDataset.dimension.geo;
+    if (!geoDim) return undefined;
+    const index = geoDim.category.index;
+    const labels = geoDim.category.label ?? {};
+
+    const idx = index as string[] | Record<string, number>;
+    const codes = Array.isArray(idx)
+      ? idx
+      : Object.entries(idx).sort((a, b) => (a[1] as number) - (b[1] as number)).map(([code]) => code);
+
+    return codes.map((code) => ({ code, label: labels[code] ?? code }));
+  })();
+
+  let series: DataSeries[] = [];
+  let periods: string[] = [];
+  let warning: string | undefined;
+
+  // ------------------------------------------------------------------
+  // For yth_demo_070 we want to keep the response small, but still allow the
+  // UI to show all available sex/age/c_birth choices.
+  //
+  // Strategy:
+  // 1) Fetch the normal (possibly filtered) dataset for chart data.
+  // 2) Fetch a tiny metadata response (single geo + single time) to discover
+  //    all valid codes for the selectable dimensions.
+  // ------------------------------------------------------------------
+  if (topicId === 'yth_demo_070') {
+    const timeDim = initialDataset.dimension.time?.category?.index;
+    const latestTime = Array.isArray(timeDim)
+      ? timeDim.at(-1)
+      : Object.entries(timeDim ?? {}).sort((a, b) => (a[1] as number) - (b[1] as number)).at(-1)?.[0];
+
+    if (latestTime) {
+      try {
+        const metaFilters: Record<string, string> = { time: latestTime };
+        const unitFilter = extraFilters.unit ?? topic.filters?.unit;
+        if (unitFilter) metaFilters.unit = unitFilter;
+
+        const { dataset: meta } = await attemptFetch(metaFilters, ['EE']);
+        const metaDims = getDimensionInfo(meta);
+
+        const injectDim = (dimId: string, label: string) => {
+          const dim = metaDims.find((d) => d.id === dimId);
+          if (!dim || !extraDimensions) return;
+          const values = dim.codes.map((code) => ({ code, label: dim.labels[code] ?? code }));
+          const existing = extraDimensions.find((d) => d.id === dimId);
+          if (existing) existing.values = values;
+          else extraDimensions.push({ id: dimId, label, values });
+        };
+
+        injectDim('sex', 'Sex');
+        injectDim('age', 'Age');
+        injectDim('agedef', 'Age definition');
+        injectDim('c_birth', 'Country of birth');
+      } catch {
+        // Ignore metadata fetch failures; it is purely a UX enhancement.
+      }
+    }
   }
 
-  const dataset = (await response.json()) as JsonStatDataset;
-  let { series, periods } = parseSeries(dataset, topic.title, options?.seriesDimension);
+  const getObsCount = (dataset: JsonStatDataset): number | undefined => {
+    const ann = (dataset as any).extension?.annotation;
+    if (!Array.isArray(ann)) return undefined;
+    const obs = ann.find((a: any) => a.type === 'OBS_COUNT')?.title;
+    const num = Number(String(obs).replace(/\D/g, ''));
+    return Number.isFinite(num) ? num : undefined;
+  };
 
+  const obsCount = getObsCount(initialDataset);
+  const safeToFetchFull = obsCount == null || obsCount <= maxAllowedValues;
+
+  if (tooLarge) {
+    warning = `Dataset contains ${valueCount.toLocaleString()} observations, which is too large to render. Please apply additional filters (e.g. select a sex, age group or country) to reduce the dataset size.`;
+  } else {
+    ({ series, periods } = parseSeries(initialDataset, topic.title, options?.seriesDimension));
+
+    // If the API returns an empty series list, it typically means the selected
+    // filters (including any defaults we applied) do not match any data.
+    if (series.length === 0) {
+      warning =
+        'No observations were returned for this dataset with the current filters. ' +
+        'Try selecting a different dataset or adjusting the filters (e.g., change the geo, time or dimension selections).';
+    }
+
+    // If the dataset contains an extremely large number of series (e.g. many
+    // geos or multi-dimensional splits), truncate them so the UI remains responsive.
+    const MAX_SERIES = 40;
+    if (series.length > MAX_SERIES) {
+      warning =
+        warning ??
+        `Too many series (${series.length}) to display. Showing the first ${MAX_SERIES}. ` +
+          'Please reduce the number of selected countries or split dimensions.';
+      series = series.slice(0, MAX_SERIES);
+    }
+
+    const requestedEu = (geoValues ?? topic.geoValues ?? []).includes('EU27_2020');
+    const hasEuInResponse = availableGeos?.some((g) => g.code === 'EU27_2020');
+
+    if (requestedEu && !hasEuInResponse && !warning) {
+      if (safeToFetchFull) {
+        try {
+          const { dataset: fullDataset } = await attemptFetch(extraFilters, []);
+          const euAggregate = buildEuAggregate(fullDataset);
+          if (euAggregate) {
+            series.push(euAggregate);
+          }
+        } catch {
+          // ignore failures; leave the missing data warning in place
+        }
+      } else {
+        warning =
+          'EU aggregate not available for this dataset without downloading a large dataset. ' +
+          'Try applying more specific filters or removing the EU aggregate selection.';
+      }
+    }
+  }
 
   // If the topic doesn't explicitly specify a unit suffix (e.g. '%'), and
   // the dataset defines a single unit, use that as a display suffix so the UI
   // doesn't look like it's showing raw counts.
   let unitSuffix = topic.unitSuffix;
   if (!unitSuffix) {
-    const unitDim = dataset.dimension.unit;
+    const unitDim = initialDataset.dimension.unit;
     const unitLabels = unitDim?.category?.label;
     const unitIndex = unitDim?.category?.index;
 
@@ -458,21 +593,20 @@ export async function fetchTopicData(
     }
   }
 
-  const extraDimensions = (() => {
-    const dimensions = getDimensionInfo(dataset);
-    const timeDimension = dimensions.find((d) => /time/i.test(d.id)) ?? dimensions.at(-1);
-    const geoDimension = dimensions.find((d) => d.id.toLowerCase() === 'geo');
-
-    const extra = dimensions
-      .filter((d) => d.id !== timeDimension?.id && d.id !== geoDimension?.id)
-      .map((d) => ({
-        id: d.id,
-        label: d.id,
-        values: d.codes.map((code) => ({ code, label: d.labels[code] ?? code })),
-      }));
-
-    return extra.length > 0 ? extra : undefined;
-  })();
+  if (warning) {
+    return {
+      title: topic.title,
+      subtitle: topic.description,
+      unitSuffix,
+      decimals: topic.decimals ?? 0,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      extraDimensions,
+      availableGeos,
+      warning,
+    };
+  }
 
   // Trim trailing zero values (often used as a placeholder for missing future data).
   for (const s of series) {
@@ -505,86 +639,6 @@ export async function fetchTopicData(
   // Align x-axis periods with the last available point across all series.
   const maxSortKey = Math.max(...series.flatMap((s) => s.points.map((p) => p.sortKey)));
   periods = periods.filter((p) => inferSortKey(p) <= maxSortKey);
-
-  // if the topic requests the EU27 aggregate but the response didn't include it
-  // (e.g. many health tables only publish individual countries), fetch the
-  // full dataset without a geo filter and build a synthetic EU series.
-  if (
-    topic.geoValues?.includes('EU27_2020') &&
-    (() => {
-      const idx = dataset.dimension.geo?.category.index;
-      if (!idx) return false;
-      return Array.isArray(idx) ? !idx.includes('EU27_2020') : idx['EU27_2020'] === undefined;
-    })()
-  ) {
-    // ask again without geo restrictions to get all countries
-    const fullUrl = new URL(`${EUROSTAT_BASE}/${topic.datasetCode}`);
-    fullUrl.searchParams.set('lang', 'en');
-    for (const [key, value] of Object.entries(topic.filters)) {
-      const values = Array.isArray(value) ? value : [value];
-      for (const entry of values) {
-        fullUrl.searchParams.append(key, entry);
-      }
-    }
-
-    const fullResponse = await fetch(fullUrl.toString());
-    if (!fullResponse.ok) {
-      throw new Error(`Eurostat request failed with status ${fullResponse.status}.`);
-    }
-    const fullDataset = (await fullResponse.json()) as JsonStatDataset;
-    const fullResult = parseSeries(fullDataset, topic.title, options?.seriesDimension);
-
-    // compute aggregate over EU27 member codes
-    const euAggregate = buildAggregate(fullDataset, EU27_CODES, 'European Union - 27 countries (from 2020)');
-
-    // Determine which geos were requested (including any custom ones passed in).
-    const requestedGeos = [...new Set([...(geoValues ?? topic.geoValues ?? [])])];
-
-    const geoLabels = (fullDataset.dimension.geo?.category.label ?? {}) as Record<string, string>;
-    const requestedGeoLabels = requestedGeos
-      .map((code) => geoLabels[code] ?? code)
-      .filter(Boolean);
-
-    series = fullResult.series.filter((s) => requestedGeoLabels.includes(s.label));
-
-    // Ensure Estonia is included if it was requested or part of the original topic.
-    if (requestedGeos.includes('EE') && !series.find((s) => s.label === 'Estonia')) {
-      const est = fullResult.series.find((s) => s.label === 'Estonia');
-      if (est) series.push(est);
-    }
-
-    // Always include the EU aggregate when it is requested.
-    if (requestedGeos.includes('EU27_2020')) {
-      series.push(euAggregate);
-    }
-
-    periods = fullResult.periods;
-
-    // Trim any trailing incomplete years from series (especially in the EU aggregate).
-    // Eurostat sometimes publishes a new year label before most countries have reported.
-    for (const s of series) {
-      while (s.points.length > 0 && s.points[s.points.length - 1].value === 0) {
-        s.points.pop();
-      }
-
-      if (/european union|eu27/i.test(s.label)) {
-        while (s.points.length > 1) {
-          const last = s.points[s.points.length - 1];
-          const prev = s.points[s.points.length - 2];
-          if (last.value === 0 || last.value < prev.value * 0.35) {
-            s.points.pop();
-            continue;
-          }
-          break;
-        }
-      }
-    }
-
-    // Ensure the x-axis periods do not include years beyond the last available point.
-    const maxSortKey = Math.max(...series.flatMap((s) => s.points.map((p) => p.sortKey)));
-    periods = periods.filter((p) => inferSortKey(p) <= maxSortKey);
-  }
-
 
   const baseSeries = series.filter((s) => !s.label.includes('(forecast)'));
 
@@ -672,7 +726,8 @@ export async function fetchTopicData(
     const maxValue = Math.max(...points.map((p) => p.value), 0);
     // For small values, ratio-based extrapolation is unstable and usually misleading.
     // Lower the threshold to 5 so small-but-not-tiny series still get a forecast.
-    if (points.length < 4 || maxValue < 5) {
+    // Allow 3 points (instead of 4) so series like Sweden (with 3 years) can still be forecasted.
+    if (points.length < 3 || maxValue < 5) {
       skippedForecastSeries.push(base.label);
       continue;
     }
@@ -753,11 +808,9 @@ export async function fetchTopicData(
   series = [...series, ...forecastSeries];
 
   if (series.length === 0) {
-    // include the request URL to aid debugging if the dataset structure changes
-    throw new Error(
-      `Eurostat returned no observations for this topic (url: ${url}). ` +
-        'This can happen if the dataset filters are out of date or the API is unavailable.',
-    );
+    warning =
+      warning ??
+      'No observations were returned for this topic. This can happen if the dataset filters are out of date, the API is temporarily unavailable, or the dataset is not available for the selected filters.';
   }
 
   // debug: show final state for induced abortions (should include forecast year)
@@ -778,19 +831,6 @@ export async function fetchTopicData(
     // eslint-disable-next-line no-console
     console.log('DEBUG forecast-series', series.filter((s) => s.label.includes('(forecast)')).map((s) => s.label));
   }
-
-  const availableGeos = (() => {
-    const geoDim = dataset.dimension.geo;
-    if (!geoDim) return undefined;
-    const index = geoDim.category.index;
-    const labels = geoDim.category.label ?? {};
-
-    const codes = Array.isArray(index)
-      ? index
-      : Object.entries(index).sort((a, b) => a[1] - b[1]).map(([code]) => code);
-
-    return codes.map((code) => ({ code, label: labels[code] ?? code }));
-  })();
 
   return {
     title: topic.title,
