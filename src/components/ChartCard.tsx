@@ -306,6 +306,12 @@ const axisColors = baseSeries.map((s) => {
           <h2 className="text-2xl font-semibold tracking-tight text-white">{displayTitle}</h2>
           <p className="max-w-3xl text-sm leading-6 text-slate-300">{displayDescription}</p>
 
+          {query.data?.forecastDisabledReason ? (
+            <div className="mt-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              <strong className="font-semibold">No reliable forecast:</strong> {query.data.forecastDisabledReason}
+            </div>
+          ) : null}
+
           {(seriesDimension || Object.values(dimensionFilters).some((v) => v)) ? (
             <p className="mt-2 text-sm text-slate-400">
               {seriesDimension ? (

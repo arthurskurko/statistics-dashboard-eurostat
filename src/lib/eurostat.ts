@@ -406,6 +406,32 @@ export async function fetchTopicData(
   const dataset = (await response.json()) as JsonStatDataset;
   let { series, periods } = parseSeries(dataset, topic.title, options?.seriesDimension);
 
+  // If the topic doesn't explicitly specify a unit suffix (e.g. '%'), and
+  // the dataset defines a single unit, use that as a display suffix so the UI
+  // doesn't look like it's showing raw counts.
+  let unitSuffix = topic.unitSuffix;
+  if (!unitSuffix) {
+    const unitDim = dataset.dimension.unit;
+    const unitLabels = unitDim?.category?.label;
+    const unitIndex = unitDim?.category?.index;
+
+    if (unitLabels && unitIndex) {
+      const unitCodes = Array.isArray(unitIndex)
+        ? unitIndex
+        : Object.entries(unitIndex)
+            .sort((a, b) => a[1] - b[1])
+            .map(([code]) => code);
+
+      if (unitCodes.length === 1) {
+        const label = unitLabels[unitCodes[0]];
+        // Map common unit descriptions to simple suffixes.
+        if (/percent/i.test(label)) unitSuffix = '%';
+        else if (/number/i.test(label) || /count/i.test(label)) unitSuffix = '';
+        else unitSuffix = label;
+      }
+    }
+  }
+
   const extraDimensions = (() => {
     const dimensions = getDimensionInfo(dataset);
     const timeDimension = dimensions.find((d) => /time/i.test(d.id)) ?? dimensions.at(-1);
@@ -521,20 +547,35 @@ export async function fetchTopicData(
 
   const baseSeries = series.filter((s) => !s.label.includes('(forecast)'));
 
-  // Try to load precomputed forecasts from /public/forecasts/<dataset>.json (Python/R output).
+  // Track series for which a forecast is not reliable. For very small counts,
+  // ratio-based extrapolation tends to collapse toward zero and is misleading.
+  const skippedForecastSeries: string[] = [];
+  let forecastDisabledReason: string | undefined;
+
+  // Only use precomputed forecasts when no additional filters are applied.
+  // Filters mean the series being displayed may be a subset of the data used
+  // to build the cached forecast file.
+  const usePrecomputedForecast = Object.keys(extraFilters).length === 0;
+
   let precomputedForecast: number[] | null = null;
-  try {
-    const resp = await fetch(`/forecasts/${topic.datasetCode}.json`);
-    if (resp.ok) {
-      const fc = (await resp.json()) as { forecast?: number[] };
-      if (Array.isArray(fc.forecast) && fc.forecast.length > 0) {
-        precomputedForecast = fc.forecast;
-        // eslint-disable-next-line no-console
-        console.log('Using precomputed forecast for', topicId, 'len', precomputedForecast.length);
+  if (usePrecomputedForecast) {
+    // Try to load precomputed forecasts from /public/forecasts/<dataset>.json (Python/R output).
+    try {
+      const resp = await fetch(`/forecasts/${topic.datasetCode}.json`);
+      if (resp.ok) {
+        const fc = (await resp.json()) as { forecast?: number[] };
+        if (Array.isArray(fc.forecast) && fc.forecast.length > 0) {
+          precomputedForecast = fc.forecast;
+          // eslint-disable-next-line no-console
+          console.log('Using precomputed forecast for', topicId, 'len', precomputedForecast.length);
+        }
       }
+    } catch {
+      // ignore and fall back to computed forecast
     }
-  } catch {
-    // ignore and fall back to computed forecast
+  } else {
+    // eslint-disable-next-line no-console
+    console.log('Skipping precomputed forecast for', topicId, 'because filters are active:', extraFilters);
   }
 
   if (!precomputedForecast) {
@@ -582,9 +623,20 @@ export async function fetchTopicData(
     });
   };
 
-  // Create a forecast series for each real (non-forecast) series.
+  const forecastSeries: DataSeries[] = [];
+
+  // Build forecasts for each series, but skip series that are too small or sparse.
   for (const base of baseSeries) {
-    const lastPoint = base.points[base.points.length - 1];
+    const points = base.points;
+    const maxValue = Math.max(...points.map((p) => p.value), 0);
+    // For small values, ratio-based extrapolation is unstable and usually misleading.
+    // Lower the threshold to 5 so small-but-not-tiny series still get a forecast.
+    if (points.length < 4 || maxValue < 5) {
+      skippedForecastSeries.push(base.label);
+      continue;
+    }
+
+    const lastPoint = points[points.length - 1];
     if (!lastPoint) continue;
 
     const years: string[] = [];
@@ -607,7 +659,7 @@ export async function fetchTopicData(
       label.toLowerCase().includes('european union') || label.toLowerCase().includes('eu27');
 
     let forecastValues: number[];
-    const basePoints = base.points.map((p) => ({ periodCode: p.periodCode, value: p.value }));
+    const basePoints = points.map((p) => ({ periodCode: p.periodCode, value: p.value }));
 
     if (isEu(base.label) && precomputedForecast && precomputedForecast.length > 0) {
       // apply precomputed forecast only to EU series
@@ -635,7 +687,7 @@ export async function fetchTopicData(
       forecastValues = [...forecastValues, ...Array(years.length - forecastValues.length).fill(lastVal)];
     }
 
-    const points = [
+    const pointsOut = [
       { ...lastPoint, predicted: true },
       ...years.map((year, idx) => ({
         periodCode: year,
@@ -646,12 +698,18 @@ export async function fetchTopicData(
       })),
     ].sort((a, b) => a.sortKey - b.sortKey);
 
-    series.push({
+    forecastSeries.push({
       id: `${base.id}-forecast`,
       label: `${base.label} (forecast)`,
-      points,
+      points: pointsOut,
     });
   }
+
+  if (skippedForecastSeries.length > 0) {
+    forecastDisabledReason = `Forecast skipped for ${skippedForecastSeries.join(', ')} (values too small or sparse).`;
+  }
+
+  series = [...series, ...forecastSeries];
 
   if (series.length === 0) {
     // include the request URL to aid debugging if the dataset structure changes
@@ -683,11 +741,12 @@ export async function fetchTopicData(
   return {
     title: topic.title,
     subtitle: topic.description,
-    unitSuffix: topic.unitSuffix,
+    unitSuffix,
     decimals: topic.decimals ?? 0,
     sourceUrl: topic.sourceUrl,
     series,
     periods,
     extraDimensions,
+    forecastDisabledReason,
   };
 }
