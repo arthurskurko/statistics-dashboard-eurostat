@@ -186,26 +186,31 @@ export function buildChartOption({
       formatter: (params: unknown) => {
         const entries = Array.isArray(params) ? params : [params];
         const lines: string[] = [];
+
+        const extractValue = (entry: any): number | null => {
+          if (!entry) return null;
+          if (typeof entry.value === 'number') return entry.value;
+          if (Array.isArray(entry.value) && typeof entry.value[1] === 'number') return entry.value[1];
+          if (typeof entry.data === 'number') return entry.data;
+          if (entry.data && typeof entry.data.value === 'number') return entry.data.value;
+          return null;
+        };
+
         entries.forEach((entry) => {
           if (!entry || typeof entry !== 'object') return;
 
-          const seriesName = 'seriesName' in entry && typeof entry.seriesName === 'string'
-            ? entry.seriesName
-            : '';
-          const marker = 'marker' in entry && typeof entry.marker === 'string' ? entry.marker : '';
-          const rawValue =
-            'value' in entry && (typeof entry.value === 'number' || entry.value === null)
-              ? entry.value
-              : null;
+          const seriesName = typeof entry.seriesName === 'string' ? entry.seriesName : '';
+          const marker = typeof entry.marker === 'string' ? entry.marker : '';
+          const rawValue = extractValue(entry);
 
-          if (!seriesName.includes('(forecast)')) {
-            const value =
-              rawValue == null
-                ? 'n/a'
-                : formatValue(rawValue, data.decimals, data.unitSuffix);
-            lines.push(`${marker} ${seriesName}: ${value}`);
-          }
+          const displayName = seriesName.replace(/ \(forecast\)$/, '');
+          const isForecast = seriesName.includes('(forecast)');
+
+          if (rawValue == null) return; // skip empty series points (avoids redundant n/a entries)
+          const value = formatValue(rawValue, data.decimals, data.unitSuffix);
+          lines.push(`${marker} ${displayName}: ${value}${isForecast ? ' (forecast)' : ''}`);
         });
+
         return lines.join('<br/>');
       },
     },
