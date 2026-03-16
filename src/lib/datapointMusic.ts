@@ -32,7 +32,9 @@ function normalizeValue(value: number, min: number, max: number): number {
   return (value - min) / (max - min);
 }
 
-function buildPreparedSeries(series: DataSeries[]): PreparedSeries[] {
+function buildPreparedSeries(series: DataSeries[], settings: MusicSettings): PreparedSeries[] {
+  const instrumentOverride = settings.instrumentOverride !== 'auto';
+
   return series
     .filter((entry) => !entry.label.includes('(forecast)') && entry.points.length > 0)
     .slice(0, MAX_SIMULTANEOUS_SERIES)
@@ -41,11 +43,32 @@ function buildPreparedSeries(series: DataSeries[]): PreparedSeries[] {
       const min = Math.min(...points);
       const max = Math.max(...points);
       const instrumentKey = extractInstrumentKey(entry.label);
-      const waveform = INSTRUMENTS[hashString(instrumentKey) % INSTRUMENTS.length];
+      const waveform = instrumentOverride
+        ? (settings.instrumentOverride as OscillatorType)
+        : INSTRUMENTS[hashString(instrumentKey) % INSTRUMENTS.length];
 
       return { points, min, max, waveform };
     });
 }
+
+export type MusicScale = 'chromatic' | 'major' | 'minor' | 'pentatonic';
+
+export type MusicSettings = {
+  tempoBpm: number;
+  scale: MusicScale;
+  octaveShift: number;
+  instrumentOverride: OscillatorType | 'auto';
+  arpeggiate: boolean;
+};
+
+const SCALE_DEGREES: Record<MusicScale, number[]> = {
+  chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  major: [0, 2, 4, 5, 7, 9, 11, 12],
+  minor: [0, 2, 3, 5, 7, 8, 10, 12],
+  pentatonic: [0, 2, 4, 7, 9, 12],
+};
+
+const BASE_MIDI = 48; // C3
 
 export class DataPointMusicPlayer {
   private audioContext: AudioContext | null = null;
@@ -57,9 +80,22 @@ export class DataPointMusicPlayer {
   private running = false;
 
   private preparedSeries: PreparedSeries[] = [];
+  private sourceSeries: DataSeries[] = [];
 
-  constructor(series: DataSeries[], private readonly stepMs = 320) {
-    this.preparedSeries = buildPreparedSeries(series);
+  private settings: MusicSettings = {
+    tempoBpm: 120,
+    scale: 'major',
+    octaveShift: 0,
+    instrumentOverride: 'auto',
+    arpeggiate: false,
+  };
+
+  constructor(series: DataSeries[], settings?: Partial<MusicSettings>) {
+    if (settings) {
+      this.settings = { ...this.settings, ...settings };
+    }
+    this.sourceSeries = series;
+    this.preparedSeries = buildPreparedSeries(series, this.settings);
   }
 
   get isPlaying(): boolean {
@@ -67,11 +103,40 @@ export class DataPointMusicPlayer {
   }
 
   setSeries(series: DataSeries[]): void {
-    this.preparedSeries = buildPreparedSeries(series);
+    this.sourceSeries = series;
+    this.preparedSeries = buildPreparedSeries(series, this.settings);
     this.stepIndex = 0;
     if (this.running && this.preparedSeries.length === 0) {
       this.stop();
     }
+  }
+
+  setTempo(bpm: number): void {
+    this.settings.tempoBpm = Math.max(10, Math.min(240, bpm));
+    if (this.running) {
+      this.restartTimer();
+    }
+  }
+
+  setScale(scale: MusicScale): void {
+    this.settings.scale = scale;
+  }
+
+  setOctaveShift(shift: number): void {
+    this.settings.octaveShift = Math.max(-3, Math.min(3, shift));
+  }
+
+  setInstrumentOverride(instrument: OscillatorType | 'auto'): void {
+    this.settings.instrumentOverride = instrument;
+    this.preparedSeries = buildPreparedSeries(this.sourceSeries, this.settings);
+  }
+
+  setArpeggiate(arpeggiate: boolean): void {
+    this.settings.arpeggiate = arpeggiate;
+  }
+
+  getSettings(): MusicSettings {
+    return { ...this.settings };
   }
 
   async toggle(): Promise<boolean> {
@@ -93,11 +158,20 @@ export class DataPointMusicPlayer {
     }
 
     this.running = true;
+    this.restartTimer();
+    this.playStep();
+  }
+
+  private restartTimer(): void {
+    if (this.timerId !== null) {
+      window.clearInterval(this.timerId);
+      this.timerId = null;
+    }
+
+    const stepMs = 60000 / this.settings.tempoBpm;
     this.timerId = window.setInterval(() => {
       this.playStep();
-    }, this.stepMs);
-
-    this.playStep();
+    }, stepMs);
   }
 
   stop(): void {
@@ -134,15 +208,23 @@ export class DataPointMusicPlayer {
 
     const context = this.getAudioContext();
     const now = context.currentTime;
-    const duration = Math.max(0.12, this.stepMs / 1000 - 0.08);
+    const stepMs = 60000 / this.settings.tempoBpm;
+    const duration = Math.max(0.12, stepMs / 1000 - 0.08);
 
-    this.preparedSeries.forEach((entry, index) => {
+    const seriesToPlay = this.settings.arpeggiate
+      ? [this.preparedSeries[this.stepIndex % this.preparedSeries.length]]
+      : this.preparedSeries;
+
+    seriesToPlay.forEach((entry, index) => {
       if (entry.points.length === 0) return;
 
       const value = entry.points[this.stepIndex % entry.points.length];
       const normalized = normalizeValue(value, entry.min, entry.max);
 
-      const midi = 44 + normalized * 30 + (index % 3) * 3;
+      const scale = SCALE_DEGREES[this.settings.scale];
+      const degree = scale[Math.floor(normalized * (scale.length - 1))];
+      const octaveOffset = this.settings.octaveShift * 12;
+      const midi = BASE_MIDI + octaveOffset + degree + (index % 3) * 3;
       const frequency = midiToFrequency(midi);
 
       const oscillator = context.createOscillator();

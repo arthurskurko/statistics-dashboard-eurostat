@@ -44,6 +44,12 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const [geoInput, setGeoInput] = React.useState('');
   const [dualAxis, setDualAxis] = React.useState(true);
   const [musicPlaying, setMusicPlaying] = React.useState(false);
+  const [musicModalOpen, setMusicModalOpen] = React.useState(false);
+  const [musicTempo, setMusicTempo] = React.useState(120);
+  const [musicScale, setMusicScale] = React.useState<'major' | 'minor' | 'pentatonic' | 'chromatic'>('major');
+  const [musicOctaveShift, setMusicOctaveShift] = React.useState(0);
+  const [musicInstrument, setMusicInstrument] = React.useState<OscillatorType | 'auto'>('auto');
+  const [musicArpeggiate, setMusicArpeggiate] = React.useState(false);
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
 
   const defaultGeoValues = useMemo(() => topic.geoValues ?? ['EE', 'EU27_2020'], [topic.geoValues]);
@@ -159,15 +165,27 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
   React.useEffect(() => {
     if (!musicPlayerRef.current) {
-      musicPlayerRef.current = new DataPointMusicPlayer(effectiveSeries);
+      musicPlayerRef.current = new DataPointMusicPlayer(effectiveSeries, {
+        tempoBpm: musicTempo,
+        scale: musicScale,
+        octaveShift: musicOctaveShift,
+        instrumentOverride: musicInstrument,
+        arpeggiate: musicArpeggiate,
+      });
       return;
     }
+
     musicPlayerRef.current.setSeries(effectiveSeries);
+    musicPlayerRef.current.setTempo(musicTempo);
+    musicPlayerRef.current.setScale(musicScale);
+    musicPlayerRef.current.setOctaveShift(musicOctaveShift);
+    musicPlayerRef.current.setInstrumentOverride(musicInstrument);
+    musicPlayerRef.current.setArpeggiate(musicArpeggiate);
 
     if (effectiveSeries.length === 0 && musicPlaying) {
       setMusicPlaying(false);
     }
-  }, [effectiveSeries, musicPlaying]);
+  }, [effectiveSeries, musicPlaying, musicTempo, musicScale, musicOctaveShift, musicInstrument, musicArpeggiate]);
 
   React.useEffect(() => () => {
     musicPlayerRef.current?.dispose();
@@ -179,6 +197,113 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
   return (
     <article className="batcave-panel relative flex min-h-[30rem] flex-col rounded-3xl p-5 shadow-card backdrop-blur-xl">
+      {musicPlaying ? (
+        <button
+          type="button"
+          onClick={() => setMusicModalOpen(true)}
+          className="fixed left-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-slate-950/80 text-lg text-emerald-300 shadow-lg backdrop-blur"
+          aria-label="Open music controls"
+          title="Music controls"
+        >
+          🎶
+        </button>
+      ) : null}
+
+      {musicModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/20 bg-slate-950/95 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-white/10 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Data music controls</h2>
+                <p className="mt-1 text-sm text-slate-300">Tweak tempo, scale and the synthesis style.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMusicModalOpen(false)}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 py-5 text-sm text-slate-200">
+              <label className="grid gap-2">
+                <span className="font-medium text-slate-100">Tempo</span>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={30}
+                    max={240}
+                    value={musicTempo}
+                    onChange={(event) => setMusicTempo(Number(event.target.value))}
+                    className="h-2 w-full cursor-pointer accent-emerald-400"
+                  />
+                  <span className="w-14 text-right text-xs text-slate-200">{musicTempo} bpm</span>
+                </div>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="font-medium text-slate-100">Scale</span>
+                <select
+                  value={musicScale}
+                  onChange={(event) => setMusicScale(event.target.value as any)}
+                  className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
+                >
+                  <option value="major">Major</option>
+                  <option value="minor">Minor</option>
+                  <option value="pentatonic">Pentatonic</option>
+                  <option value="chromatic">Chromatic</option>
+                </select>
+              </label>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="grid gap-2">
+                  <span className="font-medium text-slate-100">Octave shift</span>
+                  <input
+                    type="number"
+                    min={-3}
+                    max={3}
+                    value={musicOctaveShift}
+                    onChange={(event) => setMusicOctaveShift(Number(event.target.value))}
+                    className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
+                  />
+                </label>
+
+                <label className="grid gap-2">
+                  <span className="font-medium text-slate-100">Instrument</span>
+                  <select
+                    value={musicInstrument}
+                    onChange={(event) => setMusicInstrument(event.target.value as any)}
+                    className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
+                  >
+                    <option value="auto">Auto</option>
+                    <option value="sine">Sine</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="square">Square</option>
+                    <option value="sawtooth">Sawtooth</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={musicArpeggiate}
+                  onChange={(event) => setMusicArpeggiate(event.target.checked)}
+                  className="h-4 w-4 rounded border-white/20 bg-white/10 text-emerald-400 focus:ring-emerald-400"
+                />
+                <span className="text-sm text-slate-200">Arpeggiate (play one series at a time)</span>
+              </label>
+
+              <div className="rounded-xl bg-white/5 p-3 text-xs text-slate-300">
+                Tip: Try slow tempo with pentatonic scale for an ambient vibe, or crank tempo + sawtooth for
+                intense “cyber soundtrack” energy.
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <button
         type="button"
         onClick={() => onRemove(cardId)}
