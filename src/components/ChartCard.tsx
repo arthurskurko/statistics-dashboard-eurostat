@@ -129,6 +129,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           effectiveSeries,
           baseSeries,
           largeSeries,
+          smallSeries,
           dualAxis,
           showDualAxisButton,
           activeFilterLabels,

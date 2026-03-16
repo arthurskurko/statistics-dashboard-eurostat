@@ -9,6 +9,7 @@ type BuildChartOptionArgs = {
   effectiveSeries: DataSeries[];
   baseSeries: DataSeries[];
   largeSeries: string[];
+  smallSeries: string[];
   dualAxis: boolean;
   showDualAxisButton: boolean;
   activeFilterLabels: string[];
@@ -21,6 +22,7 @@ export function buildChartOption({
   effectiveSeries,
   baseSeries,
   largeSeries,
+  smallSeries,
   dualAxis,
   showDualAxisButton,
   activeFilterLabels,
@@ -108,6 +110,23 @@ export function buildChartOption({
     return colorMap.get(baseLabel) ?? '#4c9aff';
   });
 
+  const smallSeriesColor = colorMap.get(normalizeSeriesLabel(smallSeries[0] ?? '')) ?? '#4c9aff';
+  const largeSeriesColor = colorMap.get(normalizeSeriesLabel(largeSeries[0] ?? '')) ?? '#f97316';
+
+  const formatAxisValue = (value: number): string => {
+    const abs = Math.abs(value);
+    if (abs >= 1_000_000_000) {
+      return `${(value / 1_000_000_000).toFixed(1)}G`;
+    }
+    if (abs >= 1_000_000) {
+      return `${(value / 1_000_000).toFixed(1)}M`;
+    }
+    if (abs >= 1_000) {
+      return `${(value / 1_000).toFixed(1)}k`;
+    }
+    return value.toString();
+  };
+
   return {
     animationDuration: 400,
     backgroundColor: 'transparent',
@@ -171,20 +190,49 @@ export function buildChartOption({
         ? [
             {
               type: 'value',
-              axisLabel: { color: axisColors[0] ?? '#94a3b8' },
+              name: '{dot|●} Small values',
+              nameGap: 18,
+              nameTextStyle: {
+                rich: {
+                  dot: {
+                    color: smallSeriesColor,
+                    fontSize: 14,
+                  },
+                },
+              },
+              axisLabel: {
+                color: axisColors[0] ?? '#94a3b8',
+                formatter: (value: number) => formatAxisValue(Number(value)),
+              },
               axisLine: { lineStyle: { color: axisColors[0] ?? '#94a3b8' } },
               splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
             },
             {
               type: 'value',
-              axisLabel: { color: axisColors[1] ?? '#94a3b8' },
+              name: '{dot|●} Large values',
+              nameGap: 18,
+              nameTextStyle: {
+                rich: {
+                  dot: {
+                    color: largeSeriesColor,
+                    fontSize: 14,
+                  },
+                },
+              },
+              axisLabel: {
+                color: axisColors[1] ?? '#94a3b8',
+                formatter: (value: number) => formatAxisValue(Number(value)),
+              },
               axisLine: { lineStyle: { color: axisColors[1] ?? '#94a3b8' } },
               splitLine: { show: false },
             },
           ]
         : {
             type: 'value',
-            axisLabel: { color: '#94a3b8' },
+            axisLabel: {
+              color: '#94a3b8',
+              formatter: (value: number) => formatAxisValue(Number(value)),
+            },
             splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
           },
     series: effectiveSeries.map((series) => {
