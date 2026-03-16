@@ -19,13 +19,6 @@ type ChartCardHeaderProps = {
   dimensionFilters: Record<string, string>;
   setDimensionFilters: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   availableDimensions: DimensionOption[];
-  queryHasData: boolean;
-  showDualAxisButton: boolean;
-  dualAxis: boolean;
-  setDualAxis: React.Dispatch<React.SetStateAction<boolean>>;
-  forecastHorizon: number;
-  setForecastHorizon: (value: number) => void;
-  onRemove: () => void;
   isSeriesTruncated: boolean;
   maxSeriesToRender: number;
 };
@@ -48,13 +41,6 @@ export function ChartCardHeader({
   dimensionFilters,
   setDimensionFilters,
   availableDimensions,
-  queryHasData,
-  showDualAxisButton,
-  dualAxis,
-  setDualAxis,
-  forecastHorizon,
-  setForecastHorizon,
-  onRemove,
   isSeriesTruncated,
   maxSeriesToRender,
 }: ChartCardHeaderProps) {
@@ -62,47 +48,10 @@ export function ChartCardHeader({
 
   return (
     <div className="mb-5 space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-2">
-          <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{datasetCode}</div>
-          <h2 className="text-2xl font-semibold tracking-tight text-white">{title}</h2>
-          <p className="max-w-3xl text-sm leading-6 text-slate-300">{description}</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {queryHasData && showDualAxisButton ? (
-            <button
-              type="button"
-              onClick={() => setDualAxis((prev) => !prev)}
-              className="rounded-2xl border border-border bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10"
-            >
-              {dualAxis ? 'Dual axes: on' : 'Dual axes: off'}
-            </button>
-          ) : null}
-          {queryHasData ? (
-            <label className="flex items-center gap-2 rounded-2xl border border-border bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10">
-              <span className="whitespace-nowrap">Forecast:</span>
-              <select
-                value={forecastHorizon}
-                onChange={(event) => setForecastHorizon(Number(event.target.value))}
-                className="rounded-xl bg-slate-900/80 px-2 py-1 text-xs text-white outline-none"
-              >
-                {[5, 10, 20, 30].map((value) => (
-                  <option key={value} value={value}>
-                    {value}y
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <button
-            type="button"
-            onClick={onRemove}
-            className="rounded-2xl border border-border bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-          >
-            Remove
-          </button>
-        </div>
+      <div className="space-y-2 pr-10">
+        <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{datasetCode}</div>
+        <h2 className="text-2xl font-semibold tracking-tight text-white">{title}</h2>
+        <p className="max-w-3xl text-sm leading-6 text-slate-300">{description}</p>
       </div>
 
       {forecastDisabledReason ? (

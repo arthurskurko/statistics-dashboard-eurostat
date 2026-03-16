@@ -164,7 +164,16 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const displayDescription = query.data?.subtitle ?? topic.description;
 
   return (
-    <article className="flex min-h-[30rem] flex-col rounded-3xl border border-border bg-slate-900/80 p-5 shadow-card backdrop-blur-xl">
+    <article className="relative flex min-h-[30rem] flex-col rounded-3xl border border-border bg-slate-900/80 p-5 shadow-card backdrop-blur-xl">
+      <button
+        type="button"
+        onClick={() => onRemove(cardId)}
+        aria-label="Remove chart"
+        className="absolute right-4 top-4 z-10 grid h-8 w-8 place-items-center rounded-full border border-border bg-white/5 text-sm font-semibold text-white transition hover:bg-white/15"
+      >
+        x
+      </button>
+
       <ChartCardHeader
         topicId={topicId}
         datasetCode={topic.datasetCode}
@@ -183,13 +192,6 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         dimensionFilters={dimensionFilters}
         setDimensionFilters={setDimensionFilters}
         availableDimensions={availableDimensions}
-        queryHasData={Boolean(query.data)}
-        showDualAxisButton={showDualAxisButton}
-        dualAxis={dualAxis}
-        setDualAxis={setDualAxis}
-        forecastHorizon={forecastHorizon}
-        setForecastHorizon={setForecastHorizon}
-        onRemove={() => onRemove(cardId)}
         isSeriesTruncated={(query.data?.series?.length ?? 0) > MAX_SERIES_TO_RENDER}
         maxSeriesToRender={MAX_SERIES_TO_RENDER}
       />
@@ -245,6 +247,33 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
             decimals={query.data.decimals}
             unitSuffix={query.data.unitSuffix}
           />
+
+          <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+            {showDualAxisButton ? (
+              <button
+                type="button"
+                onClick={() => setDualAxis((prev) => !prev)}
+                className="rounded-2xl border border-border bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10"
+              >
+                {dualAxis ? 'Dual axes: on' : 'Dual axes: off'}
+              </button>
+            ) : null}
+
+            <label className="flex items-center gap-2 rounded-2xl border border-border bg-white/5 px-3 py-1 text-xs font-medium text-white transition hover:bg-white/10">
+              <span className="whitespace-nowrap">Forecast:</span>
+              <select
+                value={forecastHorizon}
+                onChange={(event) => setForecastHorizon(Number(event.target.value))}
+                className="rounded-xl bg-slate-900/80 px-2 py-1 text-xs text-white outline-none"
+              >
+                {[5, 10, 20, 30].map((value) => (
+                  <option key={value} value={value}>
+                    {value}y
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <div className="min-h-[22rem] flex-1 rounded-3xl border border-border bg-slate-950/60 p-3">
             <ReactECharts option={chartBuild.option} style={{ height: '100%', minHeight: '22rem' }} />
