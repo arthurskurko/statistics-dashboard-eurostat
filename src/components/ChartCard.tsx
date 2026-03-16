@@ -4,6 +4,7 @@ import ReactECharts from 'echarts-for-react';
 import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
 import type { TopicDefinition } from '../features/dashboard/types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { DataPointMusicPlayer } from '../lib/datapointMusic';
 import { fetchTopicData } from '../lib/eurostat';
 import { buildChartOption } from './chart-card/buildChartOption';
 import { ChartCardHeader } from './chart-card/ChartCardHeader';
@@ -43,7 +44,9 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const [geoInput, setGeoInput] = React.useState('');
   const [missingGeos, setMissingGeos] = React.useState<string[]>([]);
   const [dualAxis, setDualAxis] = React.useState(true);
+  const [musicPlaying, setMusicPlaying] = React.useState(false);
   const [chartError, setChartError] = React.useState<string | null>(null);
+  const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
 
   const defaultGeoValues = useMemo(() => topic.geoValues ?? ['EE', 'EU27_2020'], [topic.geoValues]);
 
@@ -160,6 +163,23 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     [activeFilterLabels, effectiveSeries],
   );
 
+  React.useEffect(() => {
+    if (!musicPlayerRef.current) {
+      musicPlayerRef.current = new DataPointMusicPlayer(effectiveSeries);
+      return;
+    }
+    musicPlayerRef.current.setSeries(effectiveSeries);
+
+    if (effectiveSeries.length === 0 && musicPlaying) {
+      setMusicPlaying(false);
+    }
+  }, [effectiveSeries, musicPlaying]);
+
+  React.useEffect(() => () => {
+    musicPlayerRef.current?.dispose();
+    musicPlayerRef.current = null;
+  }, []);
+
   const displayTitle = query.data?.title ?? topic.title;
   const displayDescription = query.data?.subtitle ?? topic.description;
 
@@ -249,6 +269,24 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           />
 
           <div className="bat-chart-toolbar mb-3 flex flex-wrap items-center justify-end gap-2 rounded-2xl px-3 py-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const player = musicPlayerRef.current;
+                if (!player) return;
+                try {
+                  const playing = await player.toggle();
+                  setMusicPlaying(playing);
+                } catch (error) {
+                  console.error('Could not start data music:', error);
+                  setMusicPlaying(false);
+                }
+              }}
+              className="bat-btn rounded-2xl px-3 py-1 text-xs font-medium"
+            >
+              {musicPlaying ? 'Data music: on' : 'Data music: off'}
+            </button>
+
             {showDualAxisButton ? (
               <button
                 type="button"
