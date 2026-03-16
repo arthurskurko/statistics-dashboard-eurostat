@@ -1,5 +1,8 @@
 import type { DataSeries, TopicData, TopicDefinition } from '../../features/dashboard/types';
 import type { EChartsOption } from 'echarts';
+
+// ECharts doesn't export AxisNameTextStyleOption directly; we only need the `rich` subset.
+type AxisNameTextStyleOption = { rich?: Record<string, unknown> };
 import { formatValue } from './helpers';
 
 type BuildChartOptionArgs = {
@@ -142,8 +145,34 @@ export function buildChartOption({
   }, {});
 
   const axisName = (axisIndex: number, label: string) => {
-    const dots = (seriesByAxis[axisIndex] ?? []).slice(0, 2).map((_, idx) => `\n{dot${idx}|●}`).join('');
-    return `${label}${dots}`;
+    const colors = seriesByAxis[axisIndex] ?? [];
+    if (colors.length === 0) return label;
+
+    const chunkSize = 3;
+    const rows: string[] = [];
+    for (let i = 0; i < colors.length; i += chunkSize) {
+      const rowDots = colors
+        .slice(i, i + chunkSize)
+        .map((_, idx) => `{dot_${axisIndex}_${i + idx}|●}`)
+        .join('');
+      rows.push(rowDots);
+    }
+
+    const formatted = `\n${rows.join('\n')}`;
+    return `${label}${formatted}`;
+  };
+
+  const axisNameTextStyle = (axisIndex: number): AxisNameTextStyleOption => {
+    const colors = seriesByAxis[axisIndex] ?? [];
+    const rich: Record<string, unknown> = {
+      dot: { fontSize: 14 },
+    };
+
+    colors.forEach((color, idx) => {
+      rich[`dot_${axisIndex}_${idx}`] = { color };
+    });
+
+    return { rich } as unknown as AxisNameTextStyleOption;
   };
 
   const smallSeriesColor = seriesByAxis[0]?.[0] ?? '#4c9aff';
@@ -185,7 +214,7 @@ export function buildChartOption({
       textStyle: {
         color: '#cbd5e1',
       },
-      data: baseSeries.map((series) => normalizeSeriesLabel(series.label)),
+      data: baseSeries.map((series) => `${series.label}${filterSuffix}`),
       inactiveColor: '#999999',
     },
     grid: {
@@ -214,19 +243,8 @@ export function buildChartOption({
               type: 'value',
               name: axisName(0, 'Small values'),
               nameGap: 18,
-              nameTextStyle: {
-                rich: {
-                  dot: {
-                    fontSize: 14,
-                  },
-                  dot0: {
-                    color: seriesByAxis[0]?.[0] ?? smallSeriesColor,
-                  },
-                  dot1: {
-                    color: seriesByAxis[0]?.[1] ?? smallSeriesColor,
-                  },
-                },
-              },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              nameTextStyle: axisNameTextStyle(0) as any,
               axisLabel: {
                 color: smallSeriesColor,
                 formatter: (value: number) => formatAxisValue(Number(value)),
@@ -238,19 +256,8 @@ export function buildChartOption({
               type: 'value',
               name: axisName(1, 'Large values'),
               nameGap: 18,
-              nameTextStyle: {
-                rich: {
-                  dot: {
-                    fontSize: 14,
-                  },
-                  dot0: {
-                    color: seriesByAxis[1]?.[0] ?? largeSeriesColor,
-                  },
-                  dot1: {
-                    color: seriesByAxis[1]?.[1] ?? largeSeriesColor,
-                  },
-                },
-              },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              nameTextStyle: axisNameTextStyle(1) as any,
               axisLabel: {
                 color: largeSeriesColor,
                 formatter: (value: number) => formatAxisValue(Number(value)),
