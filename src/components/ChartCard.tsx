@@ -45,7 +45,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   );
 
   const [forecastHorizon, setForecastHorizon] = useLocalStorage<number>('forecastHorizon', 20);
-  const [dimensionFilters, setDimensionFilters] = React.useState<Record<string, string>>({});
+  const [dimensionFilters, setDimensionFilters] = React.useState<Record<string, string | string[]>>({});
   const [availableDimensions, setAvailableDimensions] = React.useState<DimensionOption[]>([]);
   const [seriesDimension, setSeriesDimension] = React.useState('');
   const [geoValues, setGeoValues] = React.useState<string[]>(topic.geoValues ?? ['EE', 'EU27_2020']);
@@ -82,11 +82,47 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     setGeoValues(defaultGeoValues);
   }, [defaultGeoValues, topicId]);
 
+  React.useEffect(() => {
+    if (seriesDimension !== 'unit') return;
+
+    const unitDim = availableDimensions.find((dim) => dim.id === 'unit');
+    if (!unitDim) return;
+
+    const existing = dimensionFilters.unit;
+    const hasSelection = Array.isArray(existing) ? existing.length > 0 : Boolean(existing);
+    if (hasSelection) return;
+
+    const defaultUnits = unitDim.values.slice(0, MAX_UNIT_SELECTIONS).map((u) => u.code);
+    setDimensionFilters((prev) => ({
+      ...prev,
+      unit: defaultUnits,
+    }));
+  }, [seriesDimension, availableDimensions, dimensionFilters.unit]);
+
+  const MAX_UNIT_SELECTIONS = 3;
+
+  const selectedUnits = React.useMemo(() => {
+    const value = dimensionFilters.unit;
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string' && value) return [value];
+    return [];
+  }, [dimensionFilters.unit]);
+
+  const unitSelectionTooLarge = seriesDimension === 'unit' && selectedUnits.length > MAX_UNIT_SELECTIONS;
+  const needsUnitSelection = seriesDimension === 'unit' && selectedUnits.length === 0;
+
   const query = useQuery({
     queryKey: ['topic-data', topicId, forecastHorizon, dimensionFilters, seriesDimension, geoValues],
+    enabled: !needsUnitSelection && !unitSelectionTooLarge,
     queryFn: () => {
       const activeFilters = Object.fromEntries(
-        Object.entries(dimensionFilters).filter(([key]) => key !== seriesDimension),
+        Object.entries(dimensionFilters).filter(([key, value]) => {
+          if (seriesDimension === 'unit' && key === 'unit') {
+            // When splitting by unit we still want to respect the selected units.
+            return Array.isArray(value) ? value.length > 0 : Boolean(value);
+          }
+          return key !== seriesDimension;
+        }),
       );
 
       return fetchTopicData(topicId, {
@@ -139,7 +175,13 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     if (!query.data) return [];
     return Object.entries(dimensionFilters)
       .filter(([, value]) => Boolean(value))
-      .map(([key, value]) => findDimensionValueLabel(availableDimensions, key, value));
+      .map(([key, value]) =>
+        findDimensionValueLabel(
+          availableDimensions,
+          key,
+          Array.isArray(value) ? value : value,
+        ),
+      );
   }, [availableDimensions, dimensionFilters, query.data]);
 
   const chartBuild = useMemo(() => {
@@ -247,6 +289,9 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
   const displayTitle = query.data?.title ?? topic.title;
   const displayDescription = query.data?.subtitle ?? topic.description;
+
+  const showUnitSelectionHint = seriesDimension === 'unit' && selectedUnits.length === 0;
+  const showUnitTooManyHint = unitSelectionTooLarge;
 
   return (
     <article className="batcave-panel relative flex min-h-[30rem] flex-col rounded-3xl p-5 shadow-card backdrop-blur-xl">
@@ -518,7 +563,21 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         </div>
       ) : null}
 
-      {query.data && query.data.series.length === 0 ? (
+      {showUnitSelectionHint ? (
+        <div className="flex flex-1 flex-col items-start justify-center gap-4 rounded-3xl border border-amber-500/20 bg-amber-500/10 p-6 text-amber-100">
+          <div className="text-lg font-semibold">Select units to continue</div>
+          <p className="max-w-2xl text-sm leading-6 text-amber-100/90">
+            To avoid large downloads, you must choose at least one unit when splitting by unit.
+          </p>
+        </div>
+      ) : showUnitTooManyHint ? (
+        <div className="flex flex-1 flex-col items-start justify-center gap-4 rounded-3xl border border-rose-400/20 bg-rose-400/10 p-6 text-rose-100">
+          <div className="text-lg font-semibold">Too many units selected</div>
+          <p className="max-w-2xl text-sm leading-6 text-rose-100/90">
+            Splitting by unit with more than 3 selected units can crash the chart. Please reduce your selection.
+          </p>
+        </div>
+      ) : query.data && query.data.series.length === 0 ? (
         <div className="flex flex-1 flex-col items-start justify-center gap-4 rounded-3xl border border-rose-400/20 bg-rose-400/10 p-6 text-rose-100">
           <div className="text-lg font-semibold">No data is available for the selected filters.</div>
           <p className="max-w-2xl text-sm leading-6 text-rose-100/90">

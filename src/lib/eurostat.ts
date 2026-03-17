@@ -40,7 +40,7 @@ const DEFAULT_FILTERS_FOR_LARGE_DATASETS: Record<string, Record<string, string>>
   },
 };
 
-function buildUrlForTopic(topic: { datasetCode: string; filters: Record<string, string | string[]>; geoValues?: string[]; extraFilters?: Record<string, string> }): string {
+function buildUrlForTopic(topic: { datasetCode: string; filters: Record<string, string | string[]>; geoValues?: string[]; extraFilters?: Record<string, string | string[]> }): string {
   const url = new URL(`${EUROSTAT_BASE}/${topic.datasetCode}`);
   url.searchParams.set('lang', 'en');
 
@@ -53,7 +53,10 @@ function buildUrlForTopic(topic: { datasetCode: string; filters: Record<string, 
 
   for (const [key, value] of Object.entries(topic.extraFilters ?? {})) {
     if (!value) continue;
-    url.searchParams.set(key, value);
+    const values = Array.isArray(value) ? value : [value];
+    for (const entry of values) {
+      url.searchParams.append(key, entry);
+    }
   }
 
   for (const geo of topic.geoValues ?? []) {
@@ -326,7 +329,7 @@ export async function fetchTopicData(
   topicId: string,
   options?: {
     forecastHorizon?: number;
-    filters?: Record<string, string>;
+    filters?: Record<string, string | string[]>;
     seriesDimension?: string;
     geoValues?: string[];
   },
@@ -395,7 +398,10 @@ export async function fetchTopicData(
     };
   }
 
-  const attemptFetch = async (filters: Record<string, string>, overrideGeoValues?: string[]) => {
+  const attemptFetch = async (
+    filters: Record<string, string | string[]>,
+    overrideGeoValues?: string[],
+  ) => {
     const url = buildUrlForTopic({
       ...topic,
       extraFilters: filters,
@@ -411,6 +417,53 @@ export async function fetchTopicData(
     const dataset = (await response.json()) as JsonStatDataset;
     return { dataset, filters };
   };
+
+  // Safeguard: if the user is splitting by a dimension (especially `unit`) and the
+  // resulting series would be huge (many geo × unit combinations), avoid fetching
+  // the full dataset and instead return an early warning.
+  const effectiveGeoValues = (options?.geoValues && options.geoValues.length > 0)
+    ? options.geoValues
+    : topic.geoValues?.length
+    ? topic.geoValues
+    : ['EE'];
+
+  const unitFilter = options?.filters?.unit ?? topic.filters?.unit;
+  const unitCount = Array.isArray(unitFilter) ? unitFilter.length : unitFilter ? 1 : 0;
+  const geoCount = effectiveGeoValues.length;
+
+  const MAX_GEO_UNIT_COMBINATIONS = 30;
+  if (options?.seriesDimension === 'unit') {
+    if (unitCount === 0) {
+      const warning =
+        'Split by unit requires selecting at least one unit. Please choose one or more units to continue.';
+      return {
+        title: topic.title,
+        subtitle: topic.description,
+        unitSuffix: topic.unitSuffix,
+        decimals: topic.decimals ?? 0,
+        sourceUrl: topic.sourceUrl,
+        series: [],
+        periods: [],
+        warning,
+      };
+    }
+
+    if (geoCount * unitCount > MAX_GEO_UNIT_COMBINATIONS) {
+      const warning =
+        `Dataset too large for unit split (${geoCount} geos × ${unitCount} units). ` +
+        'Reduce the number of selected countries or units and try again.';
+      return {
+        title: topic.title,
+        subtitle: topic.description,
+        unitSuffix: topic.unitSuffix,
+        decimals: topic.decimals ?? 0,
+        sourceUrl: topic.sourceUrl,
+        series: [],
+        periods: [],
+        warning,
+      };
+    }
+  }
 
   const buildEuAggregate = (dataset: JsonStatDataset): DataSeries | null => {
     const dimensions = getDimensionInfo(dataset);
@@ -514,7 +567,7 @@ export async function fetchTopicData(
 
     if (latestTime) {
       try {
-        const metaFilters: Record<string, string> = { time: latestTime };
+        const metaFilters: Record<string, string | string[]> = { time: latestTime };
         const unitFilter = extraFilters.unit ?? topic.filters?.unit;
         if (unitFilter) metaFilters.unit = unitFilter;
 
@@ -573,6 +626,19 @@ export async function fetchTopicData(
         `Too many series (${series.length}) to display. Showing the first ${MAX_SERIES}. ` +
           'Please reduce the number of selected countries or split dimensions.';
       series = series.slice(0, MAX_SERIES);
+    }
+
+    // If the user is splitting by a dimension (e.g. unit) and the resulting series
+    // list is still large, render a friendly warning instead of trying to render
+    // an excessively large chart.
+    const MAX_SAFE_SERIES = 20;
+    if (options?.seriesDimension && series.length > MAX_SAFE_SERIES) {
+      warning =
+        warning ??
+        `Too many series (${series.length}) for the selected split dimension. ` +
+          'Reduce the number of selected values or remove the split dimension.';
+      series = [];
+      periods = [];
     }
 
     const requestedEu = (geoValues ?? topic.geoValues ?? []).includes('EU27_2020');

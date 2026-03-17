@@ -66,8 +66,15 @@ export function friendlyDimensionLabel(id: string): string {
 export function findDimensionValueLabel(
   dimensions: DimensionOption[],
   dimId: string,
-  code: string,
+  code: string | string[],
 ): string {
+  if (Array.isArray(code)) {
+    return code
+      .map((c) => findDimensionValueLabel(dimensions, dimId, c))
+      .filter(Boolean)
+      .join(', ');
+  }
+
   const dim = dimensions.find((d) => d.id === dimId);
   if (!dim) return code;
   return dim.values.find((v) => v.code === code)?.label ?? code;

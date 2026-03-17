@@ -16,8 +16,8 @@ type ChartCardHeaderProps = {
   setGeoValues: React.Dispatch<React.SetStateAction<string[]>>;
   seriesDimension: string;
   setSeriesDimension: (value: string) => void;
-  dimensionFilters: Record<string, string>;
-  setDimensionFilters: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  dimensionFilters: Record<string, string | string[]>;
+  setDimensionFilters: React.Dispatch<React.SetStateAction<Record<string, string | string[]>>>;
   availableDimensions: DimensionOption[];
   isSeriesTruncated: boolean;
   maxSeriesToRender: number;
@@ -197,30 +197,103 @@ export function ChartCardHeader({
             </div>
           </label>
 
+          {seriesDimension === 'unit' ? (
+            (() => {
+              const unitDim = availableDimensions.find((dim) => dim.id === 'unit');
+              if (!unitDim) return null;
+              const currentUnitFilter = dimensionFilters.unit;
+              const selectedUnits = Array.isArray(currentUnitFilter)
+                ? currentUnitFilter
+                : currentUnitFilter
+                ? [currentUnitFilter]
+                : [];
+
+              return (
+                <label className="flex flex-col gap-1 text-xs text-slate-200">
+                  <span className="text-slate-400">Units to include</span>
+                  <select
+                    multiple
+                    value={selectedUnits}
+                    onChange={(event) => {
+                      const selected = Array.from(event.target.selectedOptions).map((opt) => opt.value);
+                      setDimensionFilters((prev) => ({
+                        ...prev,
+                        unit: selected,
+                      }));
+                    }}
+                    className="bat-input h-32 rounded-2xl px-3 text-sm text-white outline-none transition"
+                  >
+                    {unitDim.values.map((unit) => (
+                      <option key={unit.code} value={unit.code}>
+                        {unit.label ?? unit.code}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Select one or more units to keep the dataset small enough to fetch.
+                  </p>
+                </label>
+              );
+            })()
+          ) : null}
+
           {availableDimensions
             .filter((dim) => dim.values.length > 1 && dim.id !== seriesDimension)
-            .map((dim) => (
-              <label key={dim.id} className="flex flex-col gap-1 text-xs text-slate-200">
-                <span className="text-slate-400">{friendlyDimensionLabel(dim.id)}</span>
-                <select
-                  value={dimensionFilters[dim.id] ?? ''}
-                  onChange={(event) =>
-                    setDimensionFilters((prev) => ({
-                      ...prev,
-                      [dim.id]: event.target.value,
-                    }))
-                  }
-                  className="bat-input h-10 rounded-2xl px-3 text-sm text-white outline-none transition"
-                >
-                  <option value="">(all)</option>
-                  {dim.values.map((value) => (
-                    <option key={value.code} value={value.code}>
-                      {value.label ?? value.code}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ))}
+            .map((dim) => {
+              const isUnitDim = dim.id === 'unit';
+              const value = dimensionFilters[dim.id];
+
+              return (
+                <label key={dim.id} className="flex flex-col gap-1 text-xs text-slate-200">
+                  <span className="text-slate-400">{friendlyDimensionLabel(dim.id)}</span>
+
+                  {isUnitDim ? (
+                    <select
+                      multiple
+                      value={Array.isArray(value) ? value : value ? [value] : []}
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.selectedOptions).map((opt) => opt.value);
+                        setDimensionFilters((prev) => ({
+                          ...prev,
+                          [dim.id]: selected,
+                        }));
+                      }}
+                      className="bat-input h-32 rounded-2xl px-3 text-sm text-white outline-none transition"
+                    >
+                      {dim.values.map((unit) => (
+                        <option key={unit.code} value={unit.code}>
+                          {unit.label ?? unit.code}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={typeof value === 'string' ? value : ''}
+                      onChange={(event) =>
+                        setDimensionFilters((prev) => ({
+                          ...prev,
+                          [dim.id]: event.target.value,
+                        }))
+                      }
+                      className="bat-input h-10 rounded-2xl px-3 text-sm text-white outline-none transition"
+                    >
+                      <option value="">(all)</option>
+                      {dim.values.map((value) => (
+                        <option key={value.code} value={value.code}>
+                          {value.label ?? value.code}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
+                  {isUnitDim ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Select one or more units to avoid huge downloads. If empty, the chart may not render.
+                    </p>
+                  ) : null}
+                </label>
+              );
+            })}
         </div>
       ) : null}
 
