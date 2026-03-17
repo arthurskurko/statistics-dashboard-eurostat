@@ -91,7 +91,6 @@ export function ChartCard({
   const [availableDimensions, setAvailableDimensions] = React.useState<DimensionOption[]>([]);
   const [seriesDimension, setSeriesDimension] = React.useState('');
   const [geoValues, setGeoValues] = React.useState<string[]>(topic.geoValues ?? defaultGeoValues);
-  const [geoInput, setGeoInput] = React.useState('');
   const [dualAxis, setDualAxis] = React.useState(true);
   const [musicPlaying, setMusicPlaying] = React.useState(false);
   const [musicModalOpen, setMusicModalOpen] = React.useState(false);
@@ -733,8 +732,6 @@ export function ChartCard({
         missingGeos={missingGeos}
         chartError={chartBuild.error}
         geoValues={geoValues}
-        geoInput={geoInput}
-        setGeoInput={setGeoInput}
         setGeoValues={setGeoValues}
         seriesDimension={seriesDimension}
         setSeriesDimension={setSeriesDimension}

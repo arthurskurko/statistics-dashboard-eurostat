@@ -11,8 +11,6 @@ type ChartCardHeaderProps = {
   missingGeos: string[];
   chartError: string | null;
   geoValues: string[];
-  geoInput: string;
-  setGeoInput: (value: string) => void;
   setGeoValues: React.Dispatch<React.SetStateAction<string[]>>;
   seriesDimension: string;
   setSeriesDimension: (value: string) => void;
@@ -34,8 +32,6 @@ export function ChartCardHeader({
   missingGeos,
   chartError,
   geoValues,
-  geoInput,
-  setGeoInput,
   setGeoValues,
   seriesDimension,
   setSeriesDimension,
@@ -46,8 +42,34 @@ export function ChartCardHeader({
   maxSeriesToRender,
   geoSuggestions,
 }: ChartCardHeaderProps) {
+  const [geoInput, setGeoInput] = React.useState('');
   const hasDimensionFilters = Object.values(dimensionFilters).some((value) => Boolean(value));
-  const geoCatalog = geoSuggestions && geoSuggestions.length > 0 ? geoSuggestions : KNOWN_GEOS;
+  const geoCatalog = React.useMemo(() => {
+    const merged = new Map<string, { code: string; label: string }>();
+
+    for (const geo of geoSuggestions ?? []) {
+      merged.set(geo.code, geo);
+    }
+
+    for (const geo of KNOWN_GEOS) {
+      if (!merged.has(geo.code)) merged.set(geo.code, geo);
+    }
+
+    return [...merged.values()];
+  }, [geoSuggestions]);
+
+  const geoInputUpper = geoInput.trim().toUpperCase();
+  const filteredGeoSuggestions = React.useMemo(
+    () =>
+      geoCatalog
+        .filter(
+          (geo) =>
+            geo.code.startsWith(geoInputUpper) ||
+            geo.label.toLowerCase().includes(geoInputUpper.toLowerCase()),
+        )
+        .slice(0, 10),
+    [geoCatalog, geoInputUpper],
+  );
 
   return (
     <div className="mb-5 space-y-4">
@@ -116,16 +138,9 @@ export function ChartCardHeader({
                 }
               }}
             />
-            {geoInput ? (
+            {geoInputUpper ? (
               <div className="bat-suggestions absolute left-0 top-full z-10 mt-1 max-h-40 w-full overflow-auto rounded-xl">
-                {geoCatalog
-                  .filter(
-                    (geo) =>
-                      geo.code.startsWith(geoInput) ||
-                      geo.label.toLowerCase().includes(geoInput.toLowerCase()),
-                  )
-                  .slice(0, 10)
-                  .map((geo) => (
+                {filteredGeoSuggestions.map((geo) => (
                     <button
                       key={geo.code}
                       type="button"

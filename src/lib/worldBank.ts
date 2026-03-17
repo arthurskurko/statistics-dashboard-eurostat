@@ -95,24 +95,40 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function computeForecast(points: DataPoint[], horizon: number): number[] {
+function computeForecast(
+  points: DataPoint[],
+  horizon: number,
+  bounds?: { min?: number; max?: number },
+): number[] {
   if (points.length < 2) {
     return Array(horizon).fill(points[points.length - 1]?.value ?? 0);
   }
 
-  const recent = points.slice(-8);
-  const ratios: number[] = [];
-  for (let index = 1; index < recent.length; index += 1) {
-    const previous = recent[index - 1].value;
-    const current = recent[index].value;
-    if (previous > 0) ratios.push(current / previous);
+  const recent = points.slice(-10);
+  const values = recent.map((point) => point.value);
+  const deltas: number[] = [];
+  for (let index = 1; index < values.length; index += 1) {
+    deltas.push(values[index] - values[index - 1]);
   }
 
-  const rawRatio = median(ratios);
-  const dampedRatio = 1 + (clamp(rawRatio, 0.7, 1.1) - 1) * 0.5;
-  const lastValue = recent[recent.length - 1].value;
+  const longRunLevel = median(values);
+  let level = values[values.length - 1];
+  let delta = median(deltas);
 
-  return Array.from({ length: horizon }, (_, index) => lastValue * dampedRatio ** (index + 1));
+  return Array.from({ length: horizon }, () => {
+    // Blend a decaying trend with mean reversion toward recent central tendency.
+    const reversion = (longRunLevel - level) * 0.18;
+    delta = delta * 0.72 + reversion;
+    level += delta;
+
+    if (bounds) {
+      const min = bounds.min ?? Number.NEGATIVE_INFINITY;
+      const max = bounds.max ?? Number.POSITIVE_INFINITY;
+      level = clamp(level, min, max);
+    }
+
+    return level;
+  });
 }
 
 async function fetchAllPages<T>(url: URL): Promise<T[]> {
@@ -259,13 +275,14 @@ export async function fetchWorldBankTopicData(
   const indicatorTitle = rows[0]?.indicator?.value?.trim() || topic.title;
   const unit = rows.find((row) => row.unit && row.unit.trim())?.unit?.trim();
   const decimal = rows.find((row) => typeof row.decimal === 'number')?.decimal;
+  const resolvedUnitSuffix = topic.unitSuffix ?? unit;
 
   if (series.length === 0) {
     return {
       title: indicatorTitle,
       subtitle: topic.description,
       decimals: typeof decimal === 'number' ? decimal : topic.decimals ?? 2,
-      unitSuffix: topic.unitSuffix ?? unit,
+      unitSuffix: resolvedUnitSuffix,
       sourceUrl: topic.sourceUrl,
       series: [],
       periods: [],
@@ -298,7 +315,8 @@ export async function fetchWorldBankTopicData(
 
     if (periodCodes.length === 0) continue;
 
-    const forecastValues = computeForecast(base.points, periodCodes.length);
+    const bounds = resolvedUnitSuffix === '%' ? { min: 0, max: 100 } : undefined;
+    const forecastValues = computeForecast(base.points, periodCodes.length, bounds);
     for (const periodCode of periodCodes) {
       if (!periods.includes(periodCode)) periods.push(periodCode);
     }
@@ -332,7 +350,7 @@ export async function fetchWorldBankTopicData(
     title: indicatorTitle,
     subtitle: topic.description,
     decimals: typeof decimal === 'number' ? decimal : topic.decimals ?? 2,
-    unitSuffix: topic.unitSuffix ?? unit,
+    unitSuffix: resolvedUnitSuffix,
     sourceUrl: topic.sourceUrl,
     series: [...series, ...forecastSeries],
     periods,
