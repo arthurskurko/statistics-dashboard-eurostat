@@ -107,7 +107,7 @@ export default function WorldBankApp() {
                 fallbackDescriptionPrefix="World Bank indicator"
                 sourceUrlBuilder={WORLD_BANK_SOURCE_URL_BUILDER}
                 sourceLinkLabel="World Bank indicator"
-                supportsForecast={false}
+                supportsForecast
               />
             ))}
           </section>

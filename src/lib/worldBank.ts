@@ -52,6 +52,69 @@ function inferSortKey(periodCode: string): number {
   return Number(periodCode.replace(/\D/g, '')) || 0;
 }
 
+function getNextPeriodCode(periodCode: string): string | null {
+  const annual = /^\d{4}$/;
+  const monthly = /^(\d{4})M(\d{2})$/;
+  const quarterly = /^(\d{4})Q(\d)$/i;
+
+  if (annual.test(periodCode)) {
+    return String(Number(periodCode) + 1);
+  }
+
+  const monthlyMatch = periodCode.match(monthly);
+  if (monthlyMatch) {
+    const year = Number(monthlyMatch[1]);
+    const month = Number(monthlyMatch[2]);
+    const nextMonth = month === 12 ? 1 : month + 1;
+    const nextYear = month === 12 ? year + 1 : year;
+    return `${nextYear}M${String(nextMonth).padStart(2, '0')}`;
+  }
+
+  const quarterlyMatch = periodCode.match(quarterly);
+  if (quarterlyMatch) {
+    const year = Number(quarterlyMatch[1]);
+    const quarter = Number(quarterlyMatch[2]);
+    const nextQuarter = quarter === 4 ? 1 : quarter + 1;
+    const nextYear = quarter === 4 ? year + 1 : year;
+    return `${nextYear}Q${nextQuarter}`;
+  }
+
+  return null;
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 0) return 1;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function computeForecast(points: DataPoint[], horizon: number): number[] {
+  if (points.length < 2) {
+    return Array(horizon).fill(points[points.length - 1]?.value ?? 0);
+  }
+
+  const recent = points.slice(-8);
+  const ratios: number[] = [];
+  for (let index = 1; index < recent.length; index += 1) {
+    const previous = recent[index - 1].value;
+    const current = recent[index].value;
+    if (previous > 0) ratios.push(current / previous);
+  }
+
+  const rawRatio = median(ratios);
+  const dampedRatio = 1 + (clamp(rawRatio, 0.7, 1.1) - 1) * 0.5;
+  const lastValue = recent[recent.length - 1].value;
+
+  return Array.from({ length: horizon }, (_, index) => lastValue * dampedRatio ** (index + 1));
+}
+
 async function fetchAllPages<T>(url: URL): Promise<T[]> {
   const firstResponse = await fetch(url.toString());
   if (!firstResponse.ok) {
@@ -177,6 +240,7 @@ export async function fetchWorldBankTopicData(
     geoValues?: string[];
   },
 ): Promise<TopicData> {
+  const forecastHorizon = options?.forecastHorizon ?? 20;
   const topic = WORLD_BANK_TOPIC_MAP[topicId] ?? toTopicDefinitionFromCode(topicId);
   const indicatorCode = topic.datasetCode;
   const geoValues = (options?.geoValues?.length ? options.geoValues : topic.geoValues) ?? ['EST', 'EUU'];
@@ -211,14 +275,68 @@ export async function fetchWorldBankTopicData(
     };
   }
 
+  const baseSeries = series.filter((entry) => !entry.label.includes('(forecast)'));
+  const forecastSeries: DataSeries[] = [];
+  const skippedForecastSeries: string[] = [];
+
+  for (const base of baseSeries) {
+    if (base.points.length < 3) {
+      skippedForecastSeries.push(base.label);
+      continue;
+    }
+
+    const lastPoint = base.points[base.points.length - 1];
+    if (!lastPoint) continue;
+
+    const periodCodes: string[] = [];
+    let nextPeriod = getNextPeriodCode(lastPoint.periodCode);
+    for (let index = 0; index < forecastHorizon; index += 1) {
+      if (!nextPeriod) break;
+      periodCodes.push(nextPeriod);
+      nextPeriod = getNextPeriodCode(nextPeriod);
+    }
+
+    if (periodCodes.length === 0) continue;
+
+    const forecastValues = computeForecast(base.points, periodCodes.length);
+    for (const periodCode of periodCodes) {
+      if (!periods.includes(periodCode)) periods.push(periodCode);
+    }
+
+    const predictedPoints: DataPoint[] = [
+      { ...lastPoint, predicted: true },
+      ...periodCodes.map((periodCode, index) => ({
+        periodCode,
+        label: periodCode,
+        sortKey: inferSortKey(periodCode),
+        value: forecastValues[index],
+        predicted: true,
+      })),
+    ];
+
+    forecastSeries.push({
+      id: `${base.id}-forecast`,
+      label: `${base.label} (forecast)`,
+      points: predictedPoints,
+    });
+  }
+
+  periods.sort((a, b) => inferSortKey(a) - inferSortKey(b));
+
+  const forecastDisabledReason =
+    skippedForecastSeries.length > 0
+      ? `Forecast skipped for ${skippedForecastSeries.join(', ')} (not enough historical points).`
+      : undefined;
+
   return {
     title: indicatorTitle,
     subtitle: topic.description,
     decimals: typeof decimal === 'number' ? decimal : topic.decimals ?? 2,
     unitSuffix: topic.unitSuffix ?? unit,
     sourceUrl: topic.sourceUrl,
-    series,
+    series: [...series, ...forecastSeries],
     periods,
     availableGeos: countries,
+    forecastDisabledReason,
   };
 }
