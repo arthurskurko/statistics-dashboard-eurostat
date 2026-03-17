@@ -180,9 +180,12 @@ export function buildChartOption({
 
   const smallSeriesColor = seriesByAxis[0]?.[0] ?? '#4c9aff';
   const largeSeriesColor = seriesByAxis[1]?.[0] ?? '#f97316';
+  const totalRenderedPoints = seriesWithAxis.length * xAxis.length;
+  const useLightweightRendering = totalRenderedPoints > 500;
 
   return {
-    animationDuration: 400,
+    animation: !useLightweightRendering,
+    animationDuration: useLightweightRendering ? 0 : 400,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
@@ -295,26 +298,32 @@ export function buildChartOption({
             },
             splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
           },
-    series: seriesWithAxis.map(({ baseSeries, yAxisIndex, seriesColor, isForecast }) => ({
-      name: `${baseSeries.label}${filterSuffix}`,
-      type: topic.chartVariant ?? 'line',
-      smooth: true,
-      showSymbol: false,
-      emphasis: { focus: 'series' },
-      areaStyle: !isForecast && baseSeries.label === baseSeries.label ? { opacity: 0.12 } : undefined,
-      yAxisIndex,
-      data: xAxis.map((label) => {
-        const point = baseSeries.points.find((item) => item.label === label);
-        return point?.value ?? null;
-      }),
-      itemStyle: {
-        color: seriesColor,
-      },
-      lineStyle: {
-        width: 3,
-        type: isForecast ? 'dashed' : 'solid',
-        color: seriesColor,
-      },
-    })),
+    series: seriesWithAxis.map(({ baseSeries, yAxisIndex, seriesColor, isForecast }) => {
+      // Convert point lookup from O(n) find-per-label to O(1) map lookup.
+      // This significantly reduces render cost when many series are shown.
+      const pointValueByLabel = new Map(baseSeries.points.map((point) => [point.label, point.value]));
+
+      return {
+        name: `${baseSeries.label}${filterSuffix}`,
+        type: topic.chartVariant ?? 'line',
+        smooth: !useLightweightRendering,
+        showSymbol: false,
+        emphasis: { focus: 'series' },
+        areaStyle: !useLightweightRendering && !isForecast ? { opacity: 0.12 } : undefined,
+        yAxisIndex,
+        data: xAxis.map((label) => pointValueByLabel.get(label) ?? null),
+        itemStyle: {
+          color: seriesColor,
+        },
+        lineStyle: {
+          width: useLightweightRendering ? 2 : 3,
+          type: isForecast ? 'dashed' : 'solid',
+          color: seriesColor,
+        },
+        sampling: useLightweightRendering ? 'lttb' : undefined,
+        progressive: useLightweightRendering ? 500 : 0,
+        progressiveThreshold: useLightweightRendering ? 1000 : undefined,
+      };
+    }),
   };
 }

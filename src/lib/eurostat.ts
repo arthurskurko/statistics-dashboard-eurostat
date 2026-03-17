@@ -918,6 +918,20 @@ export async function fetchTopicData(
 
   series = [...series, ...forecastSeries];
 
+  // Safety guard for split-series charts: rendering many lines across many
+  // periods (especially after forecast expansion) can freeze the browser tab.
+  // Estimate the plotted workload and short-circuit with a warning when needed.
+  const renderPointBudget = series.length * periods.length;
+  const MAX_RENDER_POINT_BUDGET = 250;
+  if (options?.seriesDimension && renderPointBudget > MAX_RENDER_POINT_BUDGET) {
+    warning =
+      `Selection would render ${renderPointBudget.toLocaleString()} points ` +
+      `(${series.length} series × ${periods.length} periods), which may freeze the browser. ` +
+      'Reduce countries, lower forecast horizon, or disable split series.';
+    series = [];
+    periods = [];
+  }
+
   if (series.length === 0) {
     warning =
       warning ??

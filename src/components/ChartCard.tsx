@@ -17,7 +17,6 @@ type ChartCardProps = {
   onRemove: (cardId: string) => void;
 };
 
-const MAX_RENDER_SERIES = 40;
 const MAX_SERIES_TO_RENDER = 16;
 
 function hashString(value: string): number {
@@ -135,7 +134,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   });
 
   const effectiveSeries = useMemo(
-    () => query.data?.series.slice(0, MAX_RENDER_SERIES) ?? [],
+    () => query.data?.series.slice(0, MAX_SERIES_TO_RENDER) ?? [],
     [query.data],
   );
   const baseSeries = effectiveSeries.filter((series) => !series.label.includes('(forecast)'));
