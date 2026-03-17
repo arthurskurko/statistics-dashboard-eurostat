@@ -389,7 +389,7 @@ export async function fetchTopicData(
     let catalogDescription: string | undefined;
 
     try {
-      const catalogResp = await fetch('/catalog.json');
+      const catalogResp = await fetch(`${import.meta.env.BASE_URL}catalog.json`);
       if (catalogResp.ok) {
         const catalog = (await catalogResp.json()) as Array<{ code: string; title?: string; description?: string }>;
         const match = catalog.find((entry) => entry.code?.toLowerCase() === topicId.toLowerCase());
@@ -767,7 +767,7 @@ export async function fetchTopicData(
   if (usePrecomputedForecast) {
     // Try to load precomputed forecasts from /public/forecasts/<dataset>.json (Python/R output).
     try {
-      const resp = await fetch(`/forecasts/${topic.datasetCode}.json`);
+      const resp = await fetch(`${import.meta.env.BASE_URL}forecasts/${topic.datasetCode}.json`);
       if (resp.ok) {
         const fc = (await resp.json()) as { forecast?: number[] };
         if (Array.isArray(fc.forecast) && fc.forecast.length > 0) {

@@ -79,7 +79,7 @@ export function AdminPanel({
   }, []);
 
   useEffect(() => {
-    fetch('/catalog.json')
+    fetch(`${import.meta.env.BASE_URL}catalog.json`)
       .then((res) => res.json())
       .then((data) => setCatalog(data))
       .catch(() => {
