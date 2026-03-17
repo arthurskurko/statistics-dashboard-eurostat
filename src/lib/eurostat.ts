@@ -285,11 +285,26 @@ function parseSeries(
   }
 
   const series = [...seriesMap.entries()]
-    .map(([label, points]) => ({
-      id: label,
-      label,
-      points: points.sort((first, second) => first.sortKey - second.sortKey),
-    }))
+    .map(([label, points]) => {
+      const sortedPoints = points.sort((first, second) => first.sortKey - second.sortKey);
+      const uniquePoints: DataPoint[] = [];
+      const seenPeriodCodes = new Set<string>();
+
+      // If a dataset includes extra dimensions that are not part of the series
+      // key (for example sex=T/M/F), keep the first value per period so charts,
+      // latest values, and forecasts are anchored to the same point.
+      for (const point of sortedPoints) {
+        if (seenPeriodCodes.has(point.periodCode)) continue;
+        seenPeriodCodes.add(point.periodCode);
+        uniquePoints.push(point);
+      }
+
+      return {
+        id: label,
+        label,
+        points: uniquePoints,
+      };
+    })
     .filter((series) => series.points.length > 0);
 
   // Drop trailing time periods that have no data points for any series. Eurostat
