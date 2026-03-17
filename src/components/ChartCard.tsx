@@ -411,26 +411,34 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="grid gap-2">
               <span className="font-medium text-slate-100">Octave shift</span>
-              <input
-                type="number"
-                min={-3}
-                max={3}
-                value={musicOctaveShift}
-                onChange={(event) => setMusicOctaveShift(Number(event.target.value))}
-                className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
-              />
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={-3}
+                  max={3}
+                  step={1}
+                  value={musicOctaveShift}
+                  onChange={(event) => setMusicOctaveShift(Number(event.target.value))}
+                  className="h-2 w-full cursor-pointer accent-emerald-400"
+                />
+                <span className="w-10 text-right text-xs text-slate-200">{musicOctaveShift}</span>
+              </div>
             </label>
 
             <label className="grid gap-2">
               <span className="font-medium text-slate-100">Phase offset</span>
-              <input
-                type="number"
-                min={0}
-                max={16}
-                value={musicPhaseOffset}
-                onChange={(event) => setMusicPhaseOffset(Number(event.target.value))}
-                className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
-              />
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={16}
+                  step={1}
+                  value={musicPhaseOffset}
+                  onChange={(event) => setMusicPhaseOffset(Number(event.target.value))}
+                  className="h-2 w-full cursor-pointer accent-emerald-400"
+                />
+                <span className="w-10 text-right text-xs text-slate-200">{musicPhaseOffset}</span>
+              </div>
               <p className="text-xs text-slate-500">Shift the timing of this chart (16th-note increments) relative to others.</p>
             </label>
           </div>
