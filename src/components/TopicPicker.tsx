@@ -57,10 +57,10 @@ export function TopicPicker({
             Eurostat dashboard builder
           </div>
           <h1 className="bat-title text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Estonia statistics dashboard
+            Europe statistics dashboard
           </h1>
           <p className="text-sm leading-7 text-slate-300 sm:text-base">
-            Choose a topic and add it to the dashboard. Each chart pulls live Eurostat data for Estonia,
+            Choose a topic and add it to the dashboard. Each chart pulls live Eurostat data for Europe countries,
             with the EU aggregate shown alongside when available.
           </p>
         </div>

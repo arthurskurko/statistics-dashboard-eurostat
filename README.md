@@ -1,4 +1,4 @@
-# Estonia Statistics Dashboard
+# Europe Statistics Dashboard
 
 A Docker-ready React + TypeScript dashboard that lets you choose a Eurostat topic from a dropdown and add it to a chart dashboard.
 
