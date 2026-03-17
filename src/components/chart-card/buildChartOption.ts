@@ -104,7 +104,10 @@ export function buildChartOption({
     );
   }
 
-  const filterSuffix = activeFilterLabels.length > 0 ? ` (${activeFilterLabels.join(', ')})` : '';
+  const filterSuffix = activeFilterLabels.length > 0 ? ` (${activeFilterLabels.slice(0, 3).join(', ')}${activeFilterLabels.length > 3 ? ', …' : ''})` : '';
+
+  const truncate = (value: string, max = 40) =>
+    value.length > max ? `${value.slice(0, max - 1)}…` : value;
 
   const formatAxisValue = (value: number): string => {
     const abs = Math.abs(value);
@@ -183,6 +186,10 @@ export function buildChartOption({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
+      textStyle: {
+        fontSize: 11,
+        lineHeight: 18,
+      },
       formatter: (params: unknown) => {
         const entries = Array.isArray(params) ? params : [params];
         const lines: string[] = [];
@@ -203,7 +210,7 @@ export function buildChartOption({
           const marker = typeof entry.marker === 'string' ? entry.marker : '';
           const rawValue = extractValue(entry);
 
-          const displayName = seriesName.replace(/ \(forecast\)$/, '');
+          const displayName = truncate(seriesName.replace(/ \(forecast\)$/, ''));
           const isForecast = seriesName.includes('(forecast)');
 
           if (rawValue == null) return; // skip empty series points (avoids redundant n/a entries)
@@ -218,6 +225,15 @@ export function buildChartOption({
       top: 0,
       textStyle: {
         color: '#cbd5e1',
+        fontSize: 10,
+      },
+      tooltip: {
+        show: true,
+      },
+      formatter: (name: string) => {
+        const maxLen = 30;
+        if (name.length <= maxLen) return name;
+        return `${name.slice(0, maxLen)}…`;
       },
       data: baseSeries.map((series) => `${series.label}${filterSuffix}`),
       inactiveColor: '#999999',
