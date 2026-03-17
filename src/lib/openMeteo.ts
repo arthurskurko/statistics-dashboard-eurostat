@@ -37,6 +37,46 @@ function inferSortKey(periodCode: string): number {
   return Number(`${match[1]}${match[2]}${match[3]}`);
 }
 
+function addDays(periodCode: string, days: number): string | null {
+  const date = new Date(`${periodCode}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 0) return 1;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function computeForecast(points: DataPoint[], horizon: number): number[] {
+  if (points.length < 2) {
+    return Array(horizon).fill(points[points.length - 1]?.value ?? 0);
+  }
+
+  const recent = points.slice(-30);
+  const ratios: number[] = [];
+  for (let index = 1; index < recent.length; index += 1) {
+    const previous = recent[index - 1].value;
+    const current = recent[index].value;
+    if (Math.abs(previous) > 1e-6) ratios.push(current / previous);
+  }
+
+  const trendRatio = ratios.length > 0 ? median(ratios) : 1;
+  const dampedRatio = 1 + (clamp(trendRatio, 0.9, 1.1) - 1) * 0.35;
+  const anchor = recent[recent.length - 1].value;
+
+  return Array.from({ length: horizon }, (_, index) => anchor * dampedRatio ** (index + 1));
+}
+
 function toTopicDefinitionFromCode(code: string): TopicDefinition {
   const datasetCode = code.startsWith('daily.') ? code : `daily.${code}`;
   return {
@@ -111,6 +151,7 @@ export async function fetchOpenMeteoTopicData(
     geoValues?: string[];
   },
 ): Promise<TopicData> {
+  const forecastHorizon = options?.forecastHorizon ?? 30;
   const topic = OPEN_METEO_TOPIC_MAP[topicId] ?? toTopicDefinitionFromCode(topicId);
   const datasetCode = topic.datasetCode;
   const variableName = datasetCode.startsWith('daily.') ? datasetCode.slice('daily.'.length) : datasetCode;
@@ -159,14 +200,68 @@ export async function fetchOpenMeteoTopicData(
     };
   }
 
+  const baseSeries = series.filter((entry) => !entry.label.includes('(forecast)'));
+  const forecastSeries: DataSeries[] = [];
+  const skippedForecastSeries: string[] = [];
+
+  for (const base of baseSeries) {
+    if (base.points.length < 14) {
+      skippedForecastSeries.push(base.label);
+      continue;
+    }
+
+    const lastPoint = base.points[base.points.length - 1];
+    if (!lastPoint) continue;
+
+    const futurePeriods: string[] = [];
+    for (let day = 1; day <= forecastHorizon; day += 1) {
+      const nextPeriod = addDays(lastPoint.periodCode, day);
+      if (!nextPeriod) break;
+      futurePeriods.push(nextPeriod);
+    }
+
+    if (futurePeriods.length === 0) continue;
+
+    const forecastValues = computeForecast(base.points, futurePeriods.length);
+    for (const period of futurePeriods) {
+      if (!periodSet.has(period)) {
+        periodSet.add(period);
+        periods.push(period);
+      }
+    }
+
+    forecastSeries.push({
+      id: `${base.id}-forecast`,
+      label: `${base.label} (forecast)`,
+      points: [
+        { ...lastPoint, predicted: true },
+        ...futurePeriods.map((period, index) => ({
+          periodCode: period,
+          label: period,
+          sortKey: inferSortKey(period),
+          value: forecastValues[index],
+          predicted: true,
+        })),
+      ],
+    });
+  }
+
+  periods.sort((a, b) => inferSortKey(a) - inferSortKey(b));
+
+  const forecastDisabledReason =
+    skippedForecastSeries.length > 0
+      ? `Forecast skipped for ${skippedForecastSeries.join(', ')} (not enough historical points).`
+      : undefined;
+
   return {
     title: topic.title,
     subtitle: topic.description,
     decimals: topic.decimals ?? 1,
     unitSuffix,
     sourceUrl: topic.sourceUrl,
-    series,
+    series: [...series, ...forecastSeries],
     periods,
     availableGeos: OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
+    forecastDisabledReason,
   };
 }

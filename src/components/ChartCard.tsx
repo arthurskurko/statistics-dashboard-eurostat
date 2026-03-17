@@ -33,6 +33,8 @@ type ChartCardProps = {
   sourceUrlBuilder?: (datasetCode: string) => string;
   sourceLinkLabel?: string;
   supportsForecast?: boolean;
+  forecastOptions?: number[];
+  forecastUnitLabel?: string;
 };
 
 const MAX_SERIES_TO_RENDER = 16;
@@ -66,6 +68,8 @@ export function ChartCard({
   sourceUrlBuilder = DEFAULT_EUROSTAT_SOURCE_URL_BUILDER,
   sourceLinkLabel = 'Eurostat dataset',
   supportsForecast = true,
+  forecastOptions = [5, 10, 20, 30],
+  forecastUnitLabel = 'y',
 }: ChartCardProps) {
   const topic = useMemo<TopicDefinition>(
     () =>
@@ -103,6 +107,8 @@ export function ChartCard({
   const [musicReverbDecay, setMusicReverbDecay] = React.useState(2.4);
   const [musicVolume, setMusicVolume] = React.useState(1);
   const [musicPhaseOffset, setMusicPhaseOffset] = React.useState(0);
+  const [periodStart, setPeriodStart] = React.useState('');
+  const [periodEnd, setPeriodEnd] = React.useState('');
   const [globalRecording, setGlobalRecording] = React.useState(() => DataPointMusicPlayer.isGlobalRecording());
   const [globalRecordingBusy, setGlobalRecordingBusy] = React.useState(false);
 
@@ -214,7 +220,73 @@ export function ChartCard({
     () => query.data?.series.slice(0, MAX_SERIES_TO_RENDER) ?? [],
     [query.data],
   );
-  const baseSeries = effectiveSeries.filter((series) => !series.label.includes('(forecast)'));
+
+  const allPeriods = useMemo(() => query.data?.periods ?? [], [query.data]);
+  const selectablePeriods = useMemo(() => {
+    const observedPoints = new Set(
+      effectiveSeries
+        .filter((series) => !series.label.includes('(forecast)'))
+        .flatMap((series) => series.points.map((point) => point.label)),
+    );
+
+    const observedPeriods = allPeriods.filter((period) => observedPoints.has(period));
+    return observedPeriods.length > 0 ? observedPeriods : allPeriods;
+  }, [allPeriods, effectiveSeries]);
+
+  React.useEffect(() => {
+    if (selectablePeriods.length === 0) {
+      setPeriodStart('');
+      setPeriodEnd('');
+      return;
+    }
+
+    setPeriodStart((current) => (selectablePeriods.includes(current) ? current : selectablePeriods[0]));
+    setPeriodEnd((current) =>
+      selectablePeriods.includes(current) ? current : selectablePeriods[selectablePeriods.length - 1],
+    );
+  }, [selectablePeriods]);
+
+  const periodStartIndex = periodStart ? allPeriods.indexOf(periodStart) : 0;
+  const periodEndIndex = periodEnd ? allPeriods.indexOf(periodEnd) : allPeriods.length - 1;
+  const rangeStartIndex = Math.max(0, Math.min(periodStartIndex, periodEndIndex));
+  const rangeEndIndex = Math.max(periodStartIndex, periodEndIndex);
+  const latestObservedPeriod = selectablePeriods.at(-1) ?? '';
+  const includeForecastTail = supportsForecast && periodEnd === latestObservedPeriod;
+
+  const filteredPeriods = useMemo(() => {
+    if (allPeriods.length === 0) return [];
+    if (includeForecastTail) {
+      return allPeriods.slice(rangeStartIndex);
+    }
+    return allPeriods.slice(rangeStartIndex, rangeEndIndex + 1);
+  }, [allPeriods, includeForecastTail, rangeEndIndex, rangeStartIndex]);
+
+  const filteredPeriodSet = useMemo(() => new Set(filteredPeriods), [filteredPeriods]);
+
+  const filteredSeries = useMemo(
+    () =>
+      effectiveSeries
+        .map((series) => ({
+          ...series,
+          points: series.points.filter((point) => filteredPeriodSet.has(point.label)),
+        }))
+        .filter((series) => series.points.length > 0),
+    [effectiveSeries, filteredPeriodSet],
+  );
+
+  const filteredTopicData = useMemo(
+    () =>
+      query.data
+        ? {
+            ...query.data,
+            periods: filteredPeriods,
+            series: filteredSeries,
+          }
+        : undefined,
+    [filteredPeriods, filteredSeries, query.data],
+  );
+
+  const baseSeries = filteredSeries.filter((series) => !series.label.includes('(forecast)'));
 
   const seriesMax = baseSeries.map((series) => ({
     label: series.label,
@@ -261,7 +333,7 @@ export function ChartCard({
   }, [availableDimensions, dimensionFilters, query.data]);
 
   const chartBuild = useMemo(() => {
-    if (!query.data || query.data.series.length === 0) {
+    if (!filteredTopicData || filteredTopicData.series.length === 0) {
       return { option: undefined, error: null as string | null };
     }
 
@@ -270,8 +342,8 @@ export function ChartCard({
         option: buildChartOption({
           topicId,
           topic,
-          data: query.data,
-          effectiveSeries,
+            data: filteredTopicData,
+            effectiveSeries: filteredSeries,
           baseSeries,
           largeSeries,
           dualAxis,
@@ -290,9 +362,9 @@ export function ChartCard({
     activeFilterLabels,
     baseSeries,
     dualAxis,
-    effectiveSeries,
+    filteredSeries,
+    filteredTopicData,
     largeSeries,
-    query.data,
     showDualAxisButton,
     topic,
     topicId,
@@ -300,8 +372,8 @@ export function ChartCard({
   ]);
 
   const latestValues = useMemo(
-    () => computeLatestValues(effectiveSeries, activeFilterLabels),
-    [activeFilterLabels, effectiveSeries],
+    () => computeLatestValues(filteredSeries, activeFilterLabels),
+    [activeFilterLabels, filteredSeries],
   );
 
   // Tempo is local to the chart; no global sync.
@@ -309,7 +381,7 @@ export function ChartCard({
 
   React.useEffect(() => {
     if (!musicPlayerRef.current) {
-      musicPlayerRef.current = new DataPointMusicPlayer(effectiveSeries, {
+      musicPlayerRef.current = new DataPointMusicPlayer(filteredSeries, {
         tempoBpm: musicTempo,
         scale: musicScale,
         octaveShift: musicOctaveShift,
@@ -326,7 +398,7 @@ export function ChartCard({
       return;
     }
 
-    musicPlayerRef.current.setSeries(effectiveSeries);
+    musicPlayerRef.current.setSeries(filteredSeries);
     musicPlayerRef.current.setTempo(musicTempo);
     musicPlayerRef.current.setSwing(musicSwing);
     musicPlayerRef.current.setScale(musicScale);
@@ -340,11 +412,11 @@ export function ChartCard({
     musicPlayerRef.current.setVolume(musicVolume);
     musicPlayerRef.current.setPhaseOffset(musicPhaseOffset);
 
-    if (effectiveSeries.length === 0 && musicPlaying) {
+    if (filteredSeries.length === 0 && musicPlaying) {
       setMusicPlaying(false);
     }
   }, [
-    effectiveSeries,
+    filteredSeries,
     musicPlaying,
     musicTempo,
     musicSwing,
@@ -732,6 +804,13 @@ export function ChartCard({
             {query.data.warning ?? 'Try changing the selected countries, time range, or dimension filters.'}
           </p>
         </div>
+      ) : query.data && filteredSeries.length === 0 ? (
+        <div className="flex flex-1 flex-col items-start justify-center gap-4 rounded-3xl border border-amber-500/20 bg-amber-500/10 p-6 text-amber-100">
+          <div className="text-lg font-semibold">No points in selected period range.</div>
+          <p className="max-w-2xl text-sm leading-6 text-amber-100/90">
+            Expand the date range to include available observations.
+          </p>
+        </div>
       ) : query.data && chartBuild.option ? (
         <>
           <LatestValuesGrid
@@ -741,6 +820,40 @@ export function ChartCard({
           />
 
           <div className="bat-chart-toolbar mb-3 flex flex-wrap items-center justify-end gap-2 rounded-2xl px-3 py-2">
+            {selectablePeriods.length > 1 ? (
+              <>
+                <label className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium">
+                  <span className="whitespace-nowrap">From:</span>
+                  <select
+                    value={periodStart}
+                    onChange={(event) => setPeriodStart(event.target.value)}
+                    className="bat-input rounded-xl px-2 py-1 text-xs text-white outline-none"
+                  >
+                    {selectablePeriods.map((period) => (
+                      <option key={period} value={period}>
+                        {period}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium">
+                  <span className="whitespace-nowrap">To:</span>
+                  <select
+                    value={periodEnd}
+                    onChange={(event) => setPeriodEnd(event.target.value)}
+                    className="bat-input rounded-xl px-2 py-1 text-xs text-white outline-none"
+                  >
+                    {selectablePeriods.map((period) => (
+                      <option key={period} value={period}>
+                        {period}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : null}
+
             <button
               type="button"
               onClick={async () => {
@@ -789,9 +902,9 @@ export function ChartCard({
                   onChange={(event) => setForecastHorizon(Number(event.target.value))}
                   className="bat-input rounded-xl px-2 py-1 text-xs text-white outline-none"
                 >
-                  {[5, 10, 20, 30].map((value) => (
+                  {forecastOptions.map((value) => (
                     <option key={value} value={value}>
-                      {value}y
+                      {value}{forecastUnitLabel}
                     </option>
                   ))}
                 </select>
