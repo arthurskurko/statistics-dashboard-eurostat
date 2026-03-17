@@ -4,6 +4,7 @@ import { ChartCard } from './components/ChartCard';
 import { EmptyState } from './components/EmptyState';
 import { StatChip } from './components/StatChip';
 import { TopicPicker } from './components/TopicPicker';
+import { THEMES, type ThemeId } from './features/dashboard/themes';
 import { TOPICS } from './features/dashboard/topicCatalog';
 import type { DashboardCard } from './features/dashboard/types';
 import { useLocalStorage } from './hooks/useLocalStorage';
@@ -13,18 +14,6 @@ const DEFAULT_CHARTS_KEY = 'estonia-statistics-dashboard.defaultCharts';
 const THEME_STORAGE_KEY = 'estonia-statistics-dashboard.theme';
 
 const DEFAULT_CHART_TOPIC_IDS = ['population', 'unemployment-rate', 'inflation'];
-
-const THEMES = [
-  { id: 'ember-noir', label: 'Ember Noir' },
-  { id: 'batcave', label: 'Batcave Pixel' },
-  { id: 'neon-grid', label: 'Neon Grid' },
-  { id: 'aurora-core', label: 'Aurora Core' },
-  { id: 'solar-flare', label: 'Solar Flare' },
-  { id: 'mystic-forest', label: 'Mystic Forest' },
-  { id: 'retro-console', label: 'Retro Console' },
-] as const;
-
-type ThemeId = (typeof THEMES)[number]['id'];
 
 function createCard(topicId: string): DashboardCard {
   const id =
@@ -125,6 +114,9 @@ export default function App() {
             </a>
             <a href="/who" className="bat-btn rounded-2xl px-3 py-1 font-medium">
               WHO
+            </a>
+            <a href="/meteo" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+              Open-Meteo
             </a>
           </div>
           <button
