@@ -1,0 +1,10 @@
+[
+  { "code": "WHOSIS_000001", "title": "Life expectancy at birth" },
+  { "code": "NCD_BMI_30A", "title": "Obesity prevalence among adults (age-standardized)" },
+  { "code": "NCD_DIABETES_PREVALENCE_AGESTD", "title": "Diabetes prevalence (age-standardized)" },
+  { "code": "NCD_DIABETES_PREVALENCE_CRUDE", "title": "Diabetes prevalence (crude)" },
+  { "code": "Adult_curr_tob_use", "title": "Current tobacco use among adults" },
+  { "code": "EQ_OVERWEIGHTADULT", "title": "Overweight and obesity prevalence" },
+  { "code": "NCD_BMI_PLUS2A", "title": "Child obesity prevalence (age-standardized)" },
+  { "code": "NCD_CCS_DIAB_TARGET", "title": "National diabetes target" }
+]

@@ -102,8 +102,10 @@ export default function WorldBankApp() {
           onAddTopicById={addCardForTopicId}
           onClear={clearCards}
           chartCount={cards.length}
+          providerId="worldbank"
           topics={WORLD_BANK_TOPICS}
           catalogPath="worldbank-catalog.json"
+          popularPath="popular-worldbank.json"
           badgeText="World Bank dashboard builder"
           titleText="World Bank indicators dashboard"
           descriptionText="Search World Bank indicator codes, add charts, and compare Estonia with aggregate or country peers."

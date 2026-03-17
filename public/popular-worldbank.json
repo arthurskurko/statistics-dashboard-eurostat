@@ -1,0 +1,10 @@
+[
+  { "code": "SP.POP.TOTL", "title": "Population, total" },
+  { "code": "NY.GDP.MKTP.CD", "title": "GDP (current US$)" },
+  { "code": "NY.GDP.PCAP.CD", "title": "GDP per capita (current US$)" },
+  { "code": "NY.GDP.MKTP.KD.ZG", "title": "GDP growth (annual %)" },
+  { "code": "FP.CPI.TOTL.ZG", "title": "Inflation, consumer prices (annual %)" },
+  { "code": "SL.UEM.TOTL.ZS", "title": "Unemployment, total (% of total labor force)" },
+  { "code": "SP.DYN.LE00.IN", "title": "Life expectancy at birth, total (years)" },
+  { "code": "SI.POV.GINI", "title": "Gini index" }
+]

@@ -135,6 +135,8 @@ export default function App() {
           onAddTopicById={addCardForTopicId}
           onClear={clearCards}
           chartCount={cards.length}
+          providerId="eurostat"
+          popularPath="popular-eurostat.json"
         />
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

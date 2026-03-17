@@ -101,8 +101,10 @@ export default function OpenMeteoApp() {
           onAddTopicById={addCardForTopicId}
           onClear={clearCards}
           chartCount={cards.length}
+          providerId="openmeteo"
           topics={OPEN_METEO_TOPICS}
           catalogPath="openmeteo-catalog.json"
+          popularPath="popular-openmeteo.json"
           badgeText="Open-Meteo dashboard builder"
           titleText="Open-Meteo climate dashboard"
           descriptionText="Track weather and climate variables across selected cities using the Open-Meteo archive API."

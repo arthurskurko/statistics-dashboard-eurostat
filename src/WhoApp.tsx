@@ -101,8 +101,10 @@ export default function WhoApp() {
           onAddTopicById={addCardForTopicId}
           onClear={clearCards}
           chartCount={cards.length}
+          providerId="who"
           topics={WHO_TOPICS}
           catalogPath="who-catalog.json"
+          popularPath="popular-who.json"
           badgeText="WHO dashboard builder"
           titleText="WHO indicators dashboard"
           descriptionText="Search WHO GHO OData indicator codes and compare Estonia with Europe or other selected geographies."
