@@ -6,6 +6,7 @@ type GeoPoint = {
   label: string;
   latitude: number;
   longitude: number;
+  aliases?: string[];
 };
 
 type OpenMeteoDailyResponse = {
@@ -19,16 +20,40 @@ type OpenMeteoDailyResponse = {
 const OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive';
 
 const OPEN_METEO_GEOS: GeoPoint[] = [
-  { code: 'TLL', label: 'Tallinn', latitude: 59.437, longitude: 24.7536 },
-  { code: 'HEL', label: 'Helsinki', latitude: 60.1699, longitude: 24.9384 },
-  { code: 'RIX', label: 'Riga', latitude: 56.9496, longitude: 24.1052 },
-  { code: 'STO', label: 'Stockholm', latitude: 59.3293, longitude: 18.0686 },
-  { code: 'CPH', label: 'Copenhagen', latitude: 55.6761, longitude: 12.5683 },
-  { code: 'BER', label: 'Berlin', latitude: 52.52, longitude: 13.405 },
-  { code: 'VNO', label: 'Vilnius', latitude: 54.6872, longitude: 25.2797 },
-  { code: 'WAW', label: 'Warsaw', latitude: 52.2297, longitude: 21.0122 },
-  { code: 'OSL', label: 'Oslo', latitude: 59.9139, longitude: 10.7522 },
-  { code: 'AMS', label: 'Amsterdam', latitude: 52.3676, longitude: 4.9041 },
+  { code: 'TLL', label: 'Tallinn', latitude: 59.437, longitude: 24.7536, aliases: ['ESTONIA', 'EE', 'EST'] },
+  { code: 'HEL', label: 'Helsinki', latitude: 60.1699, longitude: 24.9384, aliases: ['FINLAND', 'FI', 'FIN'] },
+  { code: 'RIX', label: 'Riga', latitude: 56.9496, longitude: 24.1052, aliases: ['LATVIA', 'LV', 'LVA'] },
+  { code: 'VNO', label: 'Vilnius', latitude: 54.6872, longitude: 25.2797, aliases: ['LITHUANIA', 'LT', 'LTU'] },
+  { code: 'STO', label: 'Stockholm', latitude: 59.3293, longitude: 18.0686, aliases: ['SWEDEN', 'SE', 'SWE'] },
+  { code: 'OSL', label: 'Oslo', latitude: 59.9139, longitude: 10.7522, aliases: ['NORWAY', 'NO', 'NOR'] },
+  { code: 'CPH', label: 'Copenhagen', latitude: 55.6761, longitude: 12.5683, aliases: ['DENMARK', 'DK', 'DNK'] },
+  { code: 'AMS', label: 'Amsterdam', latitude: 52.3676, longitude: 4.9041, aliases: ['NETHERLANDS', 'NL', 'NLD'] },
+  { code: 'BER', label: 'Berlin', latitude: 52.52, longitude: 13.405, aliases: ['GERMANY', 'DE', 'DEU'] },
+  { code: 'WAW', label: 'Warsaw', latitude: 52.2297, longitude: 21.0122, aliases: ['POLAND', 'PL', 'POL'] },
+  { code: 'PAR', label: 'Paris', latitude: 48.8566, longitude: 2.3522, aliases: ['FRANCE', 'FR', 'FRA'] },
+  { code: 'MAD', label: 'Madrid', latitude: 40.4168, longitude: -3.7038, aliases: ['SPAIN', 'ES', 'ESP'] },
+  { code: 'ROM', label: 'Rome', latitude: 41.9028, longitude: 12.4964, aliases: ['ITALY', 'IT', 'ITA'] },
+  { code: 'LON', label: 'London', latitude: 51.5072, longitude: -0.1276, aliases: ['UNITED KINGDOM', 'UK', 'GB', 'GBR'] },
+  { code: 'DUB', label: 'Dublin', latitude: 53.3498, longitude: -6.2603, aliases: ['IRELAND', 'IE', 'IRL'] },
+  { code: 'ATH', label: 'Athens', latitude: 37.9838, longitude: 23.7275, aliases: ['GREECE', 'GR', 'GRC'] },
+  { code: 'LIS', label: 'Lisbon', latitude: 38.7223, longitude: -9.1393, aliases: ['PORTUGAL', 'PT', 'PRT'] },
+  { code: 'PRG', label: 'Prague', latitude: 50.0755, longitude: 14.4378, aliases: ['CZECHIA', 'CZ', 'CZE'] },
+  { code: 'BUD', label: 'Budapest', latitude: 47.4979, longitude: 19.0402, aliases: ['HUNGARY', 'HU', 'HUN'] },
+  { code: 'BCH', label: 'Bucharest', latitude: 44.4268, longitude: 26.1025, aliases: ['ROMANIA', 'RO', 'ROU'] },
+  { code: 'KIV', label: 'Kyiv', latitude: 50.4501, longitude: 30.5234, aliases: ['UKRAINE', 'UA', 'UKR'] },
+  { code: 'ANK', label: 'Ankara', latitude: 39.9334, longitude: 32.8597, aliases: ['TURKIYE', 'TURKEY', 'TR', 'TUR'] },
+  { code: 'TKY', label: 'Tokyo', latitude: 35.6762, longitude: 139.6503, aliases: ['JAPAN', 'JP', 'JPN', 'TOKYO'] },
+  { code: 'WDC', label: 'Washington, D.C.', latitude: 38.9072, longitude: -77.0369, aliases: ['USA', 'US', 'UNITED STATES'] },
+  { code: 'OTT', label: 'Ottawa', latitude: 45.4215, longitude: -75.6972, aliases: ['CANADA', 'CA', 'CAN'] },
+  { code: 'BRA', label: 'Brasilia', latitude: -15.7939, longitude: -47.8828, aliases: ['BRAZIL', 'BR', 'BRA'] },
+  { code: 'CAI', label: 'Cairo', latitude: 30.0444, longitude: 31.2357, aliases: ['EGYPT', 'EG', 'EGY'] },
+  { code: 'KRT', label: 'Khartoum', latitude: 15.5007, longitude: 32.5599, aliases: ['SUDAN', 'SD', 'SDN'] },
+  { code: 'NBO', label: 'Nairobi', latitude: -1.2921, longitude: 36.8219, aliases: ['KENYA', 'KE', 'KEN'] },
+  { code: 'PRE', label: 'Pretoria', latitude: -25.7479, longitude: 28.2293, aliases: ['SOUTH AFRICA', 'ZA', 'ZAF'] },
+  { code: 'DEL', label: 'New Delhi', latitude: 28.6139, longitude: 77.209, aliases: ['INDIA', 'IN', 'IND', 'DELHI'] },
+  { code: 'BKK', label: 'Bangkok', latitude: 13.7563, longitude: 100.5018, aliases: ['THAILAND', 'TH', 'THA'] },
+  { code: 'SEO', label: 'Seoul', latitude: 37.5665, longitude: 126.978, aliases: ['KOREA', 'KR', 'KOR'] },
+  { code: 'CANB', label: 'Canberra', latitude: -35.2809, longitude: 149.13, aliases: ['AUSTRALIA', 'AU', 'AUS'] },
 ];
 
 function inferSortKey(periodCode: string): number {
@@ -93,7 +118,14 @@ function toTopicDefinitionFromCode(code: string): TopicDefinition {
 }
 
 function lookupGeo(code: string): GeoPoint | undefined {
-  return OPEN_METEO_GEOS.find((geo) => geo.code === code.toUpperCase());
+  const query = code.trim().toUpperCase();
+  if (!query) return undefined;
+
+  return OPEN_METEO_GEOS.find((geo) => {
+    if (geo.code.toUpperCase() === query) return true;
+    if (geo.label.toUpperCase() === query) return true;
+    return geo.aliases?.some((alias) => alias.toUpperCase() === query) ?? false;
+  });
 }
 
 async function fetchGeoSeries(
