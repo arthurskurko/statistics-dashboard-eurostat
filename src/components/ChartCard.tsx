@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import ReactECharts from 'echarts-for-react';
 import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
@@ -71,6 +72,40 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     setMusicPhaseOffset(hashString(cardId) % 16);
   }, [cardId]);
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
+  const chartRef = React.useRef<ReactECharts | null>(null);
+  const [compactMobileLayout, setCompactMobileLayout] = React.useState(
+    typeof window !== 'undefined' ? window.innerWidth < 640 : false,
+  );
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const syncCompactLayout = () => setCompactMobileLayout(window.innerWidth < 640);
+    const triggerResize = () => {
+      window.requestAnimationFrame(() => {
+        chartRef.current?.getEchartsInstance().resize();
+      });
+      window.setTimeout(() => {
+        chartRef.current?.getEchartsInstance().resize();
+      }, 220);
+    };
+
+    const onViewportChange = () => {
+      syncCompactLayout();
+      triggerResize();
+    };
+
+    syncCompactLayout();
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', onViewportChange);
+    window.visualViewport?.addEventListener('resize', onViewportChange);
+
+    return () => {
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('orientationchange', onViewportChange);
+      window.visualViewport?.removeEventListener('resize', onViewportChange);
+    };
+  }, []);
 
   const defaultGeoValues = useMemo(() => topic.geoValues ?? ['EE', 'EU27_2020'], [topic.geoValues]);
 
@@ -200,6 +235,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           dualAxis,
           showDualAxisButton,
           activeFilterLabels,
+          compactMobileLayout,
         }),
         error: null,
       };
@@ -218,6 +254,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     showDualAxisButton,
     topic,
     topicId,
+    compactMobileLayout,
   ]);
 
   const latestValues = useMemo(
@@ -291,208 +328,208 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
   const showUnitSelectionHint = seriesDimension === 'unit' && selectedUnits.length === 0;
   const showUnitTooManyHint = unitSelectionTooLarge;
+  const musicModal = musicModalOpen ? (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-black/80 px-4 py-4 sm:py-6">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-950/95 shadow-2xl sm:max-h-[calc(100dvh-3rem)]">
+        <div className="flex items-start justify-between border-b border-white/10 px-6 py-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Data music controls</h2>
+            <p className="mt-1 text-sm text-slate-300">Tweak tempo, scale and the synthesis style.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMusicModalOpen(false)}
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="space-y-4 overflow-y-auto px-6 py-5 text-sm text-slate-200">
+          <label className="grid gap-2">
+            <span className="font-medium text-slate-100">Tempo</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={30}
+                max={240}
+                value={musicTempo}
+                onChange={(event) => setMusicTempo(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer accent-emerald-400"
+              />
+              <span className="w-14 text-right text-xs text-slate-200">{musicTempo} bpm</span>
+            </div>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="font-medium text-slate-100">Volume</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={musicVolume}
+                onChange={(event) => setMusicVolume(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer accent-emerald-400"
+              />
+              <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicVolume * 100)}%</span>
+            </div>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="font-medium text-slate-100">Swing</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={0.5}
+                step={0.01}
+                value={musicSwing}
+                onChange={(event) => setMusicSwing(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer accent-emerald-400"
+              />
+              <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicSwing * 100)}%</span>
+            </div>
+          </label>
+
+
+          <label className="grid gap-2">
+            <span className="font-medium text-slate-100">Scale</span>
+            <select
+              value={musicScale}
+              onChange={(event) => setMusicScale(event.target.value as 'major' | 'minor' | 'pentatonic' | 'chromatic')}
+              className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
+            >
+              <option value="major">Major</option>
+              <option value="minor">Minor</option>
+              <option value="pentatonic">Pentatonic</option>
+              <option value="chromatic">Chromatic</option>
+            </select>
+          </label>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="grid gap-2">
+              <span className="font-medium text-slate-100">Octave shift</span>
+              <input
+                type="number"
+                min={-3}
+                max={3}
+                value={musicOctaveShift}
+                onChange={(event) => setMusicOctaveShift(Number(event.target.value))}
+                className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="font-medium text-slate-100">Phase offset</span>
+              <input
+                type="number"
+                min={0}
+                max={16}
+                value={musicPhaseOffset}
+                onChange={(event) => setMusicPhaseOffset(Number(event.target.value))}
+                className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
+              />
+              <p className="text-xs text-slate-500">Shift the timing of this chart (16th-note increments) relative to others.</p>
+            </label>
+          </div>
+
+          <label className="grid gap-2">
+            <span className="font-medium text-slate-100">Instrument</span>
+            <select
+              value={musicInstrument}
+              onChange={(event) => setMusicInstrument(event.target.value as OscillatorType | 'auto')}
+              className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
+            >
+              <option value="auto">Auto</option>
+              <option value="sine">Sine</option>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+              <option value="sawtooth">Sawtooth</option>
+            </select>
+          </label>
+
+          <div className="grid gap-2">
+            <span className="font-medium text-slate-100">Delay</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={0.6}
+                step={0.02}
+                value={musicDelayTime}
+                onChange={(event) => setMusicDelayTime(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer accent-emerald-400"
+              />
+              <span className="w-14 text-right text-xs text-slate-200">{musicDelayTime.toFixed(2)}s</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-400">Feedback</span>
+              <input
+                type="range"
+                min={0}
+                max={0.95}
+                step={0.01}
+                value={musicDelayFeedback}
+                onChange={(event) => setMusicDelayFeedback(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer accent-emerald-400"
+              />
+              <span className="w-12 text-right text-xs text-slate-200">{Math.round(musicDelayFeedback * 100)}%</span>
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <span className="font-medium text-slate-100">Reverb</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={musicReverbWet}
+                onChange={(event) => setMusicReverbWet(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer accent-emerald-400"
+              />
+              <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicReverbWet * 100)}%</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-400">Decay</span>
+              <input
+                type="range"
+                min={0.5}
+                max={6}
+                step={0.1}
+                value={musicReverbDecay}
+                onChange={(event) => setMusicReverbDecay(Number(event.target.value))}
+                className="h-2 w-full cursor-pointer accent-emerald-400"
+              />
+              <span className="w-14 text-right text-xs text-slate-200">{musicReverbDecay.toFixed(1)}s</span>
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={musicArpeggiate}
+              onChange={(event) => setMusicArpeggiate(event.target.checked)}
+              className="h-4 w-4 rounded border-white/20 bg-white/10 text-emerald-400 focus:ring-emerald-400"
+            />
+            <span className="text-sm text-slate-200">Arpeggiate (play one series at a time)</span>
+          </label>
+
+          <div className="rounded-xl bg-white/5 p-3 text-xs text-slate-300">
+            Tip: Try slow tempo with pentatonic scale for an ambient vibe, or crank tempo + sawtooth for
+            intense “cyber soundtrack” energy.
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <article className="batcave-panel relative flex min-h-[30rem] flex-col rounded-3xl p-5 shadow-card backdrop-blur-xl">
-
-      {musicModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
-          <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/20 bg-slate-950/95 shadow-2xl">
-            <div className="flex items-start justify-between border-b border-white/10 px-6 py-4">
-              <div>
-                <h2 className="text-lg font-semibold text-white">Data music controls</h2>
-                <p className="mt-1 text-sm text-slate-300">Tweak tempo, scale and the synthesis style.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMusicModalOpen(false)}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="space-y-4 px-6 py-5 text-sm text-slate-200">
-              <label className="grid gap-2">
-                <span className="font-medium text-slate-100">Tempo</span>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={30}
-                    max={240}
-                    value={musicTempo}
-                    onChange={(event) => setMusicTempo(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer accent-emerald-400"
-                  />
-                  <span className="w-14 text-right text-xs text-slate-200">{musicTempo} bpm</span>
-                </div>
-              </label>
-
-              <label className="grid gap-2">
-                <span className="font-medium text-slate-100">Volume</span>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={musicVolume}
-                    onChange={(event) => setMusicVolume(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer accent-emerald-400"
-                  />
-                  <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicVolume * 100)}%</span>
-                </div>
-              </label>
-
-              <label className="grid gap-2">
-                <span className="font-medium text-slate-100">Swing</span>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={0.5}
-                    step={0.01}
-                    value={musicSwing}
-                    onChange={(event) => setMusicSwing(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer accent-emerald-400"
-                  />
-                  <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicSwing * 100)}%</span>
-                </div>
-              </label>
-
-
-              <label className="grid gap-2">
-                <span className="font-medium text-slate-100">Scale</span>
-                <select
-                  value={musicScale}
-                  onChange={(event) => setMusicScale(event.target.value as any)}
-                  className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
-                >
-                  <option value="major">Major</option>
-                  <option value="minor">Minor</option>
-                  <option value="pentatonic">Pentatonic</option>
-                  <option value="chromatic">Chromatic</option>
-                </select>
-              </label>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <label className="grid gap-2">
-                  <span className="font-medium text-slate-100">Octave shift</span>
-                  <input
-                    type="number"
-                    min={-3}
-                    max={3}
-                    value={musicOctaveShift}
-                    onChange={(event) => setMusicOctaveShift(Number(event.target.value))}
-                    className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
-                  />
-                </label>
-
-                <label className="grid gap-2">
-                  <span className="font-medium text-slate-100">Phase offset</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={16}
-                    value={musicPhaseOffset}
-                    onChange={(event) => setMusicPhaseOffset(Number(event.target.value))}
-                    className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
-                  />
-                  <p className="text-xs text-slate-500">Shift the timing of this chart (16th-note increments) relative to others.</p>
-                </label>
-              </div>
-
-              <label className="grid gap-2">
-                <span className="font-medium text-slate-100">Instrument</span>
-                <select
-                  value={musicInstrument}
-                  onChange={(event) => setMusicInstrument(event.target.value as any)}
-                  className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
-                >
-                  <option value="auto">Auto</option>
-                  <option value="sine">Sine</option>
-                  <option value="triangle">Triangle</option>
-                  <option value="square">Square</option>
-                  <option value="sawtooth">Sawtooth</option>
-                </select>
-              </label>
-
-              <div className="grid gap-2">
-                <span className="font-medium text-slate-100">Delay</span>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={0.6}
-                    step={0.02}
-                    value={musicDelayTime}
-                    onChange={(event) => setMusicDelayTime(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer accent-emerald-400"
-                  />
-                  <span className="w-14 text-right text-xs text-slate-200">{musicDelayTime.toFixed(2)}s</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400">Feedback</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={0.95}
-                    step={0.01}
-                    value={musicDelayFeedback}
-                    onChange={(event) => setMusicDelayFeedback(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer accent-emerald-400"
-                  />
-                  <span className="w-12 text-right text-xs text-slate-200">{Math.round(musicDelayFeedback * 100)}%</span>
-                </div>
-              </div>
-
-              <div className="grid gap-2">
-                <span className="font-medium text-slate-100">Reverb</span>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={musicReverbWet}
-                    onChange={(event) => setMusicReverbWet(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer accent-emerald-400"
-                  />
-                  <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicReverbWet * 100)}%</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400">Decay</span>
-                  <input
-                    type="range"
-                    min={0.5}
-                    max={6}
-                    step={0.1}
-                    value={musicReverbDecay}
-                    onChange={(event) => setMusicReverbDecay(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer accent-emerald-400"
-                  />
-                  <span className="w-14 text-right text-xs text-slate-200">{musicReverbDecay.toFixed(1)}s</span>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={musicArpeggiate}
-                  onChange={(event) => setMusicArpeggiate(event.target.checked)}
-                  className="h-4 w-4 rounded border-white/20 bg-white/10 text-emerald-400 focus:ring-emerald-400"
-                />
-                <span className="text-sm text-slate-200">Arpeggiate (play one series at a time)</span>
-              </label>
-
-              <div className="rounded-xl bg-white/5 p-3 text-xs text-slate-300">
-                Tip: Try slow tempo with pentatonic scale for an ambient vibe, or crank tempo + sawtooth for
-                intense “cyber soundtrack” energy.
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {musicModal && typeof document !== 'undefined' ? createPortal(musicModal, document.body) : null}
 
       <button
         type="button"
@@ -598,6 +635,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
                 const player = musicPlayerRef.current;
                 if (!player) return;
                 try {
+                  await player.unlockAudio();
                   const playing = await player.toggle();
                   setMusicPlaying(playing);
                   if (!playing) setMusicModalOpen(false);
@@ -649,9 +687,11 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
 
           <div className="min-h-[22rem] flex-1 rounded-3xl border border-border bg-slate-950/60 p-3">
             <ReactECharts
+            ref={chartRef}
             option={chartBuild.option}
             notMerge
             lazyUpdate
+            autoResize
             style={{ height: '100%', minHeight: '22rem' }}
           />
           </div>

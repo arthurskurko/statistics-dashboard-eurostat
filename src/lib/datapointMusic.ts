@@ -230,7 +230,15 @@ export class DataPointMusicPlayer {
 
     const context = this.getAudioContext();
     if (context.state === 'suspended') {
-      await context.resume();
+      try {
+        await context.resume();
+      } catch {
+        return;
+      }
+    }
+
+    if (context.state !== 'running') {
+      return;
     }
 
     this.running = true;
@@ -238,6 +246,26 @@ export class DataPointMusicPlayer {
 
     this.stepIndex = 0;
     this.startLoop();
+  }
+
+  async unlockAudio(): Promise<boolean> {
+    try {
+      const context = this.getAudioContext();
+      if (context.state === 'suspended') {
+        await context.resume();
+      }
+
+      // iOS Safari can require a user-gesture-started source before Web Audio becomes audible.
+      const unlockBuffer = context.createBuffer(1, 1, context.sampleRate);
+      const source = context.createBufferSource();
+      source.buffer = unlockBuffer;
+      source.connect(context.destination);
+      source.start(0);
+
+      return context.state === 'running';
+    } catch {
+      return false;
+    }
   }
 
   private startLoop(): void {

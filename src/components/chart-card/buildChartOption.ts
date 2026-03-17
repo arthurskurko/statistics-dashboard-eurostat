@@ -15,6 +15,7 @@ type BuildChartOptionArgs = {
   dualAxis: boolean;
   showDualAxisButton: boolean;
   activeFilterLabels: string[];
+  compactMobileLayout?: boolean;
 };
 
 export function buildChartOption({
@@ -27,6 +28,7 @@ export function buildChartOption({
   dualAxis,
   showDualAxisButton,
   activeFilterLabels,
+  compactMobileLayout = false,
 }: BuildChartOptionArgs): EChartsOption {
   const xAxis = data.periods;
   const twoSeries = showDualAxisButton;
@@ -110,15 +112,23 @@ export function buildChartOption({
     value.length > max ? `${value.slice(0, max - 1)}…` : value;
 
   const formatAxisValue = (value: number): string => {
+    const compactNumber = (scaled: number): string => {
+      const roundedInt = Math.round(scaled);
+      if (Math.abs(scaled - roundedInt) < 0.05) {
+        return `${roundedInt}`;
+      }
+      return scaled.toFixed(1).replace(/\.0$/, '');
+    };
+
     const abs = Math.abs(value);
     if (abs >= 1_000_000_000) {
-      return `${(value / 1_000_000_000).toFixed(1)}G`;
+      return `${compactNumber(value / 1_000_000_000)}G`;
     }
     if (abs >= 1_000_000) {
-      return `${(value / 1_000_000).toFixed(1)}M`;
+      return `${compactNumber(value / 1_000_000)}M`;
     }
     if (abs >= 1_000) {
-      return `${(value / 1_000).toFixed(1)}k`;
+      return `${compactNumber(value / 1_000)}k`;
     }
     return value.toString();
   };
@@ -168,7 +178,7 @@ export function buildChartOption({
   const axisNameTextStyle = (axisIndex: number): AxisNameTextStyleOption => {
     const colors = seriesByAxis[axisIndex] ?? [];
     const rich: Record<string, unknown> = {
-      dot: { fontSize: 14 },
+      dot: { fontSize: compactMobileLayout ? 11 : 14 },
     };
 
     colors.forEach((color, idx) => {
@@ -182,6 +192,10 @@ export function buildChartOption({
   const largeSeriesColor = seriesByAxis[1]?.[0] ?? '#f97316';
   const totalRenderedPoints = seriesWithAxis.length * xAxis.length;
   const useLightweightRendering = totalRenderedPoints > 500;
+  const axisLabelFontSize = compactMobileLayout ? 10 : 12;
+  const legendFontSize = compactMobileLayout ? 9 : 10;
+  const axisNameSmallLabel = compactMobileLayout ? 'Small' : 'Small values';
+  const axisNameLargeLabel = compactMobileLayout ? 'Large' : 'Large values';
 
   return {
     animation: !useLightweightRendering,
@@ -197,12 +211,17 @@ export function buildChartOption({
         const entries = Array.isArray(params) ? params : [params];
         const lines: string[] = [];
 
-        const extractValue = (entry: any): number | null => {
-          if (!entry) return null;
-          if (typeof entry.value === 'number') return entry.value;
-          if (Array.isArray(entry.value) && typeof entry.value[1] === 'number') return entry.value[1];
-          if (typeof entry.data === 'number') return entry.data;
-          if (entry.data && typeof entry.data.value === 'number') return entry.data.value;
+        const extractValue = (entry: Record<string, unknown>): number | null => {
+          const value = entry.value;
+          if (typeof value === 'number') return value;
+          if (Array.isArray(value) && typeof value[1] === 'number') return value[1];
+
+          const dataValue = entry.data;
+          if (typeof dataValue === 'number') return dataValue;
+          if (dataValue && typeof dataValue === 'object' && 'value' in dataValue) {
+            const nestedValue = (dataValue as Record<string, unknown>).value;
+            if (typeof nestedValue === 'number') return nestedValue;
+          }
           return null;
         };
 
@@ -228,13 +247,16 @@ export function buildChartOption({
       top: 0,
       textStyle: {
         color: '#cbd5e1',
-        fontSize: 10,
+        fontSize: legendFontSize,
       },
+      itemWidth: compactMobileLayout ? 14 : 18,
+      itemHeight: compactMobileLayout ? 8 : 10,
+      itemGap: compactMobileLayout ? 10 : 18,
       tooltip: {
         show: true,
       },
       formatter: (name: string) => {
-        const maxLen = 30;
+        const maxLen = compactMobileLayout ? 22 : 30;
         if (name.length <= maxLen) return name;
         return `${name.slice(0, maxLen)}…`;
       },
@@ -242,10 +264,10 @@ export function buildChartOption({
       inactiveColor: '#999999',
     },
     grid: {
-      left: 16,
-      right: 16,
-      top: 56,
-      bottom: 8,
+      left: compactMobileLayout ? 8 : 16,
+      right: compactMobileLayout ? 8 : 16,
+      top: compactMobileLayout ? 50 : 56,
+      bottom: compactMobileLayout ? 4 : 8,
       containLabel: true,
     },
     xAxis: {
@@ -253,6 +275,8 @@ export function buildChartOption({
       data: xAxis,
       axisLabel: {
         color: '#94a3b8',
+        fontSize: axisLabelFontSize,
+        hideOverlap: true,
       },
       axisLine: {
         lineStyle: {
@@ -265,12 +289,14 @@ export function buildChartOption({
         ? [
             {
               type: 'value',
-              name: axisName(0, 'Small values'),
-              nameGap: 18,
+              name: axisName(0, axisNameSmallLabel),
+              nameGap: compactMobileLayout ? 12 : 18,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               nameTextStyle: axisNameTextStyle(0) as any,
               axisLabel: {
                 color: smallSeriesColor,
+                fontSize: axisLabelFontSize,
+                margin: compactMobileLayout ? 6 : 8,
                 formatter: (value: number) => formatAxisValue(Number(value)),
               },
               axisLine: { lineStyle: { color: smallSeriesColor } },
@@ -278,12 +304,14 @@ export function buildChartOption({
             },
             {
               type: 'value',
-              name: axisName(1, 'Large values'),
-              nameGap: 18,
+              name: axisName(1, axisNameLargeLabel),
+              nameGap: compactMobileLayout ? 12 : 18,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               nameTextStyle: axisNameTextStyle(1) as any,
               axisLabel: {
                 color: largeSeriesColor,
+                fontSize: axisLabelFontSize,
+                margin: compactMobileLayout ? 6 : 8,
                 formatter: (value: number) => formatAxisValue(Number(value)),
               },
               axisLine: { lineStyle: { color: largeSeriesColor } },
@@ -294,6 +322,7 @@ export function buildChartOption({
             type: 'value',
             axisLabel: {
               color: '#94a3b8',
+              fontSize: axisLabelFontSize,
               formatter: (value: number) => formatAxisValue(Number(value)),
             },
             splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
@@ -316,7 +345,7 @@ export function buildChartOption({
           color: seriesColor,
         },
         lineStyle: {
-          width: useLightweightRendering ? 2 : 3,
+          width: useLightweightRendering ? (compactMobileLayout ? 1.5 : 2) : (compactMobileLayout ? 2 : 3),
           type: isForecast ? 'dashed' : 'solid',
           color: seriesColor,
         },
