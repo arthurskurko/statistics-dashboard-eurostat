@@ -18,6 +18,17 @@ type OpenMeteoDailyResponse = {
 };
 
 const OPEN_METEO_ARCHIVE = 'https://archive-api.open-meteo.com/v1/archive';
+const OPEN_METEO_CACHE_TTL_MS = 10 * 60 * 1000;
+const OPEN_METEO_MAX_RETRIES = 4;
+const OPEN_METEO_BASE_RETRY_MS = 1000;
+const OPEN_METEO_MAX_CONCURRENT_REQUESTS = 2;
+const OPEN_METEO_HISTORY_DAYS = 4 * 365;
+const OPEN_METEO_MAX_POINTS_PER_SERIES = 1200;
+
+const openMeteoResponseCache = new Map<string, { expiresAt: number; payload: OpenMeteoDailyResponse }>();
+const openMeteoInFlight = new Map<string, Promise<OpenMeteoDailyResponse>>();
+let openMeteoActiveRequests = 0;
+const openMeteoQueue: Array<() => void> = [];
 
 const OPEN_METEO_GEOS: GeoPoint[] = [
   { code: 'TLL', label: 'Tallinn', latitude: 59.437, longitude: 24.7536, aliases: ['ESTONIA', 'EE', 'EST'] },
@@ -56,6 +67,129 @@ const OPEN_METEO_GEOS: GeoPoint[] = [
   { code: 'CANB', label: 'Canberra', latitude: -35.2809, longitude: 149.13, aliases: ['AUSTRALIA', 'AU', 'AUS'] },
 ];
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function formatDateUtc(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function getDefaultStartDate(endDate: Date): string {
+  const start = new Date(endDate);
+  start.setUTCDate(start.getUTCDate() - OPEN_METEO_HISTORY_DAYS);
+  return formatDateUtc(start);
+}
+
+function decimatePoints(points: DataPoint[], maxPoints: number): DataPoint[] {
+  if (points.length <= maxPoints) return points;
+
+  const stride = Math.ceil(points.length / maxPoints);
+  const reduced = points.filter((_, index) => index % stride === 0);
+
+  // Always keep the latest point for accurate latest value + forecast anchor.
+  const lastPoint = points[points.length - 1];
+  if (lastPoint && reduced[reduced.length - 1]?.periodCode !== lastPoint.periodCode) {
+    reduced.push(lastPoint);
+  }
+
+  return reduced;
+}
+
+function parseRetryAfterMs(retryAfter: string | null): number | null {
+  if (!retryAfter) return null;
+
+  const asSeconds = Number(retryAfter);
+  if (Number.isFinite(asSeconds) && asSeconds >= 0) {
+    return asSeconds * 1000;
+  }
+
+  const asDate = Date.parse(retryAfter);
+  if (Number.isFinite(asDate)) {
+    const delta = asDate - Date.now();
+    return delta > 0 ? delta : 0;
+  }
+
+  return null;
+}
+
+async function acquireOpenMeteoSlot(): Promise<void> {
+  if (openMeteoActiveRequests < OPEN_METEO_MAX_CONCURRENT_REQUESTS) {
+    openMeteoActiveRequests += 1;
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    openMeteoQueue.push(() => {
+      openMeteoActiveRequests += 1;
+      resolve();
+    });
+  });
+}
+
+function releaseOpenMeteoSlot(): void {
+  openMeteoActiveRequests = Math.max(0, openMeteoActiveRequests - 1);
+  const next = openMeteoQueue.shift();
+  if (next) next();
+}
+
+async function withOpenMeteoSlot<T>(task: () => Promise<T>): Promise<T> {
+  await acquireOpenMeteoSlot();
+  try {
+    return await task();
+  } finally {
+    releaseOpenMeteoSlot();
+  }
+}
+
+async function requestOpenMeteoDaily(url: string): Promise<OpenMeteoDailyResponse> {
+  const cached = openMeteoResponseCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.payload;
+  }
+
+  const existingInFlight = openMeteoInFlight.get(url);
+  if (existingInFlight) {
+    return existingInFlight;
+  }
+
+  const requestPromise = withOpenMeteoSlot(async () => {
+    for (let attempt = 0; attempt <= OPEN_METEO_MAX_RETRIES; attempt += 1) {
+      const response = await fetch(url);
+
+      if (response.ok) {
+        const payload = (await response.json()) as OpenMeteoDailyResponse;
+        openMeteoResponseCache.set(url, {
+          expiresAt: Date.now() + OPEN_METEO_CACHE_TTL_MS,
+          payload,
+        });
+        return payload;
+      }
+
+      const shouldRetry = response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504;
+      const isLastAttempt = attempt >= OPEN_METEO_MAX_RETRIES;
+
+      if (!shouldRetry || isLastAttempt) {
+        throw new Error(`Open-Meteo request failed with status ${response.status}.`);
+      }
+
+      const retryAfterMs = parseRetryAfterMs(response.headers.get('Retry-After'));
+      const backoffMs = OPEN_METEO_BASE_RETRY_MS * 2 ** attempt;
+      const jitterMs = Math.floor(Math.random() * 250);
+      await wait((retryAfterMs ?? backoffMs) + jitterMs);
+    }
+
+    throw new Error('Open-Meteo request failed after retries.');
+  });
+
+  openMeteoInFlight.set(url, requestPromise);
+  try {
+    return await requestPromise;
+  } finally {
+    openMeteoInFlight.delete(url);
+  }
+}
+
 function inferSortKey(periodCode: string): number {
   const match = periodCode.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return Number(periodCode.replace(/\D/g, '')) || 0;
@@ -87,19 +221,44 @@ function computeForecast(points: DataPoint[], horizon: number): number[] {
     return Array(horizon).fill(points[points.length - 1]?.value ?? 0);
   }
 
-  const recent = points.slice(-30);
-  const ratios: number[] = [];
-  for (let index = 1; index < recent.length; index += 1) {
-    const previous = recent[index - 1].value;
-    const current = recent[index].value;
-    if (Math.abs(previous) > 1e-6) ratios.push(current / previous);
+  // Weather series are noisy and often seasonal. Exponential compounding can
+  // explode unrealistically over long horizons, so use a bounded mean-reverting
+  // forecast with mild drift.
+  const recent = points.slice(-60);
+  const recentValues = recent.map((point) => point.value);
+  const anchor = recentValues[recentValues.length - 1];
+
+  const deltas: number[] = [];
+  for (let index = 1; index < recentValues.length; index += 1) {
+    deltas.push(recentValues[index] - recentValues[index - 1]);
   }
 
-  const trendRatio = ratios.length > 0 ? median(ratios) : 1;
-  const dampedRatio = 1 + (clamp(trendRatio, 0.9, 1.1) - 1) * 0.35;
-  const anchor = recent[recent.length - 1].value;
+  const baselineWindow = recentValues.slice(-14);
+  const baseline = baselineWindow.reduce((sum, value) => sum + value, 0) / Math.max(1, baselineWindow.length);
+  const medianDelta = deltas.length > 0 ? median(deltas) : 0;
+  const absDeltas = deltas.map((value) => Math.abs(value));
+  const volatility = absDeltas.length > 0 ? median(absDeltas) : 0;
+  const drift = clamp(medianDelta, -Math.max(0.2, volatility), Math.max(0.2, volatility));
 
-  return Array.from({ length: horizon }, (_, index) => anchor * dampedRatio ** (index + 1));
+  const observedMin = Math.min(...recentValues);
+  const observedMax = Math.max(...recentValues);
+  const observedRange = Math.max(1, observedMax - observedMin);
+  const lowerBound = observedMin - observedRange * 0.25;
+  const upperBound = observedMax + observedRange * 0.25;
+  const nonNegativeSeries = observedMin >= 0;
+
+  const forecast: number[] = [];
+  let current = anchor;
+
+  for (let step = 0; step < horizon; step += 1) {
+    const meanReversion = (baseline - current) * 0.12;
+    const next = current + drift * 0.2 + meanReversion;
+    current = clamp(next, lowerBound, upperBound);
+    if (nonNegativeSeries) current = Math.max(0, current);
+    forecast.push(current);
+  }
+
+  return forecast;
 }
 
 function toTopicDefinitionFromCode(code: string): TopicDefinition {
@@ -132,20 +291,19 @@ async function fetchGeoSeries(
   geo: GeoPoint,
   variableName: string,
 ): Promise<{ series: DataSeries; periods: string[]; unitSuffix?: string }> {
+  const endDate = new Date();
+  const endDateCode = formatDateUtc(endDate);
+  const startDateCode = getDefaultStartDate(endDate);
+
   const url = new URL(OPEN_METEO_ARCHIVE);
   url.searchParams.set('latitude', String(geo.latitude));
   url.searchParams.set('longitude', String(geo.longitude));
-  url.searchParams.set('start_date', '2018-01-01');
-  url.searchParams.set('end_date', new Date().toISOString().slice(0, 10));
+  url.searchParams.set('start_date', startDateCode);
+  url.searchParams.set('end_date', endDateCode);
   url.searchParams.set('daily', variableName);
   url.searchParams.set('timezone', 'UTC');
 
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    throw new Error(`Open-Meteo request failed with status ${response.status}.`);
-  }
-
-  const payload = (await response.json()) as OpenMeteoDailyResponse;
+  const payload = await requestOpenMeteoDaily(url.toString());
   const times = payload.daily?.time ?? [];
   const values = (payload.daily?.[variableName] as Array<number | null> | undefined) ?? [];
   const unitSuffix = payload.daily_units?.[variableName];
@@ -163,13 +321,15 @@ async function fetchGeoSeries(
     })
     .filter((point): point is DataPoint => Boolean(point));
 
+  const decimatedPoints = decimatePoints(points, OPEN_METEO_MAX_POINTS_PER_SERIES);
+
   return {
     series: {
       id: geo.code,
       label: geo.label,
-      points,
+      points: decimatedPoints,
     },
-    periods: times,
+    periods: decimatedPoints.map((point) => point.periodCode),
     unitSuffix,
   };
 }

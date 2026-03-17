@@ -136,7 +136,7 @@ export default function OpenMeteoApp() {
                 sourceUrlBuilder={OPEN_METEO_SOURCE_URL_BUILDER}
                 sourceLinkLabel="Open-Meteo docs"
                 supportsForecast
-                forecastOptions={[7, 14, 30, 60]}
+                forecastOptions={[7, 14, 20, 30, 60, 90, 120, 180]}
                 forecastUnitLabel="d"
               />
             ))}
