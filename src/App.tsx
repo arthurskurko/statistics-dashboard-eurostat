@@ -15,10 +15,13 @@ const THEME_STORAGE_KEY = 'estonia-statistics-dashboard.theme';
 const DEFAULT_CHART_TOPIC_IDS = ['population', 'unemployment-rate', 'inflation'];
 
 const THEMES = [
+  { id: 'ember-noir', label: 'Ember Noir' },
   { id: 'batcave', label: 'Batcave Pixel' },
   { id: 'neon-grid', label: 'Neon Grid' },
-  { id: 'ember-noir', label: 'Ember Noir' },
   { id: 'aurora-core', label: 'Aurora Core' },
+  { id: 'solar-flare', label: 'Solar Flare' },
+  { id: 'mystic-forest', label: 'Mystic Forest' },
+  { id: 'retro-console', label: 'Retro Console' },
 ] as const;
 
 type ThemeId = (typeof THEMES)[number]['id'];
@@ -43,7 +46,7 @@ export default function App() {
     DEFAULT_CHARTS_KEY,
     DEFAULT_CHART_TOPIC_IDS,
   );
-  const [themeId, setThemeId] = useLocalStorage<ThemeId>(THEME_STORAGE_KEY, 'batcave');
+  const [themeId, setThemeId] = useLocalStorage<ThemeId>(THEME_STORAGE_KEY, 'ember-noir');
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   const activeTopics = useMemo(() => new Set(cards.map((card) => card.topicId)), [cards]);
