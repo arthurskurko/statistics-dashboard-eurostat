@@ -123,6 +123,9 @@ export default function App() {
             <a href="/worldbank" className="bat-btn rounded-2xl px-3 py-1 font-medium">
               World Bank
             </a>
+            <a href="/who" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+              WHO
+            </a>
           </div>
           <button
             type="button"

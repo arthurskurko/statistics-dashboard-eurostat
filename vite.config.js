@@ -5,6 +5,14 @@ export default defineConfig({
     server: {
         host: '0.0.0.0',
         port: 5173,
+        proxy: {
+            '/api/who': {
+                target: 'https://ghoapi.azureedge.net',
+                changeOrigin: true,
+                secure: true,
+                rewrite: function (path) { return path.replace(/^\/api\/who/, ''); },
+            },
+        },
     },
     preview: {
         host: '0.0.0.0',

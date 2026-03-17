@@ -1,0 +1,22 @@
+[
+  { "code": "WHOSIS_000001", "title": "Life expectancy at birth" },
+  { "code": "NCD_BMI_30A", "title": "Prevalence of obesity among adults, BMI >= 30 (age-standardized estimate)" },
+  { "code": "NCD_BMI_30C", "title": "Prevalence of obesity among adults, BMI >= 30 (crude estimate)" },
+  { "code": "NCD_DIABETES_PREVALENCE_AGESTD", "title": "Prevalence of diabetes, age-standardized" },
+  { "code": "NCD_DIABETES_PREVALENCE_CRUDE", "title": "Prevalence of diabetes, crude" },
+  { "code": "Adult_curr_tob_use", "title": "Prevalence of current tobacco use among adults (%)" },
+  { "code": "Adult_curr_tob_smoking", "title": "Prevalence of current tobacco smoking among adults (%)" },
+  { "code": "Adult_curr_smokeless", "title": "Prevalence of current smokeless tobacco use among adults (%)" },
+  { "code": "EQ_OVERWEIGHTADULT", "title": "Prevalence of overweight and obesity" },
+  { "code": "NCD_BMI_PLUS2A", "title": "Prevalence of obesity among children and adolescents (age-standardized estimate)" },
+  { "code": "NCD_BMI_PLUS2C", "title": "Prevalence of obesity among children and adolescents (crude estimate)" },
+  { "code": "NCD_CCS_DIAB_TARGET", "title": "Existence of a national target on diabetes" },
+  { "code": "NCD_CCS_OBES_TARGET", "title": "Existence of a national target on obesity" },
+  { "code": "NCD_CCS_DiabPlan", "title": "Existence of operational policy/strategy/action plan for diabetes" },
+  { "code": "NCD_CCS_OvwtPlan", "title": "Existence of operational policy/strategy/action plan to reduce overweight/obesity" },
+  { "code": "NCD_CCS_HbA1c", "title": "General availability of diabetes testing by HbA1c at primary health care level" },
+  { "code": "NCD_CCS_DiabetesReg", "title": "Existence of a diabetes registry" },
+  { "code": "NCD_CCS_DIAB_GUIDE", "title": "Existence of evidence-based national guidelines for diabetes management" },
+  { "code": "NCD_CCS_OBES_MGMT_GUIDE", "title": "Existence of evidence-based national guidelines for overweight/obesity management" },
+  { "code": "NCD_CCS_DIAB_SVY", "title": "Recent national adult risk factor survey covering raised blood glucose/diabetes" }
+]

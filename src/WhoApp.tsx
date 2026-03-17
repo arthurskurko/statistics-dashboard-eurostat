@@ -3,17 +3,16 @@ import { ChartCard } from './components/ChartCard';
 import { EmptyState } from './components/EmptyState';
 import { StatChip } from './components/StatChip';
 import { TopicPicker } from './components/TopicPicker';
-import { WORLD_BANK_TOPICS, WORLD_BANK_TOPIC_MAP } from './features/dashboard/worldBankTopicCatalog';
+import { WHO_TOPICS, WHO_TOPIC_MAP } from './features/dashboard/whoTopicCatalog';
 import type { DashboardCard } from './features/dashboard/types';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { fetchWorldBankTopicData } from './lib/worldBank';
+import { fetchWhoTopicData } from './lib/who';
 
-const STORAGE_KEY = 'worldbank-statistics-dashboard.cards';
-const DEFAULT_CHARTS_KEY = 'worldbank-statistics-dashboard.defaultCharts';
-const DEFAULT_CHART_TOPIC_IDS = ['wb-pop-total', 'wb-unemployment', 'wb-inflation'];
-const WORLD_BANK_DEFAULT_GEOS = ['EST', 'EUU'];
-const WORLD_BANK_SOURCE_URL_BUILDER = (datasetCode: string) =>
-  `https://data.worldbank.org/indicator/${datasetCode}`;
+const STORAGE_KEY = 'who-statistics-dashboard.cards';
+const DEFAULT_CHARTS_KEY = 'who-statistics-dashboard.defaultCharts';
+const DEFAULT_CHART_TOPIC_IDS = ['who-life-expectancy', 'who-obesity-adult', 'who-diabetes-age-std'];
+const WHO_DEFAULT_GEOS = ['EST', 'EUR'];
+const WHO_SOURCE_URL_BUILDER = (datasetCode: string) => `https://ghoapi.azureedge.net/api/${datasetCode}`;
 
 function createCard(topicId: string): DashboardCard {
   const id =
@@ -28,8 +27,8 @@ function createCard(topicId: string): DashboardCard {
   };
 }
 
-export default function WorldBankApp() {
-  const [selectedTopicId, setSelectedTopicId] = useState<string>(WORLD_BANK_TOPICS[0].id);
+export default function WhoApp() {
+  const [selectedTopicId, setSelectedTopicId] = useState<string>(WHO_TOPICS[0].id);
   const [cards, setCards] = useLocalStorage<DashboardCard[]>(STORAGE_KEY, []);
   const [defaultTopicIds] = useLocalStorage<string[]>(DEFAULT_CHARTS_KEY, DEFAULT_CHART_TOPIC_IDS);
 
@@ -62,12 +61,12 @@ export default function WorldBankApp() {
             <a href="/" className="bat-btn rounded-2xl px-3 py-1 font-medium">
               Eurostat
             </a>
-            <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
+            <a href="/worldbank" className="bat-btn rounded-2xl px-3 py-1 font-medium">
               World Bank
-            </span>
-            <a href="/who" className="bat-btn rounded-2xl px-3 py-1 font-medium">
-              WHO
             </a>
+            <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
+              WHO
+            </span>
           </div>
         </section>
 
@@ -78,18 +77,18 @@ export default function WorldBankApp() {
           onAddTopicById={addCardForTopicId}
           onClear={clearCards}
           chartCount={cards.length}
-          topics={WORLD_BANK_TOPICS}
-          catalogPath="worldbank-catalog.json"
-          badgeText="World Bank dashboard builder"
-          titleText="World Bank indicators dashboard"
-          descriptionText="Search World Bank indicator codes, add charts, and compare Estonia with aggregate or country peers."
+          topics={WHO_TOPICS}
+          catalogPath="who-catalog.json"
+          badgeText="WHO dashboard builder"
+          titleText="WHO indicators dashboard"
+          descriptionText="Search WHO GHO OData indicator codes and compare Estonia with Europe or other selected geographies."
         />
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatChip label="Charts on dashboard" value={cards.length} />
-          <StatChip label="Available topics" value={WORLD_BANK_TOPICS.length} />
+          <StatChip label="Available topics" value={WHO_TOPICS.length} />
           <StatChip label="Unique topics added" value={activeTopics.size} />
-          <StatChip label="Data source" value="World Bank" />
+          <StatChip label="Data source" value="WHO GHO OData" />
         </section>
 
         {cards.length === 0 ? <EmptyState /> : null}
@@ -102,14 +101,14 @@ export default function WorldBankApp() {
                 cardId={card.id}
                 topicId={card.topicId}
                 onRemove={(cardId) => setCards((currentCards) => currentCards.filter((entry) => entry.id !== cardId))}
-                providerId="worldbank"
-                providerName="World Bank"
-                topicMap={WORLD_BANK_TOPIC_MAP}
-                fetchTopicDataFn={fetchWorldBankTopicData}
-                defaultGeoValues={WORLD_BANK_DEFAULT_GEOS}
-                fallbackDescriptionPrefix="World Bank indicator"
-                sourceUrlBuilder={WORLD_BANK_SOURCE_URL_BUILDER}
-                sourceLinkLabel="World Bank indicator"
+                providerId="who"
+                providerName="WHO"
+                topicMap={WHO_TOPIC_MAP}
+                fetchTopicDataFn={fetchWhoTopicData}
+                defaultGeoValues={WHO_DEFAULT_GEOS}
+                fallbackDescriptionPrefix="WHO indicator"
+                sourceUrlBuilder={WHO_SOURCE_URL_BUILDER}
+                sourceLinkLabel="WHO indicator"
                 supportsForecast
               />
             ))}
