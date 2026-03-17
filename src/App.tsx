@@ -116,6 +116,14 @@ export default function App() {
               ))}
             </select>
           </label>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
+              Eurostat
+            </span>
+            <a href="/worldbank" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+              World Bank
+            </a>
+          </div>
           <button
             type="button"
             onClick={() => setIsAdminOpen(true)}

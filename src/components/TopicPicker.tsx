@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TOPICS } from '../features/dashboard/topicCatalog';
+import type { TopicDefinition } from '../features/dashboard/types';
 
 type TopicPickerProps = {
   selectedTopicId: string;
@@ -8,6 +9,11 @@ type TopicPickerProps = {
   onAddTopicById: (topicId: string) => void;
   onClear: () => void;
   chartCount: number;
+  topics?: TopicDefinition[];
+  catalogPath?: string;
+  badgeText?: string;
+  titleText?: string;
+  descriptionText?: string;
 };
 
 type CatalogEntry = {
@@ -22,6 +28,12 @@ export function TopicPicker({
   onAddTopicById,
   onClear,
   chartCount,
+  topics = TOPICS,
+  catalogPath = 'catalog.json',
+  badgeText = 'Eurostat dashboard builder',
+  titleText = 'Europe statistics dashboard',
+  descriptionText =
+    'Choose a topic and add it to the dashboard. Each chart pulls live Eurostat data for Europe countries, with the EU aggregate shown alongside when available.',
 }: TopicPickerProps) {
   const [customCode, setCustomCode] = useState('');
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
@@ -41,27 +53,26 @@ export function TopicPicker({
   ).slice(0, 10);
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}catalog.json`)
+    fetch(`${import.meta.env.BASE_URL}${catalogPath}`)
       .then((res) => res.json())
       .then((data) => setCatalog(data))
       .catch(() => {
         /* ignore */
       });
-  }, []);
+  }, [catalogPath]);
 
   return (
     <section className="batcave-panel relative z-30 rounded-3xl p-6 shadow-card backdrop-blur-xl">
       <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
         <div className="max-w-2xl space-y-2">
           <div className="pixel-badge inline-flex rounded-full px-3 py-1 text-xs font-medium uppercase tracking-[0.24em]">
-            Eurostat dashboard builder
+            {badgeText}
           </div>
           <h1 className="bat-title text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Europe statistics dashboard
+            {titleText}
           </h1>
           <p className="text-sm leading-7 text-slate-300 sm:text-base">
-            Choose a topic and add it to the dashboard. Each chart pulls live Eurostat data for Europe countries,
-            with the EU aggregate shown alongside when available.
+            {descriptionText}
           </p>
         </div>
 
@@ -75,7 +86,7 @@ export function TopicPicker({
                   onChange={(event) => onSelectedTopicIdChange(event.target.value)}
                   className="bat-input h-12 rounded-2xl px-4 text-white outline-none transition"
                 >
-                  {TOPICS.map((topic) => (
+                  {topics.map((topic) => (
                     <option key={topic.id} value={topic.id}>
                       {topic.title}
                     </option>

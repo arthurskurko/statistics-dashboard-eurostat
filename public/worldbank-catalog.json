@@ -1,0 +1,22 @@
+[
+  { "code": "SP.POP.TOTL", "title": "Population, total" },
+  { "code": "SP.POP.GROW", "title": "Population growth (annual %)" },
+  { "code": "NY.GDP.MKTP.CD", "title": "GDP (current US$)" },
+  { "code": "NY.GDP.PCAP.CD", "title": "GDP per capita (current US$)" },
+  { "code": "NY.GDP.MKTP.KD.ZG", "title": "GDP growth (annual %)" },
+  { "code": "FP.CPI.TOTL.ZG", "title": "Inflation, consumer prices (annual %)" },
+  { "code": "SL.UEM.TOTL.ZS", "title": "Unemployment, total (% of total labor force)" },
+  { "code": "SL.TLF.CACT.ZS", "title": "Labor force participation rate, total (% of total population ages 15+)" },
+  { "code": "SP.DYN.LE00.IN", "title": "Life expectancy at birth, total (years)" },
+  { "code": "SH.XPD.CHEX.GD.ZS", "title": "Current health expenditure (% of GDP)" },
+  { "code": "SE.XPD.TOTL.GD.ZS", "title": "Government expenditure on education, total (% of GDP)" },
+  { "code": "SI.POV.GINI", "title": "Gini index" },
+  { "code": "EN.ATM.CO2E.PC", "title": "CO2 emissions (metric tons per capita)" },
+  { "code": "EG.USE.PCAP.KG.OE", "title": "Energy use (kg of oil equivalent per capita)" },
+  { "code": "IT.NET.USER.ZS", "title": "Individuals using the Internet (% of population)" },
+  { "code": "NE.EXP.GNFS.ZS", "title": "Exports of goods and services (% of GDP)" },
+  { "code": "NE.IMP.GNFS.ZS", "title": "Imports of goods and services (% of GDP)" },
+  { "code": "GC.DOD.TOTL.GD.ZS", "title": "Central government debt, total (% of GDP)" },
+  { "code": "SP.DYN.TFRT.IN", "title": "Fertility rate, total (births per woman)" },
+  { "code": "SP.DYN.IMRT.IN", "title": "Mortality rate, infant (per 1,000 live births)" }
+]

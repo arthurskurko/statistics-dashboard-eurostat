@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import ReactECharts from 'echarts-for-react';
 import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
-import type { TopicDefinition } from '../features/dashboard/types';
+import type { TopicData, TopicDefinition } from '../features/dashboard/types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { DataPointMusicPlayer } from '../lib/datapointMusic';
 import { fetchTopicData } from '../lib/eurostat';
@@ -16,9 +16,34 @@ type ChartCardProps = {
   cardId: string;
   topicId: string;
   onRemove: (cardId: string) => void;
+  providerId?: string;
+  providerName?: string;
+  topicMap?: Record<string, TopicDefinition>;
+  fetchTopicDataFn?: (
+    topicId: string,
+    options?: {
+      forecastHorizon?: number;
+      filters?: Record<string, string | string[]>;
+      seriesDimension?: string;
+      geoValues?: string[];
+    },
+  ) => Promise<TopicData>;
+  defaultGeoValues?: string[];
+  fallbackDescriptionPrefix?: string;
+  sourceUrlBuilder?: (datasetCode: string) => string;
+  sourceLinkLabel?: string;
+  supportsForecast?: boolean;
 };
 
 const MAX_SERIES_TO_RENDER = 16;
+const DEFAULT_EUROSTAT_GEOS = ['EE', 'EU27_2020'];
+const DEFAULT_EUROSTAT_SOURCE_URL_BUILDER = (datasetCode: string) =>
+  `https://ec.europa.eu/eurostat/databrowser/view/${datasetCode}/default/table?lang=en`;
+
+function areStringArraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
 
 function hashString(value: string): number {
   let hash = 0;
@@ -28,27 +53,40 @@ function hashString(value: string): number {
   return hash;
 }
 
-export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
+export function ChartCard({
+  cardId,
+  topicId,
+  onRemove,
+  providerId = 'eurostat',
+  providerName = 'Eurostat',
+  topicMap = TOPIC_MAP,
+  fetchTopicDataFn = fetchTopicData,
+  defaultGeoValues = DEFAULT_EUROSTAT_GEOS,
+  fallbackDescriptionPrefix = 'Eurostat dataset',
+  sourceUrlBuilder = DEFAULT_EUROSTAT_SOURCE_URL_BUILDER,
+  sourceLinkLabel = 'Eurostat dataset',
+  supportsForecast = true,
+}: ChartCardProps) {
   const topic = useMemo<TopicDefinition>(
     () =>
-      TOPIC_MAP[topicId] ?? {
+      topicMap[topicId] ?? {
         id: topicId,
         title: topicId,
-        description: `Eurostat dataset ${topicId}`,
+        description: `${fallbackDescriptionPrefix} ${topicId}`,
         datasetCode: topicId,
         filters: {},
-        geoValues: ['EE', 'EU27_2020'],
+        geoValues: defaultGeoValues,
         decimals: 0,
-        sourceUrl: `https://ec.europa.eu/eurostat/databrowser/view/${topicId}/default/table?lang=en`,
+        sourceUrl: sourceUrlBuilder(topicId),
       },
-    [topicId],
+    [defaultGeoValues, fallbackDescriptionPrefix, sourceUrlBuilder, topicId, topicMap],
   );
 
-  const [forecastHorizon, setForecastHorizon] = useLocalStorage<number>('forecastHorizon', 20);
+  const [forecastHorizon, setForecastHorizon] = useLocalStorage<number>(`${providerId}.forecastHorizon`, 20);
   const [dimensionFilters, setDimensionFilters] = React.useState<Record<string, string | string[]>>({});
   const [availableDimensions, setAvailableDimensions] = React.useState<DimensionOption[]>([]);
   const [seriesDimension, setSeriesDimension] = React.useState('');
-  const [geoValues, setGeoValues] = React.useState<string[]>(topic.geoValues ?? ['EE', 'EU27_2020']);
+  const [geoValues, setGeoValues] = React.useState<string[]>(topic.geoValues ?? defaultGeoValues);
   const [geoInput, setGeoInput] = React.useState('');
   const [dualAxis, setDualAxis] = React.useState(true);
   const [musicPlaying, setMusicPlaying] = React.useState(false);
@@ -109,14 +147,16 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     };
   }, []);
 
-  const defaultGeoValues = useMemo(() => topic.geoValues ?? ['EE', 'EU27_2020'], [topic.geoValues]);
+  const resolvedDefaultGeos = useMemo(() => topic.geoValues ?? defaultGeoValues, [defaultGeoValues, topic.geoValues]);
 
   React.useEffect(() => {
     setDimensionFilters({});
     setAvailableDimensions([]);
     setSeriesDimension('');
-    setGeoValues(defaultGeoValues);
-  }, [defaultGeoValues, topicId]);
+    setGeoValues((current) =>
+      areStringArraysEqual(current, resolvedDefaultGeos) ? current : resolvedDefaultGeos,
+    );
+  }, [resolvedDefaultGeos, topicId]);
 
   React.useEffect(() => {
     if (seriesDimension !== 'unit') return;
@@ -148,7 +188,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const needsUnitSelection = seriesDimension === 'unit' && selectedUnits.length === 0;
 
   const query = useQuery({
-    queryKey: ['topic-data', topicId, forecastHorizon, dimensionFilters, seriesDimension, geoValues],
+    queryKey: [providerId, 'topic-data', topicId, forecastHorizon, dimensionFilters, seriesDimension, geoValues],
     enabled: !needsUnitSelection && !unitSelectionTooLarge,
     queryFn: () => {
       const activeFilters = Object.fromEntries(
@@ -161,8 +201,8 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         }),
       );
 
-      return fetchTopicData(topicId, {
-        forecastHorizon,
+      return fetchTopicDataFn(topicId, {
+        forecastHorizon: supportsForecast ? forecastHorizon : undefined,
         filters: activeFilters,
         seriesDimension,
         geoValues,
@@ -353,7 +393,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `eurostat-global-mix-${timestamp}.${extension}`;
+      link.download = `${providerId}-global-mix-${timestamp}.${extension}`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -363,7 +403,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     } finally {
       setGlobalRecordingBusy(false);
     }
-  }, [globalRecording]);
+  }, [globalRecording, providerId]);
 
   const displayTitle = query.data?.title ?? topic.title;
   const displayDescription = query.data?.subtitle ?? topic.description;
@@ -631,6 +671,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         availableDimensions={availableDimensions}
         isSeriesTruncated={(query.data?.series?.length ?? 0) > MAX_SERIES_TO_RENDER}
         maxSeriesToRender={MAX_SERIES_TO_RENDER}
+        geoSuggestions={query.data?.availableGeos}
       />
 
       {query.isLoading ? (
@@ -647,8 +688,8 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
         <div className="flex flex-1 flex-col items-start justify-center gap-4 rounded-3xl border border-rose-400/20 bg-rose-400/10 p-6 text-rose-100">
           <div className="text-lg font-semibold">Could not load this topic right now.</div>
           <p className="max-w-2xl text-sm leading-6 text-rose-100/90">
-            {(query.error as Error).message} This can happen if Eurostat changes a dataset filter or the API
-            is temporarily unavailable.
+            {(query.error as Error).message} This can happen if the {providerName} API changes filters,
+            indicator metadata, or is temporarily unavailable.
           </p>
           <div className="flex flex-wrap gap-3">
             <button
@@ -740,20 +781,22 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
               </button>
             ) : null}
 
-            <label className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium">
-              <span className="whitespace-nowrap">Forecast:</span>
-              <select
-                value={forecastHorizon}
-                onChange={(event) => setForecastHorizon(Number(event.target.value))}
-                className="bat-input rounded-xl px-2 py-1 text-xs text-white outline-none"
-              >
-                {[5, 10, 20, 30].map((value) => (
-                  <option key={value} value={value}>
-                    {value}y
-                  </option>
-                ))}
-              </select>
-            </label>
+            {supportsForecast ? (
+              <label className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium">
+                <span className="whitespace-nowrap">Forecast:</span>
+                <select
+                  value={forecastHorizon}
+                  onChange={(event) => setForecastHorizon(Number(event.target.value))}
+                  className="bat-input rounded-xl px-2 py-1 text-xs text-white outline-none"
+                >
+                  {[5, 10, 20, 30].map((value) => (
+                    <option key={value} value={value}>
+                      {value}y
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
 
           <div className="min-h-[22rem] flex-1 rounded-3xl border border-border bg-slate-950/60 p-3">
@@ -770,7 +813,7 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
             <span>{query.data.subtitle}</span>
             <a href={query.data.sourceUrl} target="_blank" rel="noreferrer" className="text-sky-300 hover:text-sky-200">
-              Eurostat dataset ↗
+              {sourceLinkLabel} ↗
             </a>
           </div>
         </>

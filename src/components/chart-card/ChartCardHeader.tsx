@@ -21,6 +21,7 @@ type ChartCardHeaderProps = {
   availableDimensions: DimensionOption[];
   isSeriesTruncated: boolean;
   maxSeriesToRender: number;
+  geoSuggestions?: Array<{ code: string; label: string }>;
 };
 
 export function ChartCardHeader({
@@ -43,8 +44,10 @@ export function ChartCardHeader({
   availableDimensions,
   isSeriesTruncated,
   maxSeriesToRender,
+  geoSuggestions,
 }: ChartCardHeaderProps) {
   const hasDimensionFilters = Object.values(dimensionFilters).some((value) => Boolean(value));
+  const geoCatalog = geoSuggestions && geoSuggestions.length > 0 ? geoSuggestions : KNOWN_GEOS;
 
   return (
     <div className="mb-5 space-y-4">
@@ -70,7 +73,7 @@ export function ChartCardHeader({
         <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
           <strong className="font-semibold">No data for:</strong>{' '}
           {missingGeos
-            .map((code) => KNOWN_GEOS.find((geo) => geo.code === code)?.label ?? code)
+            .map((code) => geoCatalog.find((geo) => geo.code === code)?.label ?? code)
             .join(', ')}
         </div>
       ) : null}
@@ -115,7 +118,7 @@ export function ChartCardHeader({
             />
             {geoInput ? (
               <div className="bat-suggestions absolute left-0 top-full z-10 mt-1 max-h-40 w-full overflow-auto rounded-xl">
-                {KNOWN_GEOS
+                {geoCatalog
                   .filter(
                     (geo) =>
                       geo.code.startsWith(geoInput) ||
