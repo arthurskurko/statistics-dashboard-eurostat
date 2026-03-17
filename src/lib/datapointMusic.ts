@@ -80,6 +80,13 @@ function buildPreparedSeries(series: DataSeries[], settings: MusicSettings): Pre
 }
 
 export class DataPointMusicPlayer {
+  private static sharedAudioContext: AudioContext | null = null;
+  private static sharedRecordingDestination: MediaStreamAudioDestinationNode | null = null;
+  private static activeMasterGains = new Set<GainNode>();
+  private static globalRecorder: MediaRecorder | null = null;
+  private static globalChunks: BlobPart[] = [];
+  private static activeInstanceCount = 0;
+
   private audioContext: AudioContext | null = null;
 
   private masterGain: GainNode | null = null;
@@ -117,11 +124,98 @@ export class DataPointMusicPlayer {
   };
 
   constructor(series: DataSeries[], settings?: Partial<MusicSettings>) {
+    DataPointMusicPlayer.activeInstanceCount += 1;
+
     if (settings) {
       this.settings = { ...this.settings, ...settings };
     }
     this.sourceSeries = series;
     this.preparedSeries = buildPreparedSeries(series, this.settings);
+  }
+
+  static isGlobalRecording(): boolean {
+    return this.globalRecorder?.state === 'recording';
+  }
+
+  static canRecordGlobalMix(): boolean {
+    return typeof MediaRecorder !== 'undefined';
+  }
+
+  static async startGlobalRecording(): Promise<void> {
+    if (!this.canRecordGlobalMix()) {
+      throw new Error('MediaRecorder is not available in this browser.');
+    }
+
+    if (this.isGlobalRecording()) {
+      return;
+    }
+
+    const context = this.getSharedAudioContext();
+    if (context.state === 'suspended') {
+      await context.resume();
+    }
+
+    if (!this.sharedRecordingDestination) {
+      this.sharedRecordingDestination = context.createMediaStreamDestination();
+      this.activeMasterGains.forEach((gainNode) => {
+        try {
+          gainNode.connect(this.sharedRecordingDestination as AudioNode);
+        } catch {
+          /* ignore stale/disconnected nodes */
+        }
+      });
+    }
+
+    const mimeType = this.pickSupportedRecordingMimeType();
+    this.globalChunks = [];
+    this.globalRecorder = mimeType
+      ? new MediaRecorder(this.sharedRecordingDestination.stream, { mimeType })
+      : new MediaRecorder(this.sharedRecordingDestination.stream);
+
+    this.globalRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        this.globalChunks.push(event.data);
+      }
+    };
+
+    this.globalRecorder.start(250);
+    this.emitGlobalRecordingChange();
+  }
+
+  static async stopGlobalRecording(): Promise<Blob> {
+    const recorder = this.globalRecorder;
+    if (!recorder) {
+      throw new Error('Global recording is not active.');
+    }
+
+    if (recorder.state === 'inactive') {
+      const fallbackType = recorder.mimeType || 'audio/webm';
+      const blob = new Blob(this.globalChunks, { type: fallbackType });
+      this.globalChunks = [];
+      this.globalRecorder = null;
+      this.emitGlobalRecordingChange();
+      return blob;
+    }
+
+    return new Promise<Blob>((resolve, reject) => {
+      recorder.onerror = () => {
+        this.globalRecorder = null;
+        this.globalChunks = [];
+        this.emitGlobalRecordingChange();
+        reject(new Error('Global recording failed.'));
+      };
+
+      recorder.onstop = () => {
+        const blobType = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(this.globalChunks, { type: blobType });
+        this.globalChunks = [];
+        this.globalRecorder = null;
+        this.emitGlobalRecordingChange();
+        resolve(blob);
+      };
+
+      recorder.stop();
+    });
   }
 
   get isPlaying(): boolean {
@@ -321,6 +415,10 @@ export class DataPointMusicPlayer {
     this.masterGain = context.createGain();
     this.masterGain.gain.value = Math.min(2, Math.max(0, this.settings.volume * 1.6));
     this.masterGain.connect(context.destination);
+    DataPointMusicPlayer.activeMasterGains.add(this.masterGain);
+    if (DataPointMusicPlayer.sharedRecordingDestination) {
+      this.masterGain.connect(DataPointMusicPlayer.sharedRecordingDestination);
+    }
 
     this.delayNode = context.createDelay(2.0);
     this.delayFeedback = context.createGain();
@@ -389,23 +487,76 @@ export class DataPointMusicPlayer {
 
   dispose(): void {
     this.stop();
-    if (this.audioContext) {
-      this.audioContext.close().catch(() => {
+
+    if (this.masterGain) {
+      DataPointMusicPlayer.activeMasterGains.delete(this.masterGain);
+      try {
+        this.masterGain.disconnect();
+      } catch {
         /* ignore */
-      });
-      this.audioContext = null;
+      }
+    }
+
+    DataPointMusicPlayer.activeInstanceCount = Math.max(0, DataPointMusicPlayer.activeInstanceCount - 1);
+    if (DataPointMusicPlayer.activeInstanceCount === 0) {
+      DataPointMusicPlayer.teardownSharedAudio();
     }
   }
 
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
+      this.audioContext = DataPointMusicPlayer.getSharedAudioContext();
+    }
+    return this.audioContext;
+  }
+
+  private static getSharedAudioContext(): AudioContext {
+    if (!this.sharedAudioContext) {
       const AudioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextCtor) {
         throw new Error('Web Audio API is not available in this browser.');
       }
-      this.audioContext = new AudioContextCtor();
+      this.sharedAudioContext = new AudioContextCtor();
     }
-    return this.audioContext;
+    return this.sharedAudioContext;
+  }
+
+  private static pickSupportedRecordingMimeType(): string {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg'];
+    for (const candidate of candidates) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(candidate)) {
+        return candidate;
+      }
+    }
+    return '';
+  }
+
+  private static emitGlobalRecordingChange(): void {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(
+      new CustomEvent('datapoint-music-recording-change', {
+        detail: { recording: this.isGlobalRecording() },
+      }),
+    );
+  }
+
+  private static teardownSharedAudio(): void {
+    if (this.globalRecorder && this.globalRecorder.state !== 'inactive') {
+      this.globalRecorder.stop();
+    }
+    this.globalRecorder = null;
+    this.globalChunks = [];
+    this.sharedRecordingDestination = null;
+    this.activeMasterGains.clear();
+
+    if (this.sharedAudioContext) {
+      this.sharedAudioContext.close().catch(() => {
+        /* ignore */
+      });
+      this.sharedAudioContext = null;
+    }
+
+    this.emitGlobalRecordingChange();
   }
 
   private playStep(step: number): void {

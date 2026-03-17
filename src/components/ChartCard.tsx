@@ -65,6 +65,8 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
   const [musicReverbDecay, setMusicReverbDecay] = React.useState(2.4);
   const [musicVolume, setMusicVolume] = React.useState(1);
   const [musicPhaseOffset, setMusicPhaseOffset] = React.useState(0);
+  const [globalRecording, setGlobalRecording] = React.useState(() => DataPointMusicPlayer.isGlobalRecording());
+  const [globalRecordingBusy, setGlobalRecordingBusy] = React.useState(false);
 
   React.useEffect(() => {
     // Give each chart an automatic phase offset so multiple charts in the dashboard
@@ -323,6 +325,46 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
     musicPlayerRef.current = null;
   }, []);
 
+  React.useEffect(() => {
+    const syncRecordingState = () => setGlobalRecording(DataPointMusicPlayer.isGlobalRecording());
+    window.addEventListener('datapoint-music-recording-change', syncRecordingState);
+    return () => {
+      window.removeEventListener('datapoint-music-recording-change', syncRecordingState);
+    };
+  }, []);
+
+  const globalRecordingSupported = DataPointMusicPlayer.canRecordGlobalMix();
+
+  const handleGlobalRecording = React.useCallback(async () => {
+    try {
+      setGlobalRecordingBusy(true);
+
+      if (!globalRecording) {
+        await DataPointMusicPlayer.startGlobalRecording();
+        setGlobalRecording(true);
+        return;
+      }
+
+      const blob = await DataPointMusicPlayer.stopGlobalRecording();
+      setGlobalRecording(false);
+
+      const extension = blob.type.includes('ogg') ? 'ogg' : 'webm';
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `eurostat-global-mix-${timestamp}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Global mix recording failed:', error);
+    } finally {
+      setGlobalRecordingBusy(false);
+    }
+  }, [globalRecording]);
+
   const displayTitle = query.data?.title ?? topic.title;
   const displayDescription = query.data?.subtitle ?? topic.description;
 
@@ -529,6 +571,27 @@ export function ChartCard({ cardId, topicId, onRemove }: ChartCardProps) {
           <div className="rounded-xl bg-white/5 p-3 text-xs text-slate-300">
             Tip: Try slow tempo with pentatonic scale for an ambient vibe, or crank tempo + sawtooth for
             intense “cyber soundtrack” energy.
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Global mix export</div>
+            <button
+              type="button"
+              onClick={() => {
+                void handleGlobalRecording();
+              }}
+              disabled={!globalRecordingSupported || globalRecordingBusy}
+              className="bat-btn w-full rounded-2xl px-3 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {!globalRecordingSupported
+                ? 'Recording not supported on this browser'
+                : globalRecording
+                  ? (globalRecordingBusy ? 'Stopping and preparing download...' : 'Stop and download global mix')
+                  : (globalRecordingBusy ? 'Starting global recording...' : 'Record global mix')}
+            </button>
+            <p className="mt-2 text-xs text-slate-400">
+              Captures all chart music currently routed through the app into one audio file.
+            </p>
           </div>
         </div>
       </div>
