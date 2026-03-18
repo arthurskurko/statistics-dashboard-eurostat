@@ -204,6 +204,11 @@ function toTopicDefinitionFromCode(indicatorCode: string): TopicDefinition {
     decimals: 2,
     chartVariant: 'line',
     sourceUrl: `https://data.worldbank.org/indicator/${indicatorCode}`,
+    pubmed: {
+      availability: 'unchecked',
+      searchTerm: indicatorCode,
+      note: 'Added from indicator code. Curate PubMed mapping if this topic is kept.',
+    },
   };
 }
 

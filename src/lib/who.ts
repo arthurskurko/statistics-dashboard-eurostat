@@ -155,6 +155,11 @@ function toTopicDefinitionFromCode(indicatorCode: string): TopicDefinition {
     decimals: 2,
     chartVariant: 'line',
     sourceUrl: `${WHO_REMOTE_BASE}/${indicatorCode}`,
+    pubmed: {
+      availability: 'unchecked',
+      searchTerm: indicatorCode,
+      note: 'Added from WHO indicator code. Curate PubMed mapping if this topic is kept.',
+    },
   };
 }
 

@@ -1,11 +1,13 @@
 import React from 'react';
 import { friendlyDimensionLabel, findDimensionValueLabel, KNOWN_GEOS, type DimensionOption } from './helpers';
+import type { TopicPubMedMeta } from '../../features/dashboard/types';
 
 type ChartCardHeaderProps = {
   topicId: string;
   datasetCode: string;
   title: string;
   description: string;
+  pubmed: TopicPubMedMeta;
   forecastDisabledReason?: string;
   warning?: string;
   missingGeos: string[];
@@ -27,6 +29,7 @@ export function ChartCardHeader({
   datasetCode,
   title,
   description,
+  pubmed,
   forecastDisabledReason,
   warning,
   missingGeos,
@@ -44,6 +47,16 @@ export function ChartCardHeader({
 }: ChartCardHeaderProps) {
   const [geoInput, setGeoInput] = React.useState('');
   const hasDimensionFilters = Object.values(dimensionFilters).some((value) => Boolean(value));
+  const effectivePubMedSearchTerm = React.useMemo(() => {
+    const explicit = pubmed.searchTerm?.trim();
+    if (explicit) return explicit;
+    const titleTerm = title.trim();
+    return titleTerm || null;
+  }, [pubmed.searchTerm, title]);
+  const pubmedSearchUrl = React.useMemo(() => {
+    if (!effectivePubMedSearchTerm) return null;
+    return `https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(effectivePubMedSearchTerm)}`;
+  }, [effectivePubMedSearchTerm]);
   const geoCatalog = React.useMemo(() => {
     const merged = new Map<string, { code: string; label: string }>();
 
@@ -77,6 +90,42 @@ export function ChartCardHeader({
         <div className="text-xs uppercase tracking-[0.2em] text-slate-400">{datasetCode}</div>
         <h2 className="text-2xl font-semibold tracking-tight text-white">{title}</h2>
         <p className="max-w-3xl text-sm leading-6 text-slate-300">{description}</p>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+          <span className="rounded-full border border-white/20 px-2 py-1 font-semibold uppercase tracking-wide text-slate-200">
+            PubMed
+          </span>
+
+          {pubmed.references?.map((reference) => (
+            <a
+              key={`${reference.url}-${reference.label}`}
+              href={reference.url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-1 text-emerald-200 transition hover:bg-emerald-400/20"
+            >
+              {reference.label}
+              {reference.pmid ? ` (PMID: ${reference.pmid})` : ''}
+            </a>
+          ))}
+
+          {pubmedSearchUrl ? (
+            <a
+              href={pubmedSearchUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-sky-400/40 bg-sky-400/10 px-2 py-1 text-sky-200 transition hover:bg-sky-400/20"
+            >
+              Search related studies
+            </a>
+          ) : null}
+
+          {!pubmedSearchUrl && (pubmed.references?.length ?? 0) === 0 ? (
+            <span className="text-slate-400">No curated PubMed references yet.</span>
+          ) : null}
+
+          {pubmed.note ? <span className="text-slate-400">{pubmed.note}</span> : null}
+        </div>
       </div>
 
       {forecastDisabledReason ? (

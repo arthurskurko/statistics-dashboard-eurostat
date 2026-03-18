@@ -11,6 +11,10 @@ export const WHO_TOPICS: TopicDefinition[] = [
     decimals: 1,
     chartVariant: 'line',
     sourceUrl: 'https://ghoapi.azureedge.net/api/WHOSIS_000001',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'life expectancy',
+    },
   },
   {
     id: 'who-obesity-adult',
@@ -23,6 +27,10 @@ export const WHO_TOPICS: TopicDefinition[] = [
     unitSuffix: '%',
     chartVariant: 'line',
     sourceUrl: 'https://ghoapi.azureedge.net/api/NCD_BMI_30A',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'obesity prevalence',
+    },
   },
   {
     id: 'who-diabetes-age-std',
@@ -35,6 +43,10 @@ export const WHO_TOPICS: TopicDefinition[] = [
     unitSuffix: '%',
     chartVariant: 'line',
     sourceUrl: 'https://ghoapi.azureedge.net/api/NCD_DIABETES_PREVALENCE_AGESTD',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'diabetes prevalence',
+    },
   },
 ];
 

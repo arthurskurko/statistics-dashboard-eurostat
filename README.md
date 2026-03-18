@@ -95,3 +95,15 @@ Then open `http://localhost:8080`.
 - The app fetches live data from Eurostat's public API.
 - If a Eurostat dataset changes its filter codes, that chart can fail until the mapping is updated. For example the unemployment series dropped the 15‑74 age class in favour of 25‑74 in 2025, which required updating the app filters.
 - Dashboard cards are persisted in local storage.
+
+## PubMed references per topic
+
+Each chart now reads PubMed metadata from the topic definition and shows:
+
+- curated PubMed links (if any are configured)
+- a PubMed search link based on the topic search term
+- an optional note when a topic was added dynamically and is still uncategorized
+
+When adding a topic in any catalog under `src/features/dashboard/`, include the required `pubmed` block in that topic. For custom topics added by code, the app sets `availability: unchecked` automatically, so the dashboard stays functional until a curated mapping is added.
+
+This design keeps the app stable and avoids live PubMed API calls on page load.

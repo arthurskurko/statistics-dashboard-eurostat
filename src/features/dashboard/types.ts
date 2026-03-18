@@ -1,5 +1,18 @@
 export type ChartVariant = 'line' | 'bar';
 
+export type TopicPubMedReference = {
+  label: string;
+  url: string;
+  pmid?: string;
+};
+
+export type TopicPubMedMeta = {
+  availability: 'available' | 'search-only' | 'not-available' | 'not-applicable' | 'unchecked';
+  searchTerm?: string;
+  references?: TopicPubMedReference[];
+  note?: string;
+};
+
 export type TopicDefinition = {
   id: string;
   title: string;
@@ -11,6 +24,7 @@ export type TopicDefinition = {
   decimals?: number;
   chartVariant?: ChartVariant;
   sourceUrl: string;
+  pubmed: TopicPubMedMeta;
 };
 
 export type DashboardCard = {

@@ -273,6 +273,11 @@ function toTopicDefinitionFromCode(code: string): TopicDefinition {
     decimals: 1,
     chartVariant: 'line',
     sourceUrl: 'https://open-meteo.com/en/docs',
+    pubmed: {
+      availability: 'unchecked',
+      searchTerm: datasetCode,
+      note: 'Added from variable code. Curate PubMed mapping if this topic is kept.',
+    },
   };
 }
 

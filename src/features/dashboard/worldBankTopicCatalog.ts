@@ -11,6 +11,10 @@ export const WORLD_BANK_TOPICS: TopicDefinition[] = [
     decimals: 0,
     chartVariant: 'line',
     sourceUrl: 'https://data.worldbank.org/indicator/SP.POP.TOTL',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'population',
+    },
   },
   {
     id: 'wb-gdp-current-usd',
@@ -22,6 +26,10 @@ export const WORLD_BANK_TOPICS: TopicDefinition[] = [
     decimals: 0,
     chartVariant: 'line',
     sourceUrl: 'https://data.worldbank.org/indicator/NY.GDP.MKTP.CD',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'gross domestic product',
+    },
   },
   {
     id: 'wb-gdp-per-capita',
@@ -33,6 +41,10 @@ export const WORLD_BANK_TOPICS: TopicDefinition[] = [
     decimals: 0,
     chartVariant: 'line',
     sourceUrl: 'https://data.worldbank.org/indicator/NY.GDP.PCAP.CD',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'GDP per capita',
+    },
   },
   {
     id: 'wb-unemployment',
@@ -45,6 +57,10 @@ export const WORLD_BANK_TOPICS: TopicDefinition[] = [
     unitSuffix: '%',
     chartVariant: 'line',
     sourceUrl: 'https://data.worldbank.org/indicator/SL.UEM.TOTL.ZS',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'unemployment',
+    },
   },
   {
     id: 'wb-inflation',
@@ -57,6 +73,10 @@ export const WORLD_BANK_TOPICS: TopicDefinition[] = [
     unitSuffix: '%',
     chartVariant: 'line',
     sourceUrl: 'https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'inflation',
+    },
   },
 ];
 

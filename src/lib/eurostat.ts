@@ -412,6 +412,11 @@ export async function fetchTopicData(
       geoValues: ['EE'],
       decimals: 0,
       sourceUrl: `https://ec.europa.eu/eurostat/databrowser/view/${topicId}/default/table?lang=en`,
+      pubmed: {
+        availability: 'unchecked',
+        searchTerm: catalogTitle,
+        note: 'Added from dataset code. Curate PubMed mapping if this topic is kept.',
+      },
     };
   }
 

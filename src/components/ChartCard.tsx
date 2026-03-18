@@ -82,6 +82,11 @@ function ChartCardComponent({
         geoValues: defaultGeoValues,
         decimals: 0,
         sourceUrl: sourceUrlBuilder(topicId),
+        pubmed: {
+          availability: 'unchecked',
+          searchTerm: undefined,
+          note: 'This topic was added dynamically and has no curated PubMed mapping yet.',
+        },
       },
     [defaultGeoValues, fallbackDescriptionPrefix, sourceUrlBuilder, topicId, topicMap],
   );
@@ -738,6 +743,7 @@ function ChartCardComponent({
         datasetCode={topic.datasetCode}
         title={displayTitle}
         description={displayDescription}
+        pubmed={topic.pubmed}
         forecastDisabledReason={query.data?.forecastDisabledReason}
         warning={query.data?.warning}
         missingGeos={missingGeos}

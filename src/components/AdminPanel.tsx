@@ -68,7 +68,20 @@ export function AdminPanel({
 
   const defaultTopics = useMemo(() => {
     return defaultTopicIds
-      .map((id) => TOPIC_MAP[id] ?? { id, title: id, description: id, datasetCode: id, filters: {}, sourceUrl: '' })
+      .map((id) =>
+        TOPIC_MAP[id] ?? {
+          id,
+          title: id,
+          description: id,
+          datasetCode: id,
+          filters: {},
+          sourceUrl: '',
+          pubmed: {
+            availability: 'unchecked',
+            searchTerm: id,
+          },
+        },
+      )
       .filter(Boolean) as TopicDefinition[];
   }, [defaultTopicIds]);
 

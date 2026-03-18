@@ -12,6 +12,10 @@ export const OPEN_METEO_TOPICS: TopicDefinition[] = [
     unitSuffix: '°C',
     chartVariant: 'line',
     sourceUrl: 'https://open-meteo.com/en/docs',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'mean temperature',
+    },
   },
   {
     id: 'meteo-temp-max',
@@ -24,6 +28,10 @@ export const OPEN_METEO_TOPICS: TopicDefinition[] = [
     unitSuffix: '°C',
     chartVariant: 'line',
     sourceUrl: 'https://open-meteo.com/en/docs',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'maximum temperature',
+    },
   },
   {
     id: 'meteo-precip-sum',
@@ -36,6 +44,10 @@ export const OPEN_METEO_TOPICS: TopicDefinition[] = [
     unitSuffix: 'mm',
     chartVariant: 'line',
     sourceUrl: 'https://open-meteo.com/en/docs',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'precipitation',
+    },
   },
   {
     id: 'meteo-wind-max',
@@ -48,6 +60,10 @@ export const OPEN_METEO_TOPICS: TopicDefinition[] = [
     unitSuffix: 'km/h',
     chartVariant: 'line',
     sourceUrl: 'https://open-meteo.com/en/docs',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'wind speed',
+    },
   },
 ];
 
