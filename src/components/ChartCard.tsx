@@ -5,12 +5,15 @@ import ReactECharts from 'echarts-for-react';
 import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
 import type { TopicData, TopicDefinition } from '../features/dashboard/types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { DataPointMusicPlayer } from '../lib/datapointMusic';
 import { fetchTopicData } from '../lib/eurostat';
 import { buildChartOption } from './chart-card/buildChartOption';
+import { ChartCardToolbar } from './chart-card/ChartCardToolbar';
 import { ChartCardHeader } from './chart-card/ChartCardHeader';
 import { computeLatestValues, findDimensionValueLabel, type DimensionOption } from './chart-card/helpers';
 import { LatestValuesGrid } from './chart-card/LatestValuesGrid';
+import { MusicSettingsModal } from './chart-card/MusicSettingsModal';
+import { useChartMusic } from './chart-card/useChartMusic';
+import { useCompactMobileLayout } from './chart-card/useCompactMobileLayout';
 
 type ChartCardProps = {
   cardId: string;
@@ -45,14 +48,6 @@ const DEFAULT_EUROSTAT_SOURCE_URL_BUILDER = (datasetCode: string) =>
 function areStringArraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((value, index) => value === b[index]);
-}
-
-function hashString(value: string): number {
-  let hash = 0;
-  for (let idx = 0; idx < value.length; idx += 1) {
-    hash = (hash * 31 + value.charCodeAt(idx)) >>> 0;
-  }
-  return hash;
 }
 
 function ChartCardComponent({
@@ -97,65 +92,10 @@ function ChartCardComponent({
   const [seriesDimension, setSeriesDimension] = React.useState('');
   const [geoValues, setGeoValues] = React.useState<string[]>(topic.geoValues ?? defaultGeoValues);
   const [dualAxis, setDualAxis] = React.useState(true);
-  const [musicPlaying, setMusicPlaying] = React.useState(false);
-  const [musicModalOpen, setMusicModalOpen] = React.useState(false);
-  const [musicTempo, setMusicTempo] = React.useState(120);
-  const [musicScale, setMusicScale] = React.useState<'major' | 'minor' | 'pentatonic' | 'chromatic'>('major');
-  const [musicOctaveShift, setMusicOctaveShift] = React.useState(0);
-  const [musicInstrument, setMusicInstrument] = React.useState<OscillatorType | 'auto'>('auto');
-  const [musicArpeggiate, setMusicArpeggiate] = React.useState(false);
-  const [musicSwing, setMusicSwing] = React.useState(0.08);
-  const [musicDelayTime, setMusicDelayTime] = React.useState(0.18);
-  const [musicDelayFeedback, setMusicDelayFeedback] = React.useState(0.35);
-  const [musicReverbWet, setMusicReverbWet] = React.useState(0.18);
-  const [musicReverbDecay, setMusicReverbDecay] = React.useState(2.4);
-  const [musicVolume, setMusicVolume] = React.useState(1);
-  const [musicPhaseOffset, setMusicPhaseOffset] = React.useState(0);
   const [periodStart, setPeriodStart] = React.useState('');
   const [periodEnd, setPeriodEnd] = React.useState('');
-  const [globalRecording, setGlobalRecording] = React.useState(() => DataPointMusicPlayer.isGlobalRecording());
-  const [globalRecordingBusy, setGlobalRecordingBusy] = React.useState(false);
-
-  React.useEffect(() => {
-    // Give each chart an automatic phase offset so multiple charts in the dashboard
-    // don't all play the exact same step at the same time.
-    setMusicPhaseOffset(hashString(cardId) % 16);
-  }, [cardId]);
-  const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
   const chartRef = React.useRef<ReactECharts | null>(null);
-  const [compactMobileLayout, setCompactMobileLayout] = React.useState(
-    typeof window !== 'undefined' ? window.innerWidth < 640 : false,
-  );
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const syncCompactLayout = () => setCompactMobileLayout(window.innerWidth < 640);
-    const triggerResize = () => {
-      window.requestAnimationFrame(() => {
-        chartRef.current?.getEchartsInstance().resize();
-      });
-      window.setTimeout(() => {
-        chartRef.current?.getEchartsInstance().resize();
-      }, 220);
-    };
-
-    const onViewportChange = () => {
-      syncCompactLayout();
-      triggerResize();
-    };
-
-    syncCompactLayout();
-    window.addEventListener('resize', onViewportChange);
-    window.addEventListener('orientationchange', onViewportChange);
-    window.visualViewport?.addEventListener('resize', onViewportChange);
-
-    return () => {
-      window.removeEventListener('resize', onViewportChange);
-      window.removeEventListener('orientationchange', onViewportChange);
-      window.visualViewport?.removeEventListener('resize', onViewportChange);
-    };
-  }, []);
+  const compactMobileLayout = useCompactMobileLayout(chartRef);
 
   const resolvedDefaultGeos = useMemo(() => topic.geoValues ?? defaultGeoValues, [defaultGeoValues, topic.geoValues]);
 
@@ -391,343 +331,91 @@ function ChartCardComponent({
     [activeFilterLabels, filteredSeries],
   );
 
-  // Tempo is local to the chart; no global sync.
-  // (Tempo is stored in component state and passed directly to the player.)
-
-  React.useEffect(() => {
-    if (!musicPlayerRef.current) {
-      musicPlayerRef.current = new DataPointMusicPlayer(filteredSeries, {
-        tempoBpm: musicTempo,
-        scale: musicScale,
-        octaveShift: musicOctaveShift,
-        instrumentOverride: musicInstrument,
-        arpeggiate: musicArpeggiate,
-        swing: musicSwing,
-        delayTime: musicDelayTime,
-        delayFeedback: musicDelayFeedback,
-        reverbWet: musicReverbWet,
-        reverbDecay: musicReverbDecay,
-        volume: musicVolume,
-      });
-      musicPlayerRef.current.setPhaseOffset(musicPhaseOffset);
-      return;
-    }
-
-    musicPlayerRef.current.setSeries(filteredSeries);
-    musicPlayerRef.current.setTempo(musicTempo);
-    musicPlayerRef.current.setSwing(musicSwing);
-    musicPlayerRef.current.setScale(musicScale);
-    musicPlayerRef.current.setOctaveShift(musicOctaveShift);
-    musicPlayerRef.current.setInstrumentOverride(musicInstrument);
-    musicPlayerRef.current.setArpeggiate(musicArpeggiate);
-    musicPlayerRef.current.setDelayTime(musicDelayTime);
-    musicPlayerRef.current.setDelayFeedback(musicDelayFeedback);
-    musicPlayerRef.current.setReverbWet(musicReverbWet);
-    musicPlayerRef.current.setReverbDecay(musicReverbDecay);
-    musicPlayerRef.current.setVolume(musicVolume);
-    musicPlayerRef.current.setPhaseOffset(musicPhaseOffset);
-
-    if (filteredSeries.length === 0 && musicPlaying) {
-      setMusicPlaying(false);
-    }
-  }, [
-    filteredSeries,
+  const {
     musicPlaying,
+    musicModalOpen,
+    setMusicModalOpen,
     musicTempo,
-    musicSwing,
+    setMusicTempo,
     musicScale,
+    setMusicScale,
     musicOctaveShift,
+    setMusicOctaveShift,
     musicInstrument,
+    setMusicInstrument,
     musicArpeggiate,
+    setMusicArpeggiate,
+    musicSwing,
+    setMusicSwing,
     musicDelayTime,
+    setMusicDelayTime,
     musicDelayFeedback,
+    setMusicDelayFeedback,
     musicReverbWet,
+    setMusicReverbWet,
     musicReverbDecay,
+    setMusicReverbDecay,
     musicVolume,
+    setMusicVolume,
     musicPhaseOffset,
-  ]);
-
-  React.useEffect(() => () => {
-    musicPlayerRef.current?.dispose();
-    musicPlayerRef.current = null;
-  }, []);
-
-  React.useEffect(() => {
-    const syncRecordingState = () => setGlobalRecording(DataPointMusicPlayer.isGlobalRecording());
-    window.addEventListener('datapoint-music-recording-change', syncRecordingState);
-    return () => {
-      window.removeEventListener('datapoint-music-recording-change', syncRecordingState);
-    };
-  }, []);
-
-  const globalRecordingSupported = DataPointMusicPlayer.canRecordGlobalMix();
-
-  const handleGlobalRecording = React.useCallback(async () => {
-    try {
-      setGlobalRecordingBusy(true);
-
-      if (!globalRecording) {
-        await DataPointMusicPlayer.startGlobalRecording();
-        setGlobalRecording(true);
-        return;
-      }
-
-      const blob = await DataPointMusicPlayer.stopGlobalRecording();
-      setGlobalRecording(false);
-
-      const extension = blob.type.includes('ogg') ? 'ogg' : 'webm';
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${providerId}-global-mix-${timestamp}.${extension}`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Global mix recording failed:', error);
-    } finally {
-      setGlobalRecordingBusy(false);
-    }
-  }, [globalRecording, providerId]);
+    setMusicPhaseOffset,
+    globalRecording,
+    globalRecordingBusy,
+    globalRecordingSupported,
+    handleGlobalRecording,
+    toggleMusicPlayback,
+  } = useChartMusic({
+    cardId,
+    providerId,
+    filteredSeries,
+  });
 
   const displayTitle = query.data?.title ?? topic.title;
   const displayDescription = query.data?.subtitle ?? topic.description;
 
   const showUnitSelectionHint = seriesDimension === 'unit' && selectedUnits.length === 0;
   const showUnitTooManyHint = unitSelectionTooLarge;
-  const musicModal = musicModalOpen ? (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-black/80 px-4 py-4 sm:py-6">
-      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-950/95 shadow-2xl sm:max-h-[calc(100dvh-3rem)]">
-        <div className="flex items-start justify-between border-b border-white/10 px-6 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Data music controls</h2>
-            <p className="mt-1 text-sm text-slate-300">Tweak tempo, scale and the synthesis style.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setMusicModalOpen(false)}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 hover:bg-white/10"
-          >
-            Close
-          </button>
-        </div>
-
-        <div className="space-y-4 overflow-y-auto px-6 py-5 text-sm text-slate-200">
-          <label className="grid gap-2">
-            <span className="font-medium text-slate-100">Tempo</span>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={30}
-                max={240}
-                value={musicTempo}
-                onChange={(event) => setMusicTempo(Number(event.target.value))}
-                className="h-2 w-full cursor-pointer accent-emerald-400"
-              />
-              <span className="w-14 text-right text-xs text-slate-200">{musicTempo} bpm</span>
-            </div>
-          </label>
-
-          <label className="grid gap-2">
-            <span className="font-medium text-slate-100">Volume</span>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={musicVolume}
-                onChange={(event) => setMusicVolume(Number(event.target.value))}
-                className="h-2 w-full cursor-pointer accent-emerald-400"
-              />
-              <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicVolume * 100)}%</span>
-            </div>
-          </label>
-
-          <label className="grid gap-2">
-            <span className="font-medium text-slate-100">Swing</span>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={0}
-                max={0.5}
-                step={0.01}
-                value={musicSwing}
-                onChange={(event) => setMusicSwing(Number(event.target.value))}
-                className="h-2 w-full cursor-pointer accent-emerald-400"
-              />
-              <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicSwing * 100)}%</span>
-            </div>
-          </label>
-
-
-          <label className="grid gap-2">
-            <span className="font-medium text-slate-100">Scale</span>
-            <select
-              value={musicScale}
-              onChange={(event) => setMusicScale(event.target.value as 'major' | 'minor' | 'pentatonic' | 'chromatic')}
-              className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
-            >
-              <option value="major">Major</option>
-              <option value="minor">Minor</option>
-              <option value="pentatonic">Pentatonic</option>
-              <option value="chromatic">Chromatic</option>
-            </select>
-          </label>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="grid gap-2">
-              <span className="font-medium text-slate-100">Octave shift</span>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={-3}
-                  max={3}
-                  step={1}
-                  value={musicOctaveShift}
-                  onChange={(event) => setMusicOctaveShift(Number(event.target.value))}
-                  className="h-2 w-full cursor-pointer accent-emerald-400"
-                />
-                <span className="w-10 text-right text-xs text-slate-200">{musicOctaveShift}</span>
-              </div>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="font-medium text-slate-100">Phase offset</span>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={0}
-                  max={16}
-                  step={1}
-                  value={musicPhaseOffset}
-                  onChange={(event) => setMusicPhaseOffset(Number(event.target.value))}
-                  className="h-2 w-full cursor-pointer accent-emerald-400"
-                />
-                <span className="w-10 text-right text-xs text-slate-200">{musicPhaseOffset}</span>
-              </div>
-              <p className="text-xs text-slate-500">Shift the timing of this chart (16th-note increments) relative to others.</p>
-            </label>
-          </div>
-
-          <label className="grid gap-2">
-            <span className="font-medium text-slate-100">Instrument</span>
-            <select
-              value={musicInstrument}
-              onChange={(event) => setMusicInstrument(event.target.value as OscillatorType | 'auto')}
-              className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
-            >
-              <option value="auto">Auto</option>
-              <option value="sine">Sine</option>
-              <option value="triangle">Triangle</option>
-              <option value="square">Square</option>
-              <option value="sawtooth">Sawtooth</option>
-            </select>
-          </label>
-
-          <div className="grid gap-2">
-            <span className="font-medium text-slate-100">Delay</span>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={0}
-                max={0.6}
-                step={0.02}
-                value={musicDelayTime}
-                onChange={(event) => setMusicDelayTime(Number(event.target.value))}
-                className="h-2 w-full cursor-pointer accent-emerald-400"
-              />
-              <span className="w-14 text-right text-xs text-slate-200">{musicDelayTime.toFixed(2)}s</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-400">Feedback</span>
-              <input
-                type="range"
-                min={0}
-                max={0.95}
-                step={0.01}
-                value={musicDelayFeedback}
-                onChange={(event) => setMusicDelayFeedback(Number(event.target.value))}
-                className="h-2 w-full cursor-pointer accent-emerald-400"
-              />
-              <span className="w-12 text-right text-xs text-slate-200">{Math.round(musicDelayFeedback * 100)}%</span>
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <span className="font-medium text-slate-100">Reverb</span>
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={musicReverbWet}
-                onChange={(event) => setMusicReverbWet(Number(event.target.value))}
-                className="h-2 w-full cursor-pointer accent-emerald-400"
-              />
-              <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicReverbWet * 100)}%</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-400">Decay</span>
-              <input
-                type="range"
-                min={0.5}
-                max={6}
-                step={0.1}
-                value={musicReverbDecay}
-                onChange={(event) => setMusicReverbDecay(Number(event.target.value))}
-                className="h-2 w-full cursor-pointer accent-emerald-400"
-              />
-              <span className="w-14 text-right text-xs text-slate-200">{musicReverbDecay.toFixed(1)}s</span>
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={musicArpeggiate}
-              onChange={(event) => setMusicArpeggiate(event.target.checked)}
-              className="h-4 w-4 rounded border-white/20 bg-white/10 text-emerald-400 focus:ring-emerald-400"
-            />
-            <span className="text-sm text-slate-200">Arpeggiate (play one series at a time)</span>
-          </label>
-
-          <div className="rounded-xl bg-white/5 p-3 text-xs text-slate-300">
-            Tip: Try slow tempo with pentatonic scale for an ambient vibe, or crank tempo + sawtooth for
-            intense “cyber soundtrack” energy.
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-            <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Global mix export</div>
-            <button
-              type="button"
-              onClick={() => {
-                void handleGlobalRecording();
-              }}
-              disabled={!globalRecordingSupported || globalRecordingBusy}
-              className="bat-btn w-full rounded-2xl px-3 py-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {!globalRecordingSupported
-                ? 'Recording not supported on this browser'
-                : globalRecording
-                  ? (globalRecordingBusy ? 'Stopping and preparing download...' : 'Stop and download global mix')
-                  : (globalRecordingBusy ? 'Starting global recording...' : 'Record global mix')}
-            </button>
-            <p className="mt-2 text-xs text-slate-400">
-              Captures all chart music currently routed through the app into one audio file.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  ) : null;
-
   return (
     <article className="batcave-panel relative flex min-h-[30rem] flex-col rounded-3xl p-5 shadow-card backdrop-blur-xl">
-      {musicModal && typeof document !== 'undefined' ? createPortal(musicModal, document.body) : null}
+      {typeof document !== 'undefined'
+        ? createPortal(
+            <MusicSettingsModal
+              open={musicModalOpen}
+              onClose={() => setMusicModalOpen(false)}
+              musicTempo={musicTempo}
+              setMusicTempo={setMusicTempo}
+              musicVolume={musicVolume}
+              setMusicVolume={setMusicVolume}
+              musicSwing={musicSwing}
+              setMusicSwing={setMusicSwing}
+              musicScale={musicScale}
+              setMusicScale={setMusicScale}
+              musicOctaveShift={musicOctaveShift}
+              setMusicOctaveShift={setMusicOctaveShift}
+              musicPhaseOffset={musicPhaseOffset}
+              setMusicPhaseOffset={setMusicPhaseOffset}
+              musicInstrument={musicInstrument}
+              setMusicInstrument={setMusicInstrument}
+              musicDelayTime={musicDelayTime}
+              setMusicDelayTime={setMusicDelayTime}
+              musicDelayFeedback={musicDelayFeedback}
+              setMusicDelayFeedback={setMusicDelayFeedback}
+              musicReverbWet={musicReverbWet}
+              setMusicReverbWet={setMusicReverbWet}
+              musicReverbDecay={musicReverbDecay}
+              setMusicReverbDecay={setMusicReverbDecay}
+              musicArpeggiate={musicArpeggiate}
+              setMusicArpeggiate={setMusicArpeggiate}
+              globalRecordingSupported={globalRecordingSupported}
+              globalRecordingBusy={globalRecordingBusy}
+              globalRecording={globalRecording}
+              onGlobalRecording={() => {
+                void handleGlobalRecording();
+              }}
+            />,
+            document.body,
+          )
+        : null}
 
       <button
         type="button"
@@ -833,98 +521,26 @@ function ChartCardComponent({
             unitSuffix={query.data.unitSuffix}
           />
 
-          <div className="bat-chart-toolbar mb-3 flex flex-wrap items-center justify-end gap-2 rounded-2xl px-3 py-2">
-            {selectablePeriods.length > 1 ? (
-              <>
-                <label className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium">
-                  <span className="whitespace-nowrap">From:</span>
-                  <select
-                    value={periodStart}
-                    onChange={(event) => setPeriodStart(event.target.value)}
-                    className="bat-input rounded-xl px-2 py-1 text-xs text-white outline-none"
-                  >
-                    {selectablePeriods.map((period) => (
-                      <option key={period} value={period}>
-                        {period}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium">
-                  <span className="whitespace-nowrap">To:</span>
-                  <select
-                    value={periodEnd}
-                    onChange={(event) => setPeriodEnd(event.target.value)}
-                    className="bat-input rounded-xl px-2 py-1 text-xs text-white outline-none"
-                  >
-                    {selectablePeriods.map((period) => (
-                      <option key={period} value={period}>
-                        {period}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            ) : null}
-
-            <button
-              type="button"
-              onClick={async () => {
-                const player = musicPlayerRef.current;
-                if (!player) return;
-                try {
-                  await player.unlockAudio();
-                  const playing = await player.toggle();
-                  setMusicPlaying(playing);
-                  if (!playing) setMusicModalOpen(false);
-                } catch (error) {
-                  console.error('Could not start data music:', error);
-                  setMusicPlaying(false);
-                }
-              }}
-              className="bat-btn rounded-2xl px-3 py-1 text-xs font-medium"
-            >
-              {musicPlaying ? 'Data music: on' : 'Data music: off'}
-            </button>
-
-            {musicPlaying ? (
-              <button
-                type="button"
-                onClick={() => setMusicModalOpen(true)}
-                className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium"
-              >
-                🎵 Music settings
-              </button>
-            ) : null}
-
-            {showDualAxisButton ? (
-              <button
-                type="button"
-                onClick={() => setDualAxis((prev) => !prev)}
-                className="bat-btn rounded-2xl px-3 py-1 text-xs font-medium"
-              >
-                {dualAxis ? 'Dual axes: on' : 'Dual axes: off'}
-              </button>
-            ) : null}
-
-            {supportsForecast ? (
-              <label className="bat-btn flex items-center gap-2 rounded-2xl px-3 py-1 text-xs font-medium">
-                <span className="whitespace-nowrap">Forecast:</span>
-                <select
-                  value={forecastHorizon}
-                  onChange={(event) => setForecastHorizon(Number(event.target.value))}
-                  className="bat-input rounded-xl px-2 py-1 text-xs text-white outline-none"
-                >
-                  {forecastOptions.map((value) => (
-                    <option key={value} value={value}>
-                      {value}{forecastUnitLabel}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-          </div>
+          <ChartCardToolbar
+            selectablePeriods={selectablePeriods}
+            periodStart={periodStart}
+            onPeriodStartChange={setPeriodStart}
+            periodEnd={periodEnd}
+            onPeriodEndChange={setPeriodEnd}
+            musicPlaying={musicPlaying}
+            onToggleMusic={() => {
+              void toggleMusicPlayback();
+            }}
+            onOpenMusicSettings={() => setMusicModalOpen(true)}
+            showDualAxisButton={showDualAxisButton}
+            dualAxis={dualAxis}
+            onToggleDualAxis={() => setDualAxis((prev) => !prev)}
+            supportsForecast={supportsForecast}
+            forecastHorizon={forecastHorizon}
+            onForecastHorizonChange={setForecastHorizon}
+            forecastOptions={forecastOptions}
+            forecastUnitLabel={forecastUnitLabel}
+          />
 
           <div className="min-h-[22rem] flex-1 rounded-3xl border border-border bg-slate-950/60 p-3">
             <ReactECharts

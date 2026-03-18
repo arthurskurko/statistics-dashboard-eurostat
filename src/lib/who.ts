@@ -1,5 +1,6 @@
 import { WHO_TOPIC_MAP } from '../features/dashboard/whoTopicCatalog';
 import type { DataPoint, DataSeries, TopicData, TopicDefinition } from '../features/dashboard/types';
+import { clamp, getNextPeriodCode, inferSortKey, median } from './timeSeries';
 
 type WhoApiResponse<T> = {
   value?: T[];
@@ -48,28 +49,6 @@ function toProxiedWhoUrl(url: string): string {
   }
 
   return url;
-}
-
-function inferSortKey(periodCode: string): number {
-  return Number(periodCode.replace(/\D/g, '')) || 0;
-}
-
-function getNextPeriodCode(periodCode: string): string | null {
-  if (!/^\d{4}$/.test(periodCode)) return null;
-  return String(Number(periodCode) + 1);
-}
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  if (sorted.length === 0) return 1;
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function computeForecast(points: DataPoint[], horizon: number): number[] {

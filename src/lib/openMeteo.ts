@@ -1,5 +1,6 @@
 import { OPEN_METEO_TOPIC_MAP } from '../features/dashboard/openMeteoTopicCatalog';
 import type { DataPoint, DataSeries, TopicData, TopicDefinition } from '../features/dashboard/types';
+import { clamp, getNextPeriodCode, inferSortKey, median } from './timeSeries';
 
 type GeoPoint = {
   code: string;
@@ -188,32 +189,6 @@ async function requestOpenMeteoDaily(url: string): Promise<OpenMeteoDailyRespons
   } finally {
     openMeteoInFlight.delete(url);
   }
-}
-
-function inferSortKey(periodCode: string): number {
-  const match = periodCode.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return Number(periodCode.replace(/\D/g, '')) || 0;
-  return Number(`${match[1]}${match[2]}${match[3]}`);
-}
-
-function addDays(periodCode: string, days: number): string | null {
-  const date = new Date(`${periodCode}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  if (sorted.length === 0) return 1;
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function computeForecast(points: DataPoint[], horizon: number): number[] {
@@ -411,10 +386,11 @@ export async function fetchOpenMeteoTopicData(
     if (!lastPoint) continue;
 
     const futurePeriods: string[] = [];
+    let nextPeriod = getNextPeriodCode(lastPoint.periodCode);
     for (let day = 1; day <= forecastHorizon; day += 1) {
-      const nextPeriod = addDays(lastPoint.periodCode, day);
       if (!nextPeriod) break;
       futurePeriods.push(nextPeriod);
+      nextPeriod = getNextPeriodCode(nextPeriod);
     }
 
     if (futurePeriods.length === 0) continue;
