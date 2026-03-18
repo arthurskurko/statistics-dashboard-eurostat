@@ -52,11 +52,11 @@ export default function App() {
   }, [cards.length, defaultTopicIds, setCards]);
 
   function addCard() {
-    setCards((currentCards) => [...currentCards, createCard(selectedTopicId)]);
+    setCards((currentCards) => [createCard(selectedTopicId), ...currentCards]);
   }
 
   function addCardForTopicId(topicId: string) {
-    setCards((currentCards) => [...currentCards, createCard(topicId)]);
+    setCards((currentCards) => [createCard(topicId), ...currentCards]);
   }
 
   function addDefaultCards() {

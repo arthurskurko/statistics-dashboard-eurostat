@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "generate-forecasts": "python scripts/generate_forecasts.py",
     "generate-catalog": "node scripts/generate_catalog.cjs",
+    "generate-who-catalog": "node scripts/generate_who_catalog.cjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

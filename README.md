@@ -47,6 +47,12 @@ You can also build a searchable dataset catalog (used for custom topic discovery
 npm run generate-catalog
 ```
 
+To refresh the full WHO indicator catalog used by the WHO dashboard picker:
+
+```sh
+npm run generate-who-catalog
+```
+
 By default the script processes a small built‑in list of datasets
 (abortions, migration, inflation); you can also specify additional
 Eurostat dataset codes on the command line:

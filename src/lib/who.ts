@@ -170,6 +170,34 @@ function buildGeoFilter(geoValues: string[]): string {
   return `(${geoValues.map((geo) => `SpatialDim eq '${geo}'`).join(' or ')})`;
 }
 
+function parseWhoNumericValue(row: WhoDataRow): number | null {
+  if (typeof row.NumericValue === 'number' && Number.isFinite(row.NumericValue)) {
+    return row.NumericValue;
+  }
+
+  if (typeof row.Value === 'string') {
+    const parsed = Number(row.Value.replace(/,/g, '').trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return null;
+}
+
+function buildSeriesKey(row: WhoDataRow): string {
+  const spatial = (row.SpatialDim ?? '').toUpperCase().trim();
+  if (spatial) return spatial;
+
+  const dimValues = [row.Dim1, row.Dim2, row.Dim3]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value.length > 0);
+
+  if (dimValues.length > 0) {
+    return `DIM:${dimValues.join('|')}`;
+  }
+
+  return row.SpatialDimType ? String(row.SpatialDimType).toUpperCase() : 'GLOBAL';
+}
+
 function scoreRow(row: WhoDataRow): number {
   let score = 0;
   if (row.Dim1 == null) score += 4;
@@ -180,21 +208,23 @@ function scoreRow(row: WhoDataRow): number {
 }
 
 function pickCanonicalRows(rows: WhoDataRow[]): WhoDataRow[] {
-  const byGeoTime = new Map<string, WhoDataRow>();
+  const bySeriesPeriod = new Map<string, WhoDataRow>();
 
   for (const row of rows) {
-    const geo = (row.SpatialDim ?? '').toUpperCase();
     const periodCode = String(row.TimeDim ?? row.TimeDimensionValue ?? '');
-    if (!geo || !periodCode) continue;
+    if (!periodCode) continue;
 
-    const key = `${geo}__${periodCode}`;
-    const existing = byGeoTime.get(key);
+    const seriesKey = buildSeriesKey(row);
+    if (!seriesKey) continue;
+
+    const key = `${seriesKey}__${periodCode}`;
+    const existing = bySeriesPeriod.get(key);
     if (!existing || scoreRow(row) > scoreRow(existing)) {
-      byGeoTime.set(key, row);
+      bySeriesPeriod.set(key, row);
     }
   }
 
-  return [...byGeoTime.values()];
+  return [...bySeriesPeriod.values()];
 }
 
 function mapRowsToSeries(rows: WhoDataRow[]): { series: DataSeries[]; periods: string[] } {
@@ -203,10 +233,10 @@ function mapRowsToSeries(rows: WhoDataRow[]): { series: DataSeries[]; periods: s
   const periods = new Set<string>();
 
   for (const row of canonicalRows) {
-    const value = Number(row.NumericValue);
-    if (Number.isNaN(value)) continue;
+    const value = parseWhoNumericValue(row);
+    if (value === null) continue;
 
-    const geo = (row.SpatialDim ?? '').toUpperCase();
+    const geo = buildSeriesKey(row);
     const periodCode = String(row.TimeDim ?? row.TimeDimensionValue ?? '');
     if (!geo || !periodCode) continue;
 
@@ -236,6 +266,38 @@ function mapRowsToSeries(rows: WhoDataRow[]): { series: DataSeries[]; periods: s
   return { series, periods: orderedPeriods };
 }
 
+function pickFallbackGeos(rows: WhoDataRow[], preferredGeos: string[], maxGeos = 2): string[] {
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    const geo = (row.SpatialDim ?? '').toUpperCase().trim();
+    if (!geo) continue;
+    counts.set(geo, (counts.get(geo) ?? 0) + 1);
+  }
+
+  if (counts.size === 0) return [];
+
+  const selected: string[] = [];
+  for (const geo of preferredGeos.map((entry) => entry.toUpperCase())) {
+    if (!counts.has(geo)) continue;
+    if (selected.includes(geo)) continue;
+    selected.push(geo);
+    if (selected.length >= maxGeos) return selected;
+  }
+
+  const byCoverage = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([geo]) => geo);
+
+  for (const geo of byCoverage) {
+    if (selected.includes(geo)) continue;
+    selected.push(geo);
+    if (selected.length >= maxGeos) break;
+  }
+
+  return selected;
+}
+
 async function fetchIndicatorName(indicatorCode: string): Promise<string | null> {
   const url = createWhoUrl(`${WHO_PROXY_BASE}/Indicator`);
   url.searchParams.set('$format', 'json');
@@ -261,14 +323,43 @@ export async function fetchWhoTopicData(
   const geoValues = (options?.geoValues?.length ? options.geoValues : topic.geoValues) ?? ['EST', 'EUR'];
 
   const countries = await fetchWhoCountries();
+  const numericFilter = 'NumericValue ne null';
 
   const url = createWhoUrl(`${WHO_PROXY_BASE}/${indicatorCode}`);
   url.searchParams.set('$format', 'json');
   url.searchParams.set('$top', '1000');
-  url.searchParams.set('$filter', `${buildGeoFilter(geoValues)} and NumericValue ne null`);
+  url.searchParams.set('$filter', `${buildGeoFilter(geoValues)} and ${numericFilter}`);
 
   const rows = await fetchWhoAllPages<WhoDataRow>(url);
-  const { series, periods } = mapRowsToSeries(rows);
+  let { series, periods } = mapRowsToSeries(rows);
+  let warningNote: string | undefined;
+
+  if (series.length === 0) {
+    const fallbackUrl = createWhoUrl(`${WHO_PROXY_BASE}/${indicatorCode}`);
+    fallbackUrl.searchParams.set('$format', 'json');
+    fallbackUrl.searchParams.set('$top', '1000');
+    fallbackUrl.searchParams.set('$filter', numericFilter);
+
+    const fallbackRows = await fetchWhoAllPages<WhoDataRow>(fallbackUrl);
+    const fallbackGeos = pickFallbackGeos(fallbackRows, geoValues, 2);
+
+    if (fallbackGeos.length > 0) {
+      const narrowedRows = fallbackRows.filter((row) => fallbackGeos.includes((row.SpatialDim ?? '').toUpperCase()));
+      const narrowed = mapRowsToSeries(narrowedRows);
+      series = narrowed.series;
+      periods = narrowed.periods;
+
+      if (series.length > 0) {
+        warningNote = `Selected geographies (${geoValues.join(', ')}) had no data; showing ${fallbackGeos.join(', ')} instead.`;
+      }
+    }
+
+    if (series.length === 0) {
+      const generic = mapRowsToSeries(fallbackRows);
+      series = generic.series;
+      periods = generic.periods;
+    }
+  }
 
   const indicatorName = (await fetchIndicatorName(indicatorCode)) ?? topic.title;
 
@@ -351,5 +442,6 @@ export async function fetchWhoTopicData(
     periods,
     availableGeos: countries,
     forecastDisabledReason,
+    warning: warningNote,
   };
 }
