@@ -156,6 +156,7 @@ function createCard(providerId: ProviderId, topicId: string): UnifiedDashboardCa
 }
 
 export default function UnifiedDashboardApp() {
+  const basePath = import.meta.env.BASE_URL;
   const [selectedProviderId, setSelectedProviderId] = useState<ProviderId>('eurostat');
   const selectedProvider = PROVIDER_MAP[selectedProviderId];
 
@@ -221,16 +222,16 @@ export default function UnifiedDashboardApp() {
           </label>
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <a href="/" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={basePath} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               Eurostat
             </a>
-            <a href="/worldbank" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}worldbank`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               World Bank
             </a>
-            <a href="/who" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}who`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               WHO
             </a>
-            <a href="/meteo" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}meteo`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               Open-Meteo
             </a>
             <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">

@@ -30,6 +30,7 @@ function createCard(topicId: string): DashboardCard {
 }
 
 export default function WhoApp() {
+  const basePath = import.meta.env.BASE_URL;
   const [selectedTopicId, setSelectedTopicId] = useState<string>(WHO_TOPICS[0].id);
   const [cards, setCards] = useLocalStorage<DashboardCard[]>(STORAGE_KEY, []);
   const [defaultTopicIds] = useLocalStorage<string[]>(DEFAULT_CHARTS_KEY, DEFAULT_CHART_TOPIC_IDS);
@@ -83,19 +84,19 @@ export default function WhoApp() {
             </select>
           </label>
           <div className="flex items-center gap-2 text-xs">
-            <a href="/" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={basePath} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               Eurostat
             </a>
-            <a href="/dashboard" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}dashboard`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               Unified
             </a>
-            <a href="/worldbank" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}worldbank`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               World Bank
             </a>
             <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
               WHO
             </span>
-            <a href="/meteo" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}meteo`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               Open-Meteo
             </a>
           </div>

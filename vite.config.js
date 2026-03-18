@@ -1,6 +1,46 @@
+var _a, _b;
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
+import fs from 'fs';
+import path from 'path';
+var DEFAULT_BASE_BY_TARGET = {
+    local: '/',
+    test: '/statistics-test/',
+    prod: '/statistics-full/',
+};
+function normalizeBase(value) {
+    if (!value)
+        return '/';
+    var leading = value.startsWith('/') ? value : "/".concat(value);
+    return leading.endsWith('/') ? leading : "".concat(leading, "/");
+}
+function readBuildConfig() {
+    var configPath = path.resolve(__dirname, 'build.config.json');
+    if (!fs.existsSync(configPath))
+        return {};
+    try {
+        var raw = fs.readFileSync(configPath, 'utf-8');
+        return JSON.parse(raw);
+    }
+    catch (_a) {
+        return {};
+    }
+}
+function resolveBuildTarget(config) {
+    var fromEnv = process.env.APP_TARGET;
+    if (fromEnv === 'local' || fromEnv === 'test' || fromEnv === 'prod') {
+        return fromEnv;
+    }
+    if (config.target === 'local' || config.target === 'test' || config.target === 'prod') {
+        return config.target;
+    }
+    return 'prod';
+}
+var buildConfig = readBuildConfig();
+var buildTarget = resolveBuildTarget(buildConfig);
+var resolvedBase = normalizeBase((_b = (_a = buildConfig.baseByTarget) === null || _a === void 0 ? void 0 : _a[buildTarget]) !== null && _b !== void 0 ? _b : DEFAULT_BASE_BY_TARGET[buildTarget]);
 export default defineConfig({
+    base: resolvedBase,
     plugins: [react()],
     server: {
         host: '0.0.0.0',

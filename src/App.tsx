@@ -29,6 +29,7 @@ function createCard(topicId: string): DashboardCard {
 }
 
 export default function App() {
+  const basePath = import.meta.env.BASE_URL;
   const [selectedTopicId, setSelectedTopicId] = useState<string>(TOPICS[0].id);
   const [cards, setCards] = useLocalStorage<DashboardCard[]>(STORAGE_KEY, []);
   const [defaultTopicIds, setDefaultTopicIds] = useLocalStorage<string[]>(
@@ -109,16 +110,16 @@ export default function App() {
             <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
               Eurostat
             </span>
-            <a href="/dashboard" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}dashboard`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               Unified
             </a>
-            <a href="/worldbank" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}worldbank`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               World Bank
             </a>
-            <a href="/who" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}who`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               WHO
             </a>
-            <a href="/meteo" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}meteo`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
               Open-Meteo
             </a>
           </div>

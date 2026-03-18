@@ -88,6 +88,27 @@ npm run build
 npm run preview
 ```
 
+## Build target config (local/test/prod)
+
+You can switch deployment target by editing a single value in
+`build.config.json`:
+
+```json
+{
+	"target": "local"
+}
+```
+
+Supported values are `local`, `test`, and `prod`.
+The active target controls Vite `base` during build (for example
+`/`, `/statistics-test/`, `/statistics-full/`).
+
+You can also override target temporarily from terminal without editing the file:
+
+```sh
+APP_TARGET=test npm run build
+```
+
 ## Run with Docker
 
 ```bash

@@ -17,15 +17,22 @@ const queryClient = new QueryClient({
   },
 });
 
+const configuredBasePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const pathname = window.location.pathname;
+const appPath =
+  configuredBasePath && configuredBasePath !== '/' && pathname.startsWith(configuredBasePath)
+    ? pathname.slice(configuredBasePath.length) || '/'
+    : pathname;
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>
-    {window.location.pathname.startsWith('/dashboard') ? (
+    {appPath.startsWith('/dashboard') ? (
       <UnifiedDashboardApp />
-    ) : window.location.pathname.startsWith('/worldbank') ? (
+    ) : appPath.startsWith('/worldbank') ? (
       <WorldBankApp />
-    ) : window.location.pathname.startsWith('/meteo') ? (
+    ) : appPath.startsWith('/meteo') ? (
       <OpenMeteoApp />
-    ) : window.location.pathname.startsWith('/who') ? (
+    ) : appPath.startsWith('/who') ? (
       <WhoApp />
     ) : (
       <App />
