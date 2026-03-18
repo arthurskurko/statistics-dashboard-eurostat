@@ -7,6 +7,7 @@ type BuildTarget = 'local' | 'test' | 'prod';
 
 type BuildConfig = {
   target?: BuildTarget;
+  assetVersion?: number;
   baseByTarget?: Partial<Record<BuildTarget, string>>;
 };
 
@@ -49,13 +50,48 @@ function resolveBuildTarget(config: BuildConfig): BuildTarget {
 
 const buildConfig = readBuildConfig();
 const buildTarget = resolveBuildTarget(buildConfig);
+const assetVersion = Number.isFinite(buildConfig.assetVersion) ? Number(buildConfig.assetVersion) : 0;
 const resolvedBase = normalizeBase(
   buildConfig.baseByTarget?.[buildTarget] ?? DEFAULT_BASE_BY_TARGET[buildTarget],
 );
 
+function appendVersionQuery(url: string, version: number): string {
+  if (!url || /^https?:\/\//i.test(url) || url.startsWith('data:')) {
+    return url;
+  }
+
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}v=${version}`;
+}
+
+function createCacheBustPlugin(version: number) {
+  return {
+    name: 'append-asset-version-query',
+    apply: 'build' as const,
+    closeBundle() {
+      const builtIndexPath = path.resolve(__dirname, 'dist', 'index.html');
+      if (!fs.existsSync(builtIndexPath)) {
+        return;
+      }
+
+      const html = fs.readFileSync(builtIndexPath, 'utf8');
+
+      const withVersionedAssets = html
+        .replace(/src="([^"]+\.js(?:\?[^"]*)?)"/g, (_, src: string) => {
+          return `src="${appendVersionQuery(src, version)}"`;
+        })
+        .replace(/href="([^"]+\.css(?:\?[^"]*)?)"/g, (_, href: string) => {
+          return `href="${appendVersionQuery(href, version)}"`;
+        });
+
+      fs.writeFileSync(builtIndexPath, withVersionedAssets);
+    },
+  };
+}
+
 export default defineConfig({
   base: resolvedBase,
-  plugins: [react()],
+  plugins: [react(), createCacheBustPlugin(assetVersion)],
   server: {
     host: '0.0.0.0',
     port: 5173,

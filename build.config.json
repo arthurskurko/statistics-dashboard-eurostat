@@ -1,5 +1,6 @@
 {
   "target": "test",
+  "assetVersion": 1,
   "baseByTarget": {
     "local": "/",
     "test": "/statistics/",
