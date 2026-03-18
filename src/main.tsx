@@ -4,6 +4,7 @@ import App from './App';
 import OpenMeteoApp from './OpenMeteoApp';
 import WorldBankApp from './WorldBankApp';
 import WhoApp from './WhoApp';
+import UnifiedDashboardApp from './UnifiedDashboardApp';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -18,7 +19,9 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>
-    {window.location.pathname.startsWith('/worldbank') ? (
+    {window.location.pathname.startsWith('/dashboard') ? (
+      <UnifiedDashboardApp />
+    ) : window.location.pathname.startsWith('/worldbank') ? (
       <WorldBankApp />
     ) : window.location.pathname.startsWith('/meteo') ? (
       <OpenMeteoApp />

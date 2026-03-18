@@ -87,6 +87,9 @@ export default function WorldBankApp() {
             <a href="/" className="bat-btn rounded-2xl px-3 py-1 font-medium">
               Eurostat
             </a>
+            <a href="/dashboard" className="bat-btn rounded-2xl px-3 py-1 font-medium">
+              Unified
+            </a>
             <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
               World Bank
             </span>
