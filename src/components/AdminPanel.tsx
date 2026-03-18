@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CatalogCodeSearch } from './CatalogCodeSearch';
 import { TOPIC_MAP, TOPICS } from '../features/dashboard/topicCatalog';
 import type { TopicDefinition } from '../features/dashboard/types';
+import { loadCatalogEntries, type CatalogEntry } from '../lib/catalog';
 
 export type FetchStats = Record<
   string,
@@ -49,11 +50,6 @@ function readStats(): FetchStats {
     return {};
   }
 }
-
-type CatalogEntry = {
-  code: string;
-  title: string;
-};
 
 export function AdminPanel({
   defaultTopicIds,
@@ -104,9 +100,8 @@ export function AdminPanel({
   }, []);
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}catalog.json`)
-      .then((res) => res.json())
-      .then((data) => setCatalog(data))
+    loadCatalogEntries('catalog.json')
+      .then((entries) => setCatalog(entries))
       .catch(() => {
         /* ignore */
       });

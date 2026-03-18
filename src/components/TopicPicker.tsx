@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CatalogCodeSearch } from './CatalogCodeSearch';
 import { TOPICS } from '../features/dashboard/topicCatalog';
 import type { TopicDefinition } from '../features/dashboard/types';
+import { loadCatalogEntries, type CatalogEntry } from '../lib/catalog';
 
 type TopicPickerProps = {
   selectedTopicId: string;
@@ -19,12 +20,6 @@ type TopicPickerProps = {
   descriptionText?: string;
 };
 
-type CatalogEntry = {
-  code: string;
-  title: string;
-  raw?: Record<string, unknown>;
-};
-
 const USAGE_STORAGE_KEY = 'dashboard.topicUsageByProvider';
 
 function toNumber(value: unknown): number | null {
@@ -34,26 +29,6 @@ function toNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
-}
-
-function normalizeCatalogEntry(item: unknown): CatalogEntry | null {
-  if (!item || typeof item !== 'object') return null;
-  const record = item as Record<string, unknown>;
-
-  const code =
-    (typeof record.code === 'string' && record.code) ||
-    (typeof record.datasetCode === 'string' && record.datasetCode) ||
-    (typeof record.id === 'string' && record.id) ||
-    '';
-
-  const title =
-    (typeof record.title === 'string' && record.title) ||
-    (typeof record.name === 'string' && record.name) ||
-    (typeof record.display_name === 'string' && record.display_name) ||
-    code;
-
-  if (!code) return null;
-  return { code, title, raw: record };
 }
 
 function getOfficialPopularityScore(entry: CatalogEntry): number | null {
@@ -264,12 +239,8 @@ export function TopicPicker({
   }, [providerId]);
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}${catalogPath}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const entries = Array.isArray(data)
-          ? data.map(normalizeCatalogEntry).filter((entry): entry is CatalogEntry => entry !== null)
-          : [];
+    loadCatalogEntries(catalogPath)
+      .then((entries) => {
         setCatalog(entries);
       })
       .catch(() => {
@@ -283,12 +254,8 @@ export function TopicPicker({
       return;
     }
 
-    fetch(`${import.meta.env.BASE_URL}${popularPath}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const entries = Array.isArray(data)
-          ? data.map(normalizeCatalogEntry).filter((entry): entry is CatalogEntry => entry !== null)
-          : [];
+    loadCatalogEntries(popularPath)
+      .then((entries) => {
         setPopularCatalog(entries);
       })
       .catch(() => {
