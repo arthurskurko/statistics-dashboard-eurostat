@@ -1,13 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: dark;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-    sans-serif;
+  font-family: 'Rajdhani', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #08111f;
+  --bat-bg: #05080f;
+  --bat-panel: rgba(7, 15, 33, 0.88);
+  --bat-border: rgba(85, 150, 255, 0.22);
+  --bat-cyan: #49d2ff;
+  --bat-blue: #6ea0ff;
+  --bat-yellow: #f4d45a;
+  --page-glow-1: rgba(72, 154, 255, 0.2);
+  --page-glow-2: rgba(43, 74, 158, 0.26);
+  --page-glow-3: rgba(18, 38, 96, 0.55);
+  --page-overlay-1: rgba(73, 210, 255, 0.05);
+  --page-overlay-2: rgba(110, 160, 255, 0.06);
+}
+
+:root[data-theme='batcave'],
+[data-theme='batcave'] {
+  --bat-bg: #05080f;
+  --bat-panel: rgba(7, 15, 33, 0.88);
+  --bat-border: rgba(85, 150, 255, 0.22);
+  --bat-cyan: #49d2ff;
+  --bat-blue: #6ea0ff;
+  --bat-yellow: #f4d45a;
+  --page-glow-1: rgba(72, 154, 255, 0.2);
+  --page-glow-2: rgba(43, 74, 158, 0.26);
+  --page-glow-3: rgba(18, 38, 96, 0.55);
+  --page-overlay-1: rgba(73, 210, 255, 0.05);
+  --page-overlay-2: rgba(110, 160, 255, 0.06);
+}
+
+:root[data-theme='neon-grid'],
+[data-theme='neon-grid'] {
+  --bat-bg: #07040f;
+  --bat-panel: rgba(23, 10, 48, 0.86);
+  --bat-border: rgba(196, 93, 255, 0.35);
+  --bat-cyan: #58f0ff;
+  --bat-blue: #c45dff;
+  --bat-yellow: #80ffb8;
+  --page-glow-1: rgba(196, 93, 255, 0.25);
+  --page-glow-2: rgba(88, 240, 255, 0.22);
+  --page-glow-3: rgba(87, 46, 151, 0.58);
+  --page-overlay-1: rgba(196, 93, 255, 0.08);
+  --page-overlay-2: rgba(88, 240, 255, 0.08);
+}
+
+:root[data-theme='ember-noir'],
+[data-theme='ember-noir'] {
+  --bat-bg: #0d0604;
+  --bat-panel: rgba(36, 14, 8, 0.84);
+  --bat-border: rgba(255, 131, 72, 0.34);
+  --bat-cyan: #ff9a5f;
+  --bat-blue: #ff6b52;
+  --bat-yellow: #ffd166;
+  --page-glow-1: rgba(255, 131, 72, 0.28);
+  --page-glow-2: rgba(255, 80, 80, 0.2);
+  --page-glow-3: rgba(102, 33, 20, 0.6);
+  --page-overlay-1: rgba(255, 131, 72, 0.07);
+  --page-overlay-2: rgba(255, 80, 80, 0.08);
+}
+
+:root[data-theme='aurora-core'],
+[data-theme='aurora-core'] {
+  --bat-bg: #03110f;
+  --bat-panel: rgba(7, 28, 27, 0.86);
+  --bat-border: rgba(84, 255, 212, 0.3);
+  --bat-cyan: #54ffd4;
+  --bat-blue: #49b3ff;
+  --bat-yellow: #d9ff75;
+  --page-glow-1: rgba(84, 255, 212, 0.24);
+  --page-glow-2: rgba(73, 179, 255, 0.2);
+  --page-glow-3: rgba(20, 84, 72, 0.58);
+  --page-overlay-1: rgba(84, 255, 212, 0.06);
+  --page-overlay-2: rgba(73, 179, 255, 0.08);
+}
+
+:root[data-theme='solar-flare'],
+[data-theme='solar-flare'] {
+  --bat-bg: #0c0202;
+  --bat-panel: rgba(35, 10, 7, 0.85);
+  --bat-border: rgba(255, 146, 72, 0.36);
+  --bat-cyan: #ffb66b;
+  --bat-blue: #ff6880;
+  --bat-yellow: #ffd96a;
+  --page-glow-1: rgba(255, 146, 72, 0.26);
+  --page-glow-2: rgba(255, 91, 77, 0.2);
+  --page-glow-3: rgba(102, 33, 20, 0.6);
+  --page-overlay-1: rgba(255, 146, 72, 0.07);
+  --page-overlay-2: rgba(255, 91, 77, 0.08);
+}
+
+:root[data-theme='mystic-forest'],
+[data-theme='mystic-forest'] {
+  --bat-bg: #04110b;
+  --bat-panel: rgba(8, 25, 18, 0.86);
+  --bat-border: rgba(120, 240, 172, 0.3);
+  --bat-cyan: #6cffb3;
+  --bat-blue: #4ad6b9;
+  --bat-yellow: #c2ff8f;
+  --page-glow-1: rgba(120, 240, 172, 0.24);
+  --page-glow-2: rgba(74, 212, 189, 0.2);
+  --page-glow-3: rgba(14, 53, 32, 0.58);
+  --page-overlay-1: rgba(120, 240, 172, 0.06);
+  --page-overlay-2: rgba(74, 212, 189, 0.08);
+}
+
+:root[data-theme='retro-console'],
+[data-theme='retro-console'] {
+  --bat-bg: #0b0b0b;
+  --bat-panel: rgba(15, 15, 15, 0.9);
+  --bat-border: rgba(97, 255, 142, 0.25);
+  --bat-cyan: #67ffb6;
+  --bat-blue: #7b60ff;
+  --bat-yellow: #ffdd55;
+  --page-glow-1: rgba(97, 255, 142, 0.22);
+  --page-glow-2: rgba(123, 96, 255, 0.18);
+  --page-glow-3: rgba(55, 14, 81, 0.55);
+  --page-overlay-1: rgba(97, 255, 142, 0.06);
+  --page-overlay-2: rgba(123, 96, 255, 0.05);
 }
 
 html,
@@ -19,9 +135,17 @@ body,
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 25%),
-    radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 25%),
-    #08111f;
+    radial-gradient(circle at 18% 8%, var(--page-glow-1), transparent 30%),
+    radial-gradient(circle at 80% -10%, var(--page-glow-2), transparent 36%),
+    radial-gradient(circle at 50% 120%, var(--page-glow-3), transparent 40%),
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.015) 0,
+      rgba(255, 255, 255, 0.015) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    var(--bat-bg);
   color: #e2e8f0;
 }
 
@@ -42,4 +166,158 @@ select {
 ::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.24);
   border-radius: 999px;
+}
+
+.batcave-page {
+  position: relative;
+}
+
+.batcave-page::before {
+  content: '';
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(120deg, var(--page-overlay-1), transparent 28%, var(--page-overlay-2));
+  opacity: 0.6;
+}
+
+.batcave-panel {
+  border: 1px solid var(--bat-border);
+  background: var(--bat-panel);
+  box-shadow:
+    inset 0 0 0 1px rgba(73, 210, 255, 0.08),
+    0 0 0 1px rgba(8, 12, 24, 0.7),
+    0 20px 45px rgba(2, 6, 20, 0.5);
+}
+
+.bat-title {
+  font-family: 'Press Start 2P', monospace;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  text-shadow:
+    0 0 14px rgba(73, 210, 255, 0.22),
+    0 0 3px rgba(73, 210, 255, 0.2);
+}
+
+.pixel-badge {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  border-color: color-mix(in srgb, var(--bat-cyan) 60%, transparent);
+  background: color-mix(in srgb, var(--bat-blue) 24%, transparent);
+  color: color-mix(in srgb, var(--bat-cyan) 80%, white 20%);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--bat-cyan) 45%, transparent);
+}
+
+.bat-input {
+  border: 1px solid color-mix(in srgb, var(--bat-blue) 45%, transparent);
+  background: rgba(3, 8, 22, 0.92);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bat-cyan) 20%, transparent);
+}
+
+.bat-input:focus {
+  border-color: var(--bat-cyan);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--bat-cyan) 60%, transparent),
+    0 0 15px color-mix(in srgb, var(--bat-cyan) 34%, transparent);
+}
+
+@keyframes batPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(73, 210, 255, 0);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(73, 210, 255, 0.24);
+  }
+}
+
+@keyframes batShimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+.bat-btn {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--bat-blue) 55%, transparent);
+  background: rgba(18, 28, 54, 0.85);
+  color: #dce9ff;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.bat-btn.absolute {
+  position: absolute;
+}
+
+.bat-btn::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(120deg, transparent 35%, rgba(255, 255, 255, 0.22) 50%, transparent 65%);
+  transform: translateX(-120%);
+}
+
+.bat-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--bat-cyan);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--bat-cyan) 36%, transparent);
+  animation: batPulse 1.4s ease-in-out;
+}
+
+.bat-btn:hover::after {
+  animation: batShimmer 0.75s ease;
+}
+
+.bat-btn-primary {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bat-cyan) 90%, white 10%),
+    color-mix(in srgb, var(--bat-blue) 76%, black 24%)
+  );
+  color: #031320;
+  border-color: color-mix(in srgb, var(--bat-cyan) 76%, white 24%);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.bat-btn-danger {
+  border-color: color-mix(in srgb, var(--bat-yellow) 55%, transparent);
+  background: color-mix(in srgb, var(--bat-yellow) 18%, rgba(56, 45, 16, 0.66));
+  color: color-mix(in srgb, var(--bat-yellow) 74%, white 26%);
+}
+
+.bat-stat {
+  border: 1px solid color-mix(in srgb, var(--bat-blue) 34%, transparent);
+  background: linear-gradient(180deg, rgba(20, 33, 59, 0.72), rgba(11, 19, 39, 0.84));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bat-cyan) 22%, transparent);
+}
+
+.bat-empty {
+  border-color: color-mix(in srgb, var(--bat-blue) 45%, transparent);
+  background: rgba(9, 16, 33, 0.7);
+}
+
+.bat-suggestions {
+  border: 1px solid color-mix(in srgb, var(--bat-blue) 42%, transparent);
+  background: rgba(4, 9, 25, 0.95);
+  box-shadow: 0 16px 30px rgba(2, 4, 14, 0.7);
+}
+
+.bat-chart-toolbar {
+  border: 1px solid color-mix(in srgb, var(--bat-blue) 35%, transparent);
+  background: rgba(8, 15, 31, 0.68);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bat-btn,
+  .bat-btn::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

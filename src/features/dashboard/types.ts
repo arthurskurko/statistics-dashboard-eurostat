@@ -1,5 +1,18 @@
 export type ChartVariant = 'line' | 'bar';
 
+export type TopicPubMedReference = {
+  label: string;
+  url: string;
+  pmid?: string;
+};
+
+export type TopicPubMedMeta = {
+  availability: 'available' | 'search-only' | 'not-available' | 'not-applicable' | 'unchecked';
+  searchTerm?: string;
+  references?: TopicPubMedReference[];
+  note?: string;
+};
+
 export type TopicDefinition = {
   id: string;
   title: string;
@@ -11,6 +24,7 @@ export type TopicDefinition = {
   decimals?: number;
   chartVariant?: ChartVariant;
   sourceUrl: string;
+  pubmed: TopicPubMedMeta;
 };
 
 export type DashboardCard = {
@@ -47,4 +61,28 @@ export type TopicData = {
    * observations instead of simply dropping early years entirely.
    */
   periods: string[];
+  /**
+   * If the dataset includes dimensions beyond `geo` and `time`, this lists
+   * the other dimensions and their available values so the UI can let the
+   * user choose how to slice the data.
+   */
+  extraDimensions?: Array<{
+    id: string;
+    label: string;
+    values: Array<{ code: string; label: string }>;
+  }>;
+  /**
+   * Available geo (country) values in the dataset, used for user selection.
+   */
+  availableGeos?: Array<{ code: string; label: string }>;
+  /**
+   * When a reliable forecast cannot be computed (e.g., values are too small),
+   * this provides a message to explain why (and the UI can choose not to show a forecast).
+   */
+  forecastDisabledReason?: string;
+  /**
+   * When a dataset is too large to fetch/render without filters, this provides a
+   * user-friendly explanation and prompts the user to apply additional filters.
+   */
+  warning?: string;
 };

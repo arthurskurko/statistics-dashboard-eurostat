@@ -1,4 +1,4 @@
-# Estonia Statistics Dashboard
+# Europe Statistics Dashboard
 
 A Docker-ready React + TypeScript dashboard that lets you choose a Eurostat topic from a dropdown and add it to a chart dashboard.
 
@@ -41,6 +41,18 @@ Then generate (or regenerate) the forecast JSON files with:
 npm run generate-forecasts
 ```
 
+You can also build a searchable dataset catalog (used for custom topic discovery) using:
+
+```sh
+npm run generate-catalog
+```
+
+To refresh the full WHO indicator catalog used by the WHO dashboard picker:
+
+```sh
+npm run generate-who-catalog
+```
+
 By default the script processes a small built‑in list of datasets
 (abortions, migration, inflation); you can also specify additional
 Eurostat dataset codes on the command line:
@@ -76,6 +88,27 @@ npm run build
 npm run preview
 ```
 
+## Build target config (local/test/prod)
+
+You can switch deployment target by editing a single value in
+`build.config.json`:
+
+```json
+{
+	"target": "local"
+}
+```
+
+Supported values are `local`, `test`, and `prod`.
+The active target controls Vite `base` during build (for example
+`/`, `/statistics-test/`, `/statistics-full/`).
+
+You can also override target temporarily from terminal without editing the file:
+
+```sh
+APP_TARGET=test npm run build
+```
+
 ## Run with Docker
 
 ```bash
@@ -89,3 +122,15 @@ Then open `http://localhost:8080`.
 - The app fetches live data from Eurostat's public API.
 - If a Eurostat dataset changes its filter codes, that chart can fail until the mapping is updated. For example the unemployment series dropped the 15‑74 age class in favour of 25‑74 in 2025, which required updating the app filters.
 - Dashboard cards are persisted in local storage.
+
+## PubMed references per topic
+
+Each chart now reads PubMed metadata from the topic definition and shows:
+
+- curated PubMed links (if any are configured)
+- a PubMed search link based on the topic search term
+- an optional note when a topic was added dynamically and is still uncategorized
+
+When adding a topic in any catalog under `src/features/dashboard/`, include the required `pubmed` block in that topic. For custom topics added by code, the app sets `availability: unchecked` automatically, so the dashboard stays functional until a curated mapping is added.
+
+This design keeps the app stable and avoids live PubMed API calls on page load.

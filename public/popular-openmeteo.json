@@ -1,0 +1,10 @@
+[
+  { "code": "daily.temperature_2m_mean", "title": "Daily mean temperature" },
+  { "code": "daily.temperature_2m_max", "title": "Daily max temperature" },
+  { "code": "daily.temperature_2m_min", "title": "Daily min temperature" },
+  { "code": "daily.apparent_temperature_mean", "title": "Daily mean apparent temperature" },
+  { "code": "daily.precipitation_sum", "title": "Daily precipitation sum" },
+  { "code": "daily.rain_sum", "title": "Daily rain sum" },
+  { "code": "daily.wind_speed_10m_max", "title": "Daily max wind speed" },
+  { "code": "daily.shortwave_radiation_sum", "title": "Daily shortwave radiation sum" }
+]

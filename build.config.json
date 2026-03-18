@@ -1,0 +1,8 @@
+{
+  "target": "local",
+  "baseByTarget": {
+    "local": "/",
+    "test": "/statistics-test/",
+    "prod": "/statistics-full/"
+  }
+}

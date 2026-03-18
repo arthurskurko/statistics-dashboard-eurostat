@@ -16,6 +16,10 @@ export const TOPICS: TopicDefinition[] = [
     chartVariant: 'line',
     sourceUrl:
       'https://ec.europa.eu/eurostat/databrowser/view/demo_pjan/default/table?lang=en',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'population',
+    },
   },
   {
     id: 'unemployment-rate',
@@ -38,6 +42,10 @@ export const TOPICS: TopicDefinition[] = [
     chartVariant: 'line',
     sourceUrl:
       'https://ec.europa.eu/eurostat/databrowser/view/une_rt_m/default/table?lang=en',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'unemployment',
+    },
   },
   {
     id: 'inflation',
@@ -54,6 +62,10 @@ export const TOPICS: TopicDefinition[] = [
     chartVariant: 'line',
     sourceUrl:
       'https://ec.europa.eu/eurostat/databrowser/view/prc_hicp_manr/default/table?lang=en',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'inflation',
+    },
   },
   {
     id: 'immigration',
@@ -72,6 +84,10 @@ export const TOPICS: TopicDefinition[] = [
     chartVariant: 'line',
     sourceUrl:
       'https://ec.europa.eu/eurostat/databrowser/view/migr_imm1ctz/default/table?lang=en',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'immigration',
+    },
   },
   {
     id: 'induced-abortions',
@@ -89,6 +105,10 @@ export const TOPICS: TopicDefinition[] = [
     chartVariant: 'line',
     sourceUrl:
       'https://ec.europa.eu/eurostat/databrowser/view/DEMO_FABORTORD/default/table?lang=en',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'induced abortion',
+    },
   },
   {
     id: 'gdp-per-capita',
@@ -106,6 +126,10 @@ export const TOPICS: TopicDefinition[] = [
     chartVariant: 'line',
     sourceUrl:
       'https://ec.europa.eu/eurostat/databrowser/view/nama_10_pc/default/table?lang=en',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'GDP per capita',
+    },
   },
 ];
 

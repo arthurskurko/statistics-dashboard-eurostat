@@ -1,0 +1,85 @@
+import type { TopicDefinition } from './types';
+
+export const WORLD_BANK_TOPICS: TopicDefinition[] = [
+  {
+    id: 'wb-pop-total',
+    title: 'Population, total',
+    description: 'Total population for Estonia compared with the EU aggregate.',
+    datasetCode: 'SP.POP.TOTL',
+    filters: {},
+    geoValues: ['EST', 'EUU'],
+    decimals: 0,
+    chartVariant: 'line',
+    sourceUrl: 'https://data.worldbank.org/indicator/SP.POP.TOTL',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'population',
+    },
+  },
+  {
+    id: 'wb-gdp-current-usd',
+    title: 'GDP (current US$)',
+    description: 'Gross domestic product in current US dollars, Estonia compared with the EU aggregate.',
+    datasetCode: 'NY.GDP.MKTP.CD',
+    filters: {},
+    geoValues: ['EST', 'EUU'],
+    decimals: 0,
+    chartVariant: 'line',
+    sourceUrl: 'https://data.worldbank.org/indicator/NY.GDP.MKTP.CD',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'gross domestic product',
+    },
+  },
+  {
+    id: 'wb-gdp-per-capita',
+    title: 'GDP per capita (current US$)',
+    description: 'GDP per capita in current US dollars for Estonia and the EU aggregate.',
+    datasetCode: 'NY.GDP.PCAP.CD',
+    filters: {},
+    geoValues: ['EST', 'EUU'],
+    decimals: 0,
+    chartVariant: 'line',
+    sourceUrl: 'https://data.worldbank.org/indicator/NY.GDP.PCAP.CD',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'GDP per capita',
+    },
+  },
+  {
+    id: 'wb-unemployment',
+    title: 'Unemployment, total (% of total labor force)',
+    description: 'Modeled ILO estimate of unemployment rate for Estonia compared with the EU aggregate.',
+    datasetCode: 'SL.UEM.TOTL.ZS',
+    filters: {},
+    geoValues: ['EST', 'EUU'],
+    decimals: 1,
+    unitSuffix: '%',
+    chartVariant: 'line',
+    sourceUrl: 'https://data.worldbank.org/indicator/SL.UEM.TOTL.ZS',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'unemployment',
+    },
+  },
+  {
+    id: 'wb-inflation',
+    title: 'Inflation, consumer prices (annual %)',
+    description: 'Consumer price inflation for Estonia compared with the EU aggregate.',
+    datasetCode: 'FP.CPI.TOTL.ZG',
+    filters: {},
+    geoValues: ['EST', 'EUU'],
+    decimals: 1,
+    unitSuffix: '%',
+    chartVariant: 'line',
+    sourceUrl: 'https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'inflation',
+    },
+  },
+];
+
+export const WORLD_BANK_TOPIC_MAP = Object.fromEntries(
+  WORLD_BANK_TOPICS.map((topic) => [topic.id, topic]),
+);

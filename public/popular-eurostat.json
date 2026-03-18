@@ -1,0 +1,10 @@
+[
+  { "code": "demo_pjan", "title": "Population on 1 January" },
+  { "code": "une_rt_m", "title": "Unemployment rate" },
+  { "code": "prc_hicp_manr", "title": "Inflation (HICP annual rate)" },
+  { "code": "nama_10_pc", "title": "GDP per capita" },
+  { "code": "migr_imm1ctz", "title": "Immigration" },
+  { "code": "DEMO_FABORTORD", "title": "Induced abortions" },
+  { "code": "tipsna40", "title": "Births" },
+  { "code": "tps00182", "title": "Life expectancy" }
+]

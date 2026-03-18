@@ -1,13 +1,19 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AdminPanel } from './components/AdminPanel';
 import { ChartCard } from './components/ChartCard';
 import { EmptyState } from './components/EmptyState';
 import { StatChip } from './components/StatChip';
 import { TopicPicker } from './components/TopicPicker';
+import { THEMES, type ThemeId } from './features/dashboard/themes';
 import { TOPICS } from './features/dashboard/topicCatalog';
 import type { DashboardCard } from './features/dashboard/types';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
 const STORAGE_KEY = 'estonia-statistics-dashboard.cards';
+const DEFAULT_CHARTS_KEY = 'estonia-statistics-dashboard.defaultCharts';
+const THEME_STORAGE_KEY = 'estonia-statistics-dashboard.theme';
+
+const DEFAULT_CHART_TOPIC_IDS = ['population', 'unemployment-rate', 'inflation'];
 
 function createCard(topicId: string): DashboardCard {
   const id =
@@ -23,32 +29,118 @@ function createCard(topicId: string): DashboardCard {
 }
 
 export default function App() {
+  const basePath = import.meta.env.BASE_URL;
   const [selectedTopicId, setSelectedTopicId] = useState<string>(TOPICS[0].id);
   const [cards, setCards] = useLocalStorage<DashboardCard[]>(STORAGE_KEY, []);
+  const [defaultTopicIds, setDefaultTopicIds] = useLocalStorage<string[]>(
+    DEFAULT_CHARTS_KEY,
+    DEFAULT_CHART_TOPIC_IDS,
+  );
+  const [themeId, setThemeId] = useLocalStorage<ThemeId>(THEME_STORAGE_KEY, 'ember-noir');
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   const activeTopics = useMemo(() => new Set(cards.map((card) => card.topicId)), [cards]);
 
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeId);
+  }, [themeId]);
+
+  useEffect(() => {
+    // If the dashboard is empty, automatically load the user's default charts.
+    if (cards.length === 0 && defaultTopicIds.length > 0) {
+      setCards(defaultTopicIds.map((topicId) => createCard(topicId)));
+    }
+  }, [cards.length, defaultTopicIds, setCards]);
+
   function addCard() {
-    setCards((currentCards) => [...currentCards, createCard(selectedTopicId)]);
+    setCards((currentCards) => [createCard(selectedTopicId), ...currentCards]);
   }
 
-  function removeCard(cardId: string) {
-    setCards((currentCards) => currentCards.filter((card) => card.id !== cardId));
+  function addCardForTopicId(topicId: string) {
+    setCards((currentCards) => [createCard(topicId), ...currentCards]);
   }
+
+  function addDefaultCards() {
+    setCards((currentCards) => {
+      if (currentCards.length > 0) return currentCards;
+      return [...defaultTopicIds.map((topicId) => createCard(topicId))];
+    });
+  }
+
+  const removeCard = useCallback((cardId: string) => {
+    setCards((currentCards) => currentCards.filter((card) => card.id !== cardId));
+  }, [setCards]);
 
   function clearCards() {
     setCards([]);
   }
 
+  if (isAdminOpen) {
+    return (
+      <AdminPanel
+        defaultTopicIds={defaultTopicIds}
+        setDefaultTopicIds={setDefaultTopicIds}
+        onLoadDefaults={addDefaultCards}
+        onClearDashboard={clearCards}
+        onClose={() => setIsAdminOpen(false)}
+      />
+    );
+  }
+
   return (
-    <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
+    <div className="batcave-page min-h-screen px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
+        <section className="batcave-panel flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
+          <div className="text-xs uppercase tracking-[0.22em] text-slate-300">Interface theme</div>
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <span className="text-slate-300">Mode</span>
+            <select
+              value={themeId}
+              onChange={(event) => setThemeId(event.target.value as ThemeId)}
+              className="bat-input rounded-xl px-3 py-2 text-sm text-white outline-none"
+            >
+              {THEMES.map((theme) => (
+                <option key={theme.id} value={theme.id}>
+                  {theme.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
+              Eurostat
+            </span>
+            <a href={`${basePath}dashboard`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+              Unified
+            </a>
+            <a href={`${basePath}worldbank`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+              World Bank
+            </a>
+            <a href={`${basePath}who`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+              WHO
+            </a>
+            <a href={`${basePath}meteo`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+              Open-Meteo
+            </a>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAdminOpen(true)}
+            className="bat-btn rounded-2xl px-3 py-1 text-xs font-medium"
+          >
+            Admin
+          </button>
+        </section>
+
         <TopicPicker
           selectedTopicId={selectedTopicId}
           onSelectedTopicIdChange={setSelectedTopicId}
           onAddTopic={addCard}
+          onAddTopicById={addCardForTopicId}
           onClear={clearCards}
           chartCount={cards.length}
+          providerId="eurostat"
+          popularPath="popular-eurostat.json"
         />
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
