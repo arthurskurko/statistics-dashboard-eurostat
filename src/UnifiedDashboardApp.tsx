@@ -222,20 +222,20 @@ export default function UnifiedDashboardApp() {
             </select>
           </label>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <a href={basePath} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+          <div className="flex w-full flex-wrap items-center gap-2 text-xs sm:w-auto">
+            <a href={basePath} className="bat-btn whitespace-nowrap rounded-2xl px-3 py-1 font-medium">
               Eurostat
             </a>
-            <a href={`${basePath}worldbank`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}worldbank`} className="bat-btn whitespace-nowrap rounded-2xl px-3 py-1 font-medium">
               World Bank
             </a>
-            <a href={`${basePath}who`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}who`} className="bat-btn whitespace-nowrap rounded-2xl px-3 py-1 font-medium">
               WHO
             </a>
-            <a href={`${basePath}meteo`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+            <a href={`${basePath}meteo`} className="bat-btn whitespace-nowrap rounded-2xl px-3 py-1 font-medium">
               Open-Meteo
             </a>
-            <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
+            <span className="whitespace-nowrap rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
               Unified
             </span>
           </div>
@@ -294,7 +294,7 @@ export default function UnifiedDashboardApp() {
               const provider = PROVIDER_MAP[card.providerId];
 
               return (
-                <div key={card.id} className="relative" data-theme={provider.themeId}>
+                <div key={card.id} className="relative min-w-0" data-theme={provider.themeId}>
                   <div className="pointer-events-none absolute left-4 top-3 z-20">
                     <span className="rounded-full border border-white/20 bg-black/35 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-white backdrop-blur">
                       {provider.label}

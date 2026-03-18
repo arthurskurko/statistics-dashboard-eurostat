@@ -281,7 +281,7 @@ export function TopicPicker({
         <div className="w-full xl:max-w-3xl">
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="flex min-w-[16rem] flex-1 flex-col gap-2 text-sm text-slate-300">
+              <label className="flex min-w-0 flex-1 flex-col gap-2 text-sm text-slate-300 sm:min-w-[16rem]">
                 Topic
                 <select
                   value={selectedTopicId}
@@ -314,7 +314,7 @@ export function TopicPicker({
                   customCode={customCode}
                   onCustomCodeChange={setCustomCode}
                   suggestions={suggestions}
-                  inputWrapperClassName="relative min-w-[16rem] flex-1"
+                  inputWrapperClassName="relative min-w-0 flex-1 sm:min-w-[16rem]"
                   onSuggestionSelect={(code) => {
                     setCustomCode(code);
                     onSelectedTopicIdChange(code);

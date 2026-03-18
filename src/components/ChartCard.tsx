@@ -383,7 +383,7 @@ function ChartCardComponent({
   const showUnitSelectionHint = seriesDimension === 'unit' && selectedUnits.length === 0;
   const showUnitTooManyHint = unitSelectionTooLarge;
   return (
-    <article className="batcave-panel relative flex min-h-[30rem] flex-col rounded-3xl p-5 shadow-card backdrop-blur-xl">
+    <article className="batcave-panel relative flex min-h-[30rem] min-w-0 flex-col overflow-hidden rounded-3xl p-5 shadow-card backdrop-blur-xl">
       {typeof document !== 'undefined'
         ? createPortal(
             <MusicSettingsModal
@@ -553,19 +553,19 @@ function ChartCardComponent({
             forecastUnitLabel={forecastUnitLabel}
           />
 
-          <div className="min-h-[22rem] flex-1 rounded-3xl border border-border bg-slate-950/60 p-3">
+          <div className="min-h-[22rem] min-w-0 flex-1 overflow-hidden rounded-3xl border border-border bg-slate-950/60 p-3">
             <ReactECharts
             ref={chartRef}
             option={chartBuild.option}
             notMerge
             lazyUpdate
             autoResize
-            style={{ height: '100%', minHeight: '22rem' }}
+            style={{ width: '100%', maxWidth: '100%', height: '100%', minHeight: '22rem' }}
           />
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
-            <span>{query.data.subtitle}</span>
+            <span className="min-w-0 break-words">{query.data.subtitle}</span>
             <a href={query.data.sourceUrl} target="_blank" rel="noreferrer" className="text-sky-300 hover:text-sky-200">
               {sourceLinkLabel} ↗
             </a>

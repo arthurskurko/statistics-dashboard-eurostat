@@ -61,21 +61,21 @@ export function ProviderDashboardLayout<T extends { id: string }>({
             </select>
           </label>
 
-          <div className="flex items-center gap-2 text-xs">
-            <a href={`${basePath}dashboard`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+          <div className="flex w-full flex-wrap items-center gap-2 text-xs sm:w-auto">
+            <a href={`${basePath}dashboard`} className="bat-btn whitespace-nowrap rounded-2xl px-3 py-1 font-medium">
               Unified
             </a>
             {NAV_ITEMS.map((item) => {
               if (item.id === currentProvider) {
                 return (
-                  <span key={item.id} className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
+                  <span key={item.id} className="whitespace-nowrap rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
                     {item.label}
                   </span>
                 );
               }
 
               return (
-                <a key={item.id} href={`${basePath}${item.href}`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
+                <a key={item.id} href={`${basePath}${item.href}`} className="bat-btn whitespace-nowrap rounded-2xl px-3 py-1 font-medium">
                   {item.label}
                 </a>
               );
