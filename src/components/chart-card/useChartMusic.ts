@@ -2,6 +2,8 @@ import React from 'react';
 import type { DataSeries } from '../../features/dashboard/types';
 import { DataPointMusicPlayer, type MusicPlaybackMode } from '../../lib/datapointMusic';
 
+const VISUAL_STEP_UPDATE_MIN_INTERVAL_MS = 90;
+
 type UseChartMusicArgs = {
   cardId: string;
   providerId: string;
@@ -35,6 +37,7 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
   const [globalRecordingBusy, setGlobalRecordingBusy] = React.useState(false);
 
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
+  const lastVisualStepUpdateMsRef = React.useRef(0);
 
   React.useEffect(() => {
     let hash = 0;
@@ -49,6 +52,11 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
       step: number;
       points: Array<{ seriesLabel: string; label: string; value: number }>;
     }) => {
+      const now = performance.now();
+      if (now - lastVisualStepUpdateMsRef.current < VISUAL_STEP_UPDATE_MIN_INTERVAL_MS) {
+        return;
+      }
+      lastVisualStepUpdateMsRef.current = now;
       setCurrentMusicStep(info);
     },
     [],

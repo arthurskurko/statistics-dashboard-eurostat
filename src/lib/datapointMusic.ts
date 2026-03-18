@@ -35,6 +35,8 @@ export type MusicSettings = {
 
 const INSTRUMENTS: OscillatorType[] = ['sine', 'triangle', 'square', 'sawtooth'];
 const MAX_SIMULTANEOUS_SERIES = 6;
+const SCHEDULER_INTERVAL_MS = 25;
+const SCHEDULER_LOOKAHEAD_SEC = 0.12;
 
 const BASE_MIDI = 48; // C3
 
@@ -105,7 +107,8 @@ export class DataPointMusicPlayer {
   private convolver: ConvolverNode | null = null;
   private reverbWet: GainNode | null = null;
 
-  private timeoutId: number | null = null;
+  private schedulerId: number | null = null;
+  private nextStepTime = 0;
 
   private stepIndex = 0;
   private phaseOffset = 0;
@@ -380,36 +383,34 @@ export class DataPointMusicPlayer {
   }
 
   private startLoop(): void {
-    const baseMs = 60000 / this.settings.tempoBpm;
-    const phaseMs = (this.phaseOffset / 16) * baseMs;
+    const context = this.getAudioContext();
+    const baseSec = 60 / this.settings.tempoBpm;
+    const phaseSec = (this.phaseOffset / 16) * baseSec;
 
-    const scheduleNextTick = () => {
+    this.nextStepTime = context.currentTime + phaseSec;
+
+    const scheduleAhead = () => {
       if (!this.running) return;
 
-      const swingFactor = 1 + (this.stepIndex % 2 === 1 ? this.settings.swing : -this.settings.swing);
-      const delayMs = baseMs * swingFactor;
+      const scheduleUntil = context.currentTime + SCHEDULER_LOOKAHEAD_SEC;
+      while (this.nextStepTime <= scheduleUntil) {
+        const step = this.stepIndex;
+        this.playStep(step, this.nextStepTime);
 
-      this.timeoutId = window.setTimeout(() => {
-        if (!this.running) return;
-        this.playStep(this.stepIndex);
+        const swingFactor = 1 + (step % 2 === 1 ? this.settings.swing : -this.settings.swing);
+        this.nextStepTime += baseSec * swingFactor;
         this.stepIndex += 1;
-        scheduleNextTick();
-      }, delayMs);
+      }
     };
 
-    // Apply initial phase offset as a delay before the first tick.
-    this.timeoutId = window.setTimeout(() => {
-      if (!this.running) return;
-      this.playStep(this.stepIndex);
-      this.stepIndex += 1;
-      scheduleNextTick();
-    }, phaseMs);
+    scheduleAhead();
+    this.schedulerId = window.setInterval(scheduleAhead, SCHEDULER_INTERVAL_MS);
   }
 
   private stopLoop(): void {
-    if (this.timeoutId !== null) {
-      window.clearTimeout(this.timeoutId);
-      this.timeoutId = null;
+    if (this.schedulerId !== null) {
+      window.clearInterval(this.schedulerId);
+      this.schedulerId = null;
     }
   }
 
@@ -451,6 +452,8 @@ export class DataPointMusicPlayer {
     // Connect delay and reverb to master
     this.delayWet.connect(this.masterGain);
     this.reverbWet.connect(this.masterGain);
+    this.delayNode.connect(this.delayWet);
+    this.convolver.connect(this.reverbWet);
 
     // Dry signal directly to master
     this.dryGain = context.createGain();
@@ -576,11 +579,11 @@ export class DataPointMusicPlayer {
     this.emitGlobalRecordingChange();
   }
 
-  private playStep(step: number): void {
+  private playStep(step: number, atTime: number): void {
     if (!this.running || this.preparedSeries.length === 0) return;
 
     const context = this.getAudioContext();
-    const now = context.currentTime;
+    const now = atTime;
     const stepMs = 60000 / this.settings.tempoBpm;
     const duration = Math.max(0.12, stepMs / 1000 - 0.08);
 
@@ -635,19 +638,12 @@ export class DataPointMusicPlayer {
       gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
       if (this.dryGain && this.delayNode && this.delayFeedback && this.delayWet && this.convolver && this.reverbWet) {
-        // ensure effect settings updated
-        this.updateEffectSettings();
-
         oscillator.connect(gain);
         gain.connect(this.dryGain);
 
-        // Delay path
+        // Delay and reverb are preconnected once in ensureEffectNodes.
         gain.connect(this.delayNode);
-        this.delayNode.connect(this.delayWet);
-
-        // Reverb path
         gain.connect(this.convolver);
-        this.convolver.connect(this.reverbWet);
       } else {
         oscillator.connect(gain);
         gain.connect(context.destination);
