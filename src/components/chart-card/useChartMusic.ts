@@ -10,7 +10,7 @@ type UseChartMusicArgs = {
   filteredSeries: DataSeries[];
 };
 
-export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMusicArgs) {
+export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs) {
   const [musicPlaying, setMusicPlaying] = React.useState(false);
   const [currentMusicStep, setCurrentMusicStep] = React.useState<
     | {
@@ -26,7 +26,7 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
   const [musicOctaveShift, setMusicOctaveShift] = React.useState(0);
   const [musicInstrument, setMusicInstrument] = React.useState<OscillatorType | 'auto'>('auto');
   const [musicArpeggiate, setMusicArpeggiate] = React.useState(false);
-  const [musicSwing, setMusicSwing] = React.useState(0.08);
+  const [musicSwing, setMusicSwing] = React.useState(0);
   const [musicDelayTime, setMusicDelayTime] = React.useState(0.18);
   const [musicDelayFeedback, setMusicDelayFeedback] = React.useState(0.35);
   const [musicReverbWet, setMusicReverbWet] = React.useState(0.18);
@@ -38,14 +38,6 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
 
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
   const lastVisualStepUpdateMsRef = React.useRef(0);
-
-  React.useEffect(() => {
-    let hash = 0;
-    for (let index = 0; index < cardId.length; index += 1) {
-      hash = (hash * 31 + cardId.charCodeAt(index)) >>> 0;
-    }
-    setMusicPhaseOffset(hash % 16);
-  }, [cardId]);
 
   const handleMusicStep = React.useCallback(
     (info: {
