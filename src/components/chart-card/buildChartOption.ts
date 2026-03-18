@@ -311,12 +311,15 @@ export function buildChartOption({
       // Convert point lookup from O(n) find-per-label to O(1) map lookup.
       // This significantly reduces render cost when many series are shown.
       const pointValueByLabel = new Map(baseSeries.points.map((point) => [point.label, point.value]));
+      const hasSinglePoint = baseSeries.points.length <= 1;
 
       return {
         name: `${baseSeries.label}${filterSuffix}`,
         type: topic.chartVariant ?? 'line',
         smooth: !useLightweightRendering,
-        showSymbol: false,
+        // With exactly one observation there is no line segment; keep a marker visible.
+        showSymbol: hasSinglePoint,
+        symbolSize: hasSinglePoint ? 9 : 6,
         emphasis: { focus: 'series' },
         areaStyle: !useLightweightRendering && !isForecast ? { opacity: 0.12 } : undefined,
         yAxisIndex,
