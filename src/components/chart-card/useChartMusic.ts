@@ -1,6 +1,6 @@
 import React from 'react';
 import type { DataSeries } from '../../features/dashboard/types';
-import { DataPointMusicPlayer } from '../../lib/datapointMusic';
+import { DataPointMusicPlayer, type MusicPlaybackMode } from '../../lib/datapointMusic';
 
 type UseChartMusicArgs = {
   cardId: string;
@@ -19,6 +19,7 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
   >(null);
   const [musicModalOpen, setMusicModalOpen] = React.useState(false);
   const [musicTempo, setMusicTempo] = React.useState(120);
+  const [musicPlaybackMode, setMusicPlaybackMode] = React.useState<MusicPlaybackMode>('points');
   const [musicScale, setMusicScale] = React.useState<'major' | 'minor' | 'pentatonic' | 'chromatic'>('major');
   const [musicOctaveShift, setMusicOctaveShift] = React.useState(0);
   const [musicInstrument, setMusicInstrument] = React.useState<OscillatorType | 'auto'>('auto');
@@ -57,6 +58,7 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
     if (!musicPlayerRef.current) {
       musicPlayerRef.current = new DataPointMusicPlayer(filteredSeries, {
         tempoBpm: musicTempo,
+        playbackMode: musicPlaybackMode,
         scale: musicScale,
         octaveShift: musicOctaveShift,
         instrumentOverride: musicInstrument,
@@ -76,6 +78,7 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
     musicPlayerRef.current.setStepCallback(handleMusicStep);
     musicPlayerRef.current.setSeries(filteredSeries);
     musicPlayerRef.current.setTempo(musicTempo);
+    musicPlayerRef.current.setPlaybackMode(musicPlaybackMode);
     musicPlayerRef.current.setSwing(musicSwing);
     musicPlayerRef.current.setScale(musicScale);
     musicPlayerRef.current.setOctaveShift(musicOctaveShift);
@@ -95,6 +98,7 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
     filteredSeries,
     musicPlaying,
     musicTempo,
+    musicPlaybackMode,
     musicSwing,
     musicScale,
     musicOctaveShift,
@@ -183,6 +187,8 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
     setMusicModalOpen,
     musicTempo,
     setMusicTempo,
+    musicPlaybackMode,
+    setMusicPlaybackMode,
     musicScale,
     setMusicScale,
     musicOctaveShift,

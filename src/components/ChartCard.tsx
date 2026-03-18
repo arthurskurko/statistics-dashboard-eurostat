@@ -296,6 +296,8 @@ function ChartCardComponent({
     setMusicModalOpen,
     musicTempo,
     setMusicTempo,
+    musicPlaybackMode,
+    setMusicPlaybackMode,
     musicScale,
     setMusicScale,
     musicOctaveShift,
@@ -387,6 +389,8 @@ function ChartCardComponent({
               onClose={() => setMusicModalOpen(false)}
               musicTempo={musicTempo}
               setMusicTempo={setMusicTempo}
+              musicPlaybackMode={musicPlaybackMode}
+              setMusicPlaybackMode={setMusicPlaybackMode}
               musicVolume={musicVolume}
               setMusicVolume={setMusicVolume}
               musicSwing={musicSwing}

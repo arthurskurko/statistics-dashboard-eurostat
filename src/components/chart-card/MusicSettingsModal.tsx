@@ -1,8 +1,12 @@
+import type { MusicPlaybackMode } from '../../lib/datapointMusic';
+
 type MusicSettingsModalProps = {
   open: boolean;
   onClose: () => void;
   musicTempo: number;
   setMusicTempo: (value: number) => void;
+  musicPlaybackMode: MusicPlaybackMode;
+  setMusicPlaybackMode: (value: MusicPlaybackMode) => void;
   musicVolume: number;
   setMusicVolume: (value: number) => void;
   musicSwing: number;
@@ -36,6 +40,8 @@ export function MusicSettingsModal({
   onClose,
   musicTempo,
   setMusicTempo,
+  musicPlaybackMode,
+  setMusicPlaybackMode,
   musicVolume,
   setMusicVolume,
   musicSwing,
@@ -96,6 +102,18 @@ export function MusicSettingsModal({
               />
               <span className="w-14 text-right text-xs text-slate-200">{musicTempo} bpm</span>
             </div>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="font-medium text-slate-100">Playback mode</span>
+            <select
+              value={musicPlaybackMode}
+              onChange={(event) => setMusicPlaybackMode(event.target.value as MusicPlaybackMode)}
+              className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
+            >
+              <option value="points">Points (one note per datapoint)</option>
+              <option value="line">Line-follow (glide to next datapoint)</option>
+            </select>
           </label>
 
           <label className="grid gap-2">

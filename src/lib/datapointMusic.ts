@@ -9,9 +9,11 @@ type PreparedSeries = {
 };
 
 export type MusicScale = 'chromatic' | 'major' | 'minor' | 'pentatonic';
+export type MusicPlaybackMode = 'points' | 'line';
 
 export type MusicSettings = {
   tempoBpm: number;
+  playbackMode: MusicPlaybackMode;
   scale: MusicScale;
   octaveShift: number;
   instrumentOverride: OscillatorType | 'auto';
@@ -115,6 +117,7 @@ export class DataPointMusicPlayer {
 
   private settings: MusicSettings = {
     tempoBpm: 120,
+    playbackMode: 'points',
     scale: 'major',
     octaveShift: 0,
     instrumentOverride: 'auto',
@@ -260,6 +263,10 @@ export class DataPointMusicPlayer {
 
   setScale(scale: MusicScale): void {
     this.settings.scale = scale;
+  }
+
+  setPlaybackMode(mode: MusicPlaybackMode): void {
+    this.settings.playbackMode = mode;
   }
 
   setOctaveShift(shift: number): void {
@@ -603,15 +610,28 @@ export class DataPointMusicPlayer {
       const midi = BASE_MIDI + octaveOffset + degree + spreadSemitones;
       const frequency = midiToFrequency(midi);
 
+      const nextPoint = entry.points[(step + 1) % entry.points.length];
+      const nextNormalized = normalizeValue(nextPoint.value, entry.min, entry.max);
+      const nextDegree = scale[Math.floor(nextNormalized * (scale.length - 1))];
+      const nextMidi = BASE_MIDI + octaveOffset + nextDegree + spreadSemitones;
+      const nextFrequency = midiToFrequency(nextMidi);
+
       const oscillator = context.createOscillator();
       const gain = context.createGain();
 
       oscillator.type = entry.waveform;
       oscillator.frequency.setValueAtTime(frequency, now);
+      if (this.settings.playbackMode === 'line') {
+        oscillator.frequency.linearRampToValueAtTime(nextFrequency, now + duration);
+      }
 
       const baseGain = 0.25 + index * 0.06;
       gain.gain.setValueAtTime(0.0001, now);
       gain.gain.exponentialRampToValueAtTime(baseGain, now + 0.012);
+      if (this.settings.playbackMode === 'line') {
+        const sustainUntil = Math.max(now + 0.02, now + duration - 0.03);
+        gain.gain.setValueAtTime(baseGain, sustainUntil);
+      }
       gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
       if (this.dryGain && this.delayNode && this.delayFeedback && this.delayWet && this.convolver && this.reverbWet) {
@@ -641,7 +661,6 @@ export class DataPointMusicPlayer {
       this.settings.onStep({ step, points: playedPoints });
     }
 
-    this.stepIndex += 1;
   }
 }
 
