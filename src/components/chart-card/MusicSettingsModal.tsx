@@ -5,6 +5,8 @@ type MusicSettingsModalProps = {
   onClose: () => void;
   musicTempo: number;
   setMusicTempo: (value: number) => void;
+  globalTempoSyncEnabled: boolean;
+  setGlobalTempoSyncEnabled: (value: boolean) => void;
   musicPlaybackMode: MusicPlaybackMode;
   setMusicPlaybackMode: (value: MusicPlaybackMode) => void;
   musicVolume: number;
@@ -40,6 +42,8 @@ export function MusicSettingsModal({
   onClose,
   musicTempo,
   setMusicTempo,
+  globalTempoSyncEnabled,
+  setGlobalTempoSyncEnabled,
   musicPlaybackMode,
   setMusicPlaybackMode,
   musicVolume,
@@ -103,6 +107,14 @@ export function MusicSettingsModal({
               <span className="w-14 text-right text-xs text-slate-200">{musicTempo} bpm</span>
             </div>
           </label>
+
+          <button
+            type="button"
+            onClick={() => setGlobalTempoSyncEnabled(!globalTempoSyncEnabled)}
+            className="bat-btn w-full rounded-2xl px-3 py-2 text-xs font-medium"
+          >
+            {globalTempoSyncEnabled ? 'Global tempo sync: on' : 'Global tempo sync: off'}
+          </button>
 
           <label className="grid gap-2">
             <span className="font-medium text-slate-100">Playback mode</span>

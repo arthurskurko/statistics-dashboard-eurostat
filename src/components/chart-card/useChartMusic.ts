@@ -3,6 +3,11 @@ import type { DataSeries } from '../../features/dashboard/types';
 import { DataPointMusicPlayer, type MusicPlaybackMode } from '../../lib/datapointMusic';
 
 const VISUAL_STEP_UPDATE_MIN_INTERVAL_MS = 90;
+const GLOBAL_TEMPO_SYNC_EVENT = 'datapoint-music-tempo-sync-change';
+const GLOBAL_TEMPO_EVENT = 'datapoint-music-tempo-change';
+
+let globalTempoSyncEnabledState = false;
+let globalTempoBpmState = 120;
 
 type UseChartMusicArgs = {
   cardId: string;
@@ -20,7 +25,8 @@ export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs)
     | null
   >(null);
   const [musicModalOpen, setMusicModalOpen] = React.useState(false);
-  const [musicTempo, setMusicTempo] = React.useState(120);
+  const [musicTempo, setMusicTempoState] = React.useState(globalTempoBpmState);
+  const [globalTempoSyncEnabled, setGlobalTempoSyncEnabledState] = React.useState(globalTempoSyncEnabledState);
   const [musicPlaybackMode, setMusicPlaybackMode] = React.useState<MusicPlaybackMode>('points');
   const [musicScale, setMusicScale] = React.useState<'major' | 'minor' | 'pentatonic' | 'chromatic'>('major');
   const [musicOctaveShift, setMusicOctaveShift] = React.useState(0);
@@ -39,6 +45,49 @@ export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs)
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
   const lastVisualStepUpdateMsRef = React.useRef(0);
 
+  const setMusicTempo = React.useCallback(
+    (value: number) => {
+      const nextTempo = Math.max(30, Math.min(240, Math.round(value)));
+
+      if (globalTempoSyncEnabled) {
+        globalTempoBpmState = nextTempo;
+        setMusicTempoState(nextTempo);
+        window.dispatchEvent(
+          new CustomEvent(GLOBAL_TEMPO_EVENT, {
+            detail: { tempoBpm: nextTempo },
+          }),
+        );
+        return;
+      }
+
+      setMusicTempoState(nextTempo);
+    },
+    [globalTempoSyncEnabled],
+  );
+
+  const setGlobalTempoSyncEnabled = React.useCallback(
+    (enabled: boolean) => {
+      globalTempoSyncEnabledState = enabled;
+      setGlobalTempoSyncEnabledState(enabled);
+
+      if (enabled) {
+        globalTempoBpmState = musicTempo;
+        window.dispatchEvent(
+          new CustomEvent(GLOBAL_TEMPO_EVENT, {
+            detail: { tempoBpm: globalTempoBpmState },
+          }),
+        );
+      }
+
+      window.dispatchEvent(
+        new CustomEvent(GLOBAL_TEMPO_SYNC_EVENT, {
+          detail: { enabled, tempoBpm: globalTempoBpmState },
+        }),
+      );
+    },
+    [musicTempo],
+  );
+
   const handleMusicStep = React.useCallback(
     (info: {
       step: number;
@@ -53,6 +102,43 @@ export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs)
     },
     [],
   );
+
+  React.useEffect(() => {
+    const syncTempo = (event: Event) => {
+      const detail = (event as CustomEvent<{ tempoBpm?: number }>).detail;
+      if (!detail || typeof detail.tempoBpm !== 'number') return;
+
+      const nextTempo = Math.max(30, Math.min(240, Math.round(detail.tempoBpm)));
+      globalTempoBpmState = nextTempo;
+      setMusicTempoState(nextTempo);
+    };
+
+    const syncToggle = (event: Event) => {
+      const detail = (event as CustomEvent<{ enabled?: boolean; tempoBpm?: number }>).detail;
+      if (!detail || typeof detail.enabled !== 'boolean') return;
+
+      globalTempoSyncEnabledState = detail.enabled;
+      setGlobalTempoSyncEnabledState(detail.enabled);
+
+      if (detail.enabled && typeof detail.tempoBpm === 'number') {
+        const nextTempo = Math.max(30, Math.min(240, Math.round(detail.tempoBpm)));
+        globalTempoBpmState = nextTempo;
+        setMusicTempoState(nextTempo);
+      }
+    };
+
+    window.addEventListener(GLOBAL_TEMPO_EVENT, syncTempo);
+    window.addEventListener(GLOBAL_TEMPO_SYNC_EVENT, syncToggle);
+    return () => {
+      window.removeEventListener(GLOBAL_TEMPO_EVENT, syncTempo);
+      window.removeEventListener(GLOBAL_TEMPO_SYNC_EVENT, syncToggle);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!globalTempoSyncEnabled) return;
+    setMusicTempoState(globalTempoBpmState);
+  }, [globalTempoSyncEnabled]);
 
   React.useEffect(() => {
     if (!musicPlayerRef.current) {
@@ -187,6 +273,8 @@ export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs)
     setMusicModalOpen,
     musicTempo,
     setMusicTempo,
+    globalTempoSyncEnabled,
+    setGlobalTempoSyncEnabled,
     musicPlaybackMode,
     setMusicPlaybackMode,
     musicScale,

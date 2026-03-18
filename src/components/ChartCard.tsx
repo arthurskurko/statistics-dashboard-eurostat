@@ -296,6 +296,8 @@ function ChartCardComponent({
     setMusicModalOpen,
     musicTempo,
     setMusicTempo,
+    globalTempoSyncEnabled,
+    setGlobalTempoSyncEnabled,
     musicPlaybackMode,
     setMusicPlaybackMode,
     musicScale,
@@ -389,6 +391,8 @@ function ChartCardComponent({
               onClose={() => setMusicModalOpen(false)}
               musicTempo={musicTempo}
               setMusicTempo={setMusicTempo}
+              globalTempoSyncEnabled={globalTempoSyncEnabled}
+              setGlobalTempoSyncEnabled={setGlobalTempoSyncEnabled}
               musicPlaybackMode={musicPlaybackMode}
               setMusicPlaybackMode={setMusicPlaybackMode}
               musicVolume={musicVolume}

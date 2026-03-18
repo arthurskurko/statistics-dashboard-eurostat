@@ -2,7 +2,7 @@
   "target": "local",
   "baseByTarget": {
     "local": "/",
-    "test": "/statistics-test/",
+    "test": "/statistics/",
     "prod": "/statistics-full/"
   }
 }
