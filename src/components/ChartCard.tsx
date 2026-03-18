@@ -289,50 +289,9 @@ function ChartCardComponent({
       );
   }, [availableDimensions, dimensionFilters, query.data]);
 
-  const chartBuild = useMemo(() => {
-    if (!filteredTopicData || filteredTopicData.series.length === 0) {
-      return { option: undefined, error: null as string | null };
-    }
-
-    try {
-      return {
-        option: buildChartOption({
-          topic,
-            data: filteredTopicData,
-            effectiveSeries: filteredSeries,
-          baseSeries,
-          largeSeries,
-          dualAxis,
-          showDualAxisButton,
-          activeFilterLabels,
-          compactMobileLayout,
-        }),
-        error: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error('Chart option build failed:', error);
-      return { option: undefined, error: message };
-    }
-  }, [
-    activeFilterLabels,
-    baseSeries,
-    dualAxis,
-    filteredSeries,
-    filteredTopicData,
-    largeSeries,
-    showDualAxisButton,
-    topic,
-    compactMobileLayout,
-  ]);
-
-  const latestValues = useMemo(
-    () => computeLatestValues(filteredSeries, activeFilterLabels),
-    [activeFilterLabels, filteredSeries],
-  );
-
   const {
     musicPlaying,
+    currentMusicStep,
     musicModalOpen,
     setMusicModalOpen,
     musicTempo,
@@ -369,6 +328,50 @@ function ChartCardComponent({
     providerId,
     filteredSeries,
   });
+
+  const chartBuild = useMemo(() => {
+    if (!filteredTopicData || filteredTopicData.series.length === 0) {
+      return { option: undefined, error: null as string | null };
+    }
+
+    try {
+      return {
+        option: buildChartOption({
+          topic,
+            data: filteredTopicData,
+            effectiveSeries: filteredSeries,
+          baseSeries,
+          largeSeries,
+          dualAxis,
+          showDualAxisButton,
+          activeFilterLabels,
+          compactMobileLayout,
+          currentMusicStep,
+        }),
+        error: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Chart option build failed:', error);
+      return { option: undefined, error: message };
+    }
+  }, [
+    activeFilterLabels,
+    baseSeries,
+    compactMobileLayout,
+    currentMusicStep,
+    dualAxis,
+    filteredSeries,
+    filteredTopicData,
+    largeSeries,
+    showDualAxisButton,
+    topic,
+  ]);
+
+  const latestValues = useMemo(
+    () => computeLatestValues(filteredSeries, activeFilterLabels),
+    [activeFilterLabels, filteredSeries],
+  );
 
   const displayTitle = query.data?.title ?? topic.title;
   const displayDescription = query.data?.subtitle ?? topic.description;

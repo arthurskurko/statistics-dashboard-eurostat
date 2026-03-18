@@ -1,7 +1,8 @@
 import type { DataSeries } from '../features/dashboard/types';
 
 type PreparedSeries = {
-  points: number[];
+  label: string;
+  points: Array<{ label: string; value: number }>;
   min: number;
   max: number;
   waveform: OscillatorType;
@@ -23,6 +24,11 @@ export type MusicSettings = {
   reverbWet: number; // 0–1
   reverbDecay: number; // seconds
   volume: number; // 0–1
+  /** Called on each played step. */
+  onStep?: (info: {
+    step: number;
+    points: Array<{ seriesLabel: string; label: string; value: number }>;
+  }) => void;
 };
 
 const INSTRUMENTS: OscillatorType[] = ['sine', 'triangle', 'square', 'sawtooth'];
@@ -67,15 +73,15 @@ function buildPreparedSeries(series: DataSeries[], settings: MusicSettings): Pre
     .filter((entry) => !entry.label.includes('(forecast)') && entry.points.length > 0)
     .slice(0, MAX_SIMULTANEOUS_SERIES)
     .map((entry) => {
-      const points = entry.points.map((point) => point.value);
-      const min = Math.min(...points);
-      const max = Math.max(...points);
+      const points = entry.points.map((point) => ({ label: point.label, value: point.value }));
+      const min = Math.min(...points.map((p) => p.value));
+      const max = Math.max(...points.map((p) => p.value));
       const instrumentKey = extractInstrumentKey(entry.label);
       const waveform = instrumentOverride
         ? (settings.instrumentOverride as OscillatorType)
         : INSTRUMENTS[hashString(instrumentKey) % INSTRUMENTS.length];
 
-      return { points, min, max, waveform };
+      return { label: entry.label, points, min, max, waveform };
     });
 }
 
@@ -303,6 +309,10 @@ export class DataPointMusicPlayer {
 
   setArpeggiate(arpeggiate: boolean): void {
     this.settings.arpeggiate = arpeggiate;
+  }
+
+  setStepCallback(callback?: (info: { step: number; points: Array<{ seriesLabel: string; label: string; value: number }> }) => void): void {
+    this.settings.onStep = callback;
   }
 
   getSettings(): MusicSettings {
@@ -573,10 +583,16 @@ export class DataPointMusicPlayer {
 
     const spreadMultiplier = this.settings.spread;
 
+    const playedPoints: Array<{ seriesLabel: string; label: string; value: number }> = [];
+
     seriesToPlay.forEach((entry, index) => {
       if (entry.points.length === 0) return;
 
-      const value = entry.points[step % entry.points.length];
+      const point = entry.points[step % entry.points.length];
+      const value = point.value;
+      const label = point.label;
+      playedPoints.push({ seriesLabel: entry.label, label, value });
+
       const normalized = normalizeValue(value, entry.min, entry.max);
 
       const scale = SCALE_DEGREES[this.settings.scale];
@@ -620,6 +636,10 @@ export class DataPointMusicPlayer {
       oscillator.start(now);
       oscillator.stop(now + duration + 0.02);
     });
+
+    if (this.settings.onStep) {
+      this.settings.onStep({ step, points: playedPoints });
+    }
 
     this.stepIndex += 1;
   }

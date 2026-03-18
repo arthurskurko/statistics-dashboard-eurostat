@@ -10,6 +10,13 @@ type UseChartMusicArgs = {
 
 export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMusicArgs) {
   const [musicPlaying, setMusicPlaying] = React.useState(false);
+  const [currentMusicStep, setCurrentMusicStep] = React.useState<
+    | {
+        step: number;
+        points: Array<{ seriesLabel: string; label: string; value: number }>;
+      }
+    | null
+  >(null);
   const [musicModalOpen, setMusicModalOpen] = React.useState(false);
   const [musicTempo, setMusicTempo] = React.useState(120);
   const [musicScale, setMusicScale] = React.useState<'major' | 'minor' | 'pentatonic' | 'chromatic'>('major');
@@ -36,6 +43,16 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
     setMusicPhaseOffset(hash % 16);
   }, [cardId]);
 
+  const handleMusicStep = React.useCallback(
+    (info: {
+      step: number;
+      points: Array<{ seriesLabel: string; label: string; value: number }>;
+    }) => {
+      setCurrentMusicStep(info);
+    },
+    [],
+  );
+
   React.useEffect(() => {
     if (!musicPlayerRef.current) {
       musicPlayerRef.current = new DataPointMusicPlayer(filteredSeries, {
@@ -50,11 +67,13 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
         reverbWet: musicReverbWet,
         reverbDecay: musicReverbDecay,
         volume: musicVolume,
+        onStep: handleMusicStep,
       });
       musicPlayerRef.current.setPhaseOffset(musicPhaseOffset);
       return;
     }
 
+    musicPlayerRef.current.setStepCallback(handleMusicStep);
     musicPlayerRef.current.setSeries(filteredSeries);
     musicPlayerRef.current.setTempo(musicTempo);
     musicPlayerRef.current.setSwing(musicSwing);
@@ -87,6 +106,7 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
     musicReverbDecay,
     musicVolume,
     musicPhaseOffset,
+    handleMusicStep,
   ]);
 
   React.useEffect(
@@ -145,7 +165,10 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
       await player.unlockAudio();
       const playing = await player.toggle();
       setMusicPlaying(playing);
-      if (!playing) setMusicModalOpen(false);
+      if (!playing) {
+        setMusicModalOpen(false);
+        setCurrentMusicStep(null);
+      }
     } catch (error) {
       console.error('Could not start data music:', error);
       setMusicPlaying(false);
@@ -155,6 +178,7 @@ export function useChartMusic({ cardId, providerId, filteredSeries }: UseChartMu
   return {
     musicPlayerRef,
     musicPlaying,
+    currentMusicStep,
     musicModalOpen,
     setMusicModalOpen,
     musicTempo,
