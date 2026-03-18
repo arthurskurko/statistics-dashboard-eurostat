@@ -79,11 +79,11 @@ export default function WhoApp() {
           chartCount={cards.length}
           providerId="who"
           topics={WHO_TOPICS}
-          catalogPath="who-catalog.json"
+          catalogPath="popular-who.json"
           popularPath="popular-who.json"
           badgeText="WHO dashboard builder"
           titleText="WHO indicators dashboard"
-          descriptionText="Search WHO GHO OData indicator codes and compare Estonia with Europe or other selected geographies."
+          descriptionText="WHO data in this deployment is served from offline snapshots generated during build time. Search WHO GHO OData indicator codes and compare Estonia with Europe or other selected geographies."
         />
       }
       stats={[

@@ -10,6 +10,7 @@
     "generate-forecasts": "python scripts/generate_forecasts.py",
     "generate-catalog": "node scripts/generate_catalog.cjs",
     "generate-who-catalog": "node scripts/generate_who_catalog.cjs",
+    "generate-who-snapshots": "node scripts/generate_who_snapshots.cjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

@@ -1,5 +1,5 @@
 {
-  "target": "local",
+  "target": "test",
   "baseByTarget": {
     "local": "/",
     "test": "/statistics/",

@@ -31,21 +31,150 @@ type WhoDataRow = {
   Dim3?: string | null;
 };
 
-const WHO_PROXY_BASE = '/api/who/api';
+type WhoSnapshotIndex = {
+  generatedAt?: string;
+  countries?: Array<{ code: string; label: string }>;
+  indicators?: Array<{ code: string; title: string; rowCount?: number }>;
+};
+
+type WhoSnapshotData = {
+  code: string;
+  title?: string;
+  rows: WhoDataRow[];
+};
+
 const WHO_REMOTE_BASE = 'https://ghoapi.azureedge.net/api';
 const WHO_COUNTRIES_STORAGE_KEY = 'who-countries-cache.v1';
+const WHO_PROXY_ROOTS = resolveWhoProxyRoots();
+const WHO_MODE = (import.meta.env.VITE_WHO_MODE ?? 'auto').toLowerCase();
+const WHO_SNAPSHOT_BASE = `${import.meta.env.BASE_URL}who-snapshots`;
+
+let whoSnapshotIndexPromise: Promise<WhoSnapshotIndex | null> | null = null;
+const whoSnapshotDataPromises = new Map<string, Promise<WhoSnapshotData | null>>();
+
+type WhoFetchMode = 'direct' | 'proxy';
+
+function shouldTrySnapshots(): boolean {
+  return WHO_MODE === 'auto' || WHO_MODE === 'snapshot';
+}
+
+function isSnapshotOnlyMode(): boolean {
+  return WHO_MODE === 'snapshot';
+}
+
+function normalizeSnapshotCountries(input: unknown): Array<{ code: string; label: string }> {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((entry) => {
+      const code = typeof (entry as { code?: unknown }).code === 'string' ? (entry as { code: string }).code : '';
+      const label = typeof (entry as { label?: unknown }).label === 'string' ? (entry as { label: string }).label : '';
+      return { code: code.toUpperCase().trim(), label: label.trim() };
+    })
+    .filter((entry) => entry.code && entry.label)
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+async function fetchWhoSnapshotIndex(): Promise<WhoSnapshotIndex | null> {
+  if (whoSnapshotIndexPromise) return whoSnapshotIndexPromise;
+
+  const indexUrl = `${WHO_SNAPSHOT_BASE}/index.json`;
+  whoSnapshotIndexPromise = (async () => {
+    try {
+      const response = await fetch(indexUrl);
+      if (!response.ok) return null;
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.toLowerCase().includes('application/json')) return null;
+
+      const payload = (await response.json()) as WhoSnapshotIndex;
+      return payload;
+    } catch {
+      return null;
+    }
+  })();
+
+  return whoSnapshotIndexPromise;
+}
+
+async function fetchWhoSnapshotData(indicatorCode: string): Promise<WhoSnapshotData | null> {
+  const cacheKey = indicatorCode.toUpperCase();
+  const existing = whoSnapshotDataPromises.get(cacheKey);
+  if (existing) return existing;
+
+  const dataUrl = `${WHO_SNAPSHOT_BASE}/${encodeURIComponent(indicatorCode)}.json`;
+  const promise = (async () => {
+    try {
+      const response = await fetch(dataUrl);
+      if (!response.ok) return null;
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.toLowerCase().includes('application/json')) return null;
+
+      const payload = (await response.json()) as Partial<WhoSnapshotData>;
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      return {
+        code: payload.code ?? indicatorCode,
+        title: payload.title,
+        rows,
+      };
+    } catch {
+      return null;
+    }
+  })();
+
+  whoSnapshotDataPromises.set(cacheKey, promise);
+  return promise;
+}
+
+function normalizeProxyRoot(path: string): string {
+  const withLeadingSlash = path.startsWith('/') ? path : `/${path}`;
+  return withLeadingSlash.replace(/\/+$/, '');
+}
+
+function resolveWhoProxyRoots(): string[] {
+  const configured = (import.meta.env.VITE_WHO_PROXY_ROOTS as string | undefined)
+    ?.split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+  const basePath = import.meta.env.BASE_URL?.replace(/\/$/, '') ?? '';
+  const defaults: string[] = [];
+
+  if (basePath && basePath !== '/') {
+    defaults.push(`${basePath}/api/who`);
+    // Some deployments expose WHO through `${base}/api/*` without a `/who` segment.
+    defaults.push(basePath);
+  } else {
+    defaults.push('/api/who');
+  }
+
+  const deduped = new Set<string>();
+  for (const root of [...(configured ?? []), ...defaults]) {
+    deduped.add(normalizeProxyRoot(root));
+  }
+
+  return [...deduped];
+}
 
 function createWhoUrl(path: string): URL {
   return new URL(path, window.location.origin);
 }
 
-function toProxiedWhoUrl(url: string): string {
+function toProxiedWhoUrl(url: string, proxyRoot: string): string {
   if (url.startsWith(WHO_REMOTE_BASE)) {
-    return `${WHO_PROXY_BASE}${url.slice(WHO_REMOTE_BASE.length)}`;
+    return `${proxyRoot}/api${url.slice(WHO_REMOTE_BASE.length)}`;
   }
 
   if (url.startsWith('/api/')) {
-    return `/api/who${url}`;
+    return `${proxyRoot}${url}`;
+  }
+
+  return url;
+}
+
+function toDirectWhoUrl(url: string): string {
+  if (url.startsWith('/api/')) {
+    return `${WHO_REMOTE_BASE}${url.slice('/api'.length)}`;
   }
 
   return url;
@@ -72,21 +201,106 @@ function computeForecast(points: DataPoint[], horizon: number): number[] {
 }
 
 async function fetchWhoAllPages<T>(url: URL): Promise<T[]> {
-  let nextUrl: string | null = url.toString();
-  const rows: T[] = [];
+  const modeSequence: WhoFetchMode[] =
+    WHO_MODE === 'direct' ? ['direct'] : WHO_MODE === 'proxy' ? ['proxy'] : ['direct', 'proxy'];
 
-  while (nextUrl) {
-    const response = await fetch(toProxiedWhoUrl(nextUrl));
-    if (!response.ok) {
-      throw new Error(`WHO request failed with status ${response.status}.`);
+  let lastError: Error | null = null;
+
+  for (const mode of modeSequence) {
+    if (mode === 'direct') {
+      let nextUrl: string | null = url.toString();
+      const rows: T[] = [];
+
+      try {
+        while (nextUrl) {
+          const requestUrl = toDirectWhoUrl(nextUrl);
+          const response = await fetch(requestUrl);
+          if (!response.ok) {
+            throw new Error(`WHO direct request failed with status ${response.status} for ${requestUrl}.`);
+          }
+
+          const contentType = response.headers.get('content-type') ?? '';
+          if (!contentType.toLowerCase().includes('application/json')) {
+            const bodyPreview = (await response.text()).slice(0, 120);
+            throw new Error(
+              `WHO direct request returned non-JSON content (${contentType || 'unknown'}) for ${requestUrl}. Body starts with: ${bodyPreview}`,
+            );
+          }
+
+          let payload: WhoApiResponse<T>;
+          try {
+            payload = (await response.json()) as WhoApiResponse<T>;
+          } catch {
+            throw new Error(`WHO direct response could not be parsed as JSON for ${requestUrl}.`);
+          }
+
+          rows.push(...(payload.value ?? []));
+          nextUrl = payload['@odata.nextLink'] ? toDirectWhoUrl(payload['@odata.nextLink']) : null;
+        }
+
+        return rows;
+      } catch (error) {
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        lastError = normalizedError;
+
+        if (WHO_MODE === 'direct') {
+          throw normalizedError;
+        }
+
+        continue;
+      }
     }
 
-    const payload = (await response.json()) as WhoApiResponse<T>;
-    rows.push(...(payload.value ?? []));
-    nextUrl = payload['@odata.nextLink'] ? toProxiedWhoUrl(payload['@odata.nextLink']) : null;
+    for (let rootIndex = 0; rootIndex < WHO_PROXY_ROOTS.length; rootIndex += 1) {
+      const proxyRoot = WHO_PROXY_ROOTS[rootIndex];
+      let nextUrl: string | null = url.toString();
+      const rows: T[] = [];
+      let loadedPages = 0;
+
+      try {
+        while (nextUrl) {
+          const requestUrl = toProxiedWhoUrl(nextUrl, proxyRoot);
+          const response = await fetch(requestUrl);
+          if (!response.ok) {
+            throw new Error(`WHO request failed with status ${response.status} for ${requestUrl}.`);
+          }
+
+          const contentType = response.headers.get('content-type') ?? '';
+          if (!contentType.toLowerCase().includes('application/json')) {
+            const bodyPreview = (await response.text()).slice(0, 120);
+            throw new Error(
+              `WHO proxy returned non-JSON content (${contentType || 'unknown'}) for ${requestUrl}. This usually means the server is missing a reverse-proxy route for /api/who/ (or an equivalent base-prefixed route). Body starts with: ${bodyPreview}`,
+            );
+          }
+
+          let payload: WhoApiResponse<T>;
+          try {
+            payload = (await response.json()) as WhoApiResponse<T>;
+          } catch {
+            throw new Error(`WHO response could not be parsed as JSON for ${requestUrl}.`);
+          }
+
+          rows.push(...(payload.value ?? []));
+          nextUrl = payload['@odata.nextLink'] ?? null;
+          loadedPages += 1;
+        }
+
+        return rows;
+      } catch (error) {
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
+        lastError = normalizedError;
+
+        // If the very first request for this root fails, try next configured root.
+        if (loadedPages === 0 && rootIndex < WHO_PROXY_ROOTS.length - 1) {
+          continue;
+        }
+
+        break;
+      }
+    }
   }
 
-  return rows;
+  throw lastError ?? new Error('WHO request failed for all configured proxy roots.');
 }
 
 async function fetchWhoCountries(): Promise<Array<{ code: string; label: string }>> {
@@ -102,7 +316,29 @@ async function fetchWhoCountries(): Promise<Array<{ code: string; label: string 
     // ignore cache parse issues
   }
 
-  const url = createWhoUrl(`${WHO_PROXY_BASE}/DIMENSION/COUNTRY/DimensionValues`);
+  if (shouldTrySnapshots()) {
+    const snapshotIndex = await fetchWhoSnapshotIndex();
+    const snapshotCountries = normalizeSnapshotCountries(snapshotIndex?.countries);
+
+    if (snapshotCountries.length > 0) {
+      try {
+        window.localStorage.setItem(WHO_COUNTRIES_STORAGE_KEY, JSON.stringify(snapshotCountries));
+      } catch {
+        // ignore storage errors
+      }
+
+      return snapshotCountries;
+    }
+
+    if (isSnapshotOnlyMode()) {
+      return [
+        { code: 'EST', label: 'Estonia' },
+        { code: 'EUR', label: 'Europe region' },
+      ];
+    }
+  }
+
+  const url = createWhoUrl(`${WHO_REMOTE_BASE}/DIMENSION/COUNTRY/DimensionValues`);
   url.searchParams.set('$format', 'json');
   url.searchParams.set('$top', '1000');
 
@@ -155,8 +391,18 @@ function parseWhoNumericValue(row: WhoDataRow): number | null {
   }
 
   if (typeof row.Value === 'string') {
+    const normalized = row.Value.trim().toLowerCase();
+    if (normalized === 'yes') return 1;
+    if (normalized === 'no') return 0;
+
     const parsed = Number(row.Value.replace(/,/g, '').trim());
     if (Number.isFinite(parsed)) return parsed;
+
+    const firstNumber = row.Value.match(/-?\d+(?:[.,]\d+)?/);
+    if (firstNumber) {
+      const extracted = Number(firstNumber[0].replace(',', '.'));
+      if (Number.isFinite(extracted)) return extracted;
+    }
   }
 
   return null;
@@ -278,13 +524,53 @@ function pickFallbackGeos(rows: WhoDataRow[], preferredGeos: string[], maxGeos =
 }
 
 async function fetchIndicatorName(indicatorCode: string): Promise<string | null> {
-  const url = createWhoUrl(`${WHO_PROXY_BASE}/Indicator`);
+  if (shouldTrySnapshots()) {
+    const snapshot = await fetchWhoSnapshotData(indicatorCode);
+    if (snapshot?.title) {
+      return snapshot.title;
+    }
+
+    if (isSnapshotOnlyMode()) {
+      return null;
+    }
+  }
+
+  const url = createWhoUrl(`${WHO_REMOTE_BASE}/Indicator`);
   url.searchParams.set('$format', 'json');
   url.searchParams.set('$top', '1');
   url.searchParams.set('$filter', `IndicatorCode eq '${indicatorCode}'`);
 
   const rows = await fetchWhoAllPages<WhoIndicator>(url);
   return rows[0]?.IndicatorName ?? null;
+}
+
+function resolveWhoSeries(
+  selectedRows: WhoDataRow[],
+  fallbackRows: WhoDataRow[],
+  preferredGeos: string[],
+): { series: DataSeries[]; periods: string[]; warningNote?: string } {
+  let { series, periods } = mapRowsToSeries(selectedRows);
+  let warningNote: string | undefined;
+
+  if (series.length > 0) {
+    return { series, periods, warningNote };
+  }
+
+  const fallbackGeos = pickFallbackGeos(fallbackRows, preferredGeos, 2);
+  if (fallbackGeos.length > 0) {
+    const narrowedRows = fallbackRows.filter((row) => fallbackGeos.includes((row.SpatialDim ?? '').toUpperCase()));
+    const narrowed = mapRowsToSeries(narrowedRows);
+    series = narrowed.series;
+    periods = narrowed.periods;
+
+    if (series.length > 0) {
+      warningNote = `Selected geographies (${preferredGeos.join(', ')}) had no data; showing ${fallbackGeos.join(', ')} instead.`;
+      return { series, periods, warningNote };
+    }
+  }
+
+  const generic = mapRowsToSeries(fallbackRows);
+  return { series: generic.series, periods: generic.periods, warningNote };
 }
 
 export async function fetchWhoTopicData(
@@ -304,43 +590,59 @@ export async function fetchWhoTopicData(
   const countries = await fetchWhoCountries();
   const numericFilter = 'NumericValue ne null';
 
-  const url = createWhoUrl(`${WHO_PROXY_BASE}/${indicatorCode}`);
-  url.searchParams.set('$format', 'json');
-  url.searchParams.set('$top', '1000');
-  url.searchParams.set('$filter', `${buildGeoFilter(geoValues)} and ${numericFilter}`);
-
-  const rows = await fetchWhoAllPages<WhoDataRow>(url);
-  let { series, periods } = mapRowsToSeries(rows);
+  let series: DataSeries[] = [];
+  let periods: string[] = [];
   let warningNote: string | undefined;
+  let indicatorNameFromSnapshot: string | null = null;
 
-  if (series.length === 0) {
-    const fallbackUrl = createWhoUrl(`${WHO_PROXY_BASE}/${indicatorCode}`);
+  if (shouldTrySnapshots()) {
+    const snapshot = await fetchWhoSnapshotData(indicatorCode);
+
+    if (snapshot) {
+      indicatorNameFromSnapshot = snapshot.title ?? null;
+      const fallbackRows = snapshot.rows.filter((row) => parseWhoNumericValue(row) !== null);
+      const selectedRows = fallbackRows.filter((row) => geoValues.includes((row.SpatialDim ?? '').toUpperCase()));
+      const resolved = resolveWhoSeries(selectedRows, fallbackRows, geoValues);
+      series = resolved.series;
+      periods = resolved.periods;
+      warningNote = resolved.warningNote;
+    } else if (isSnapshotOnlyMode()) {
+      return {
+        title: topic.title,
+        subtitle: topic.description,
+        decimals: topic.decimals ?? 2,
+        unitSuffix: topic.unitSuffix,
+        sourceUrl: topic.sourceUrl,
+        series: [],
+        periods: [],
+        availableGeos: countries,
+        warning:
+          `No pre-generated WHO snapshot was found for indicator ${indicatorCode}. Run the WHO snapshot generator and redeploy static files.`,
+      };
+    }
+  }
+
+  if (series.length === 0 && !isSnapshotOnlyMode()) {
+    const url = createWhoUrl(`${WHO_REMOTE_BASE}/${indicatorCode}`);
+    url.searchParams.set('$format', 'json');
+    url.searchParams.set('$top', '1000');
+    url.searchParams.set('$filter', `${buildGeoFilter(geoValues)} and ${numericFilter}`);
+
+    const rows = await fetchWhoAllPages<WhoDataRow>(url);
+
+    const fallbackUrl = createWhoUrl(`${WHO_REMOTE_BASE}/${indicatorCode}`);
     fallbackUrl.searchParams.set('$format', 'json');
     fallbackUrl.searchParams.set('$top', '1000');
     fallbackUrl.searchParams.set('$filter', numericFilter);
 
     const fallbackRows = await fetchWhoAllPages<WhoDataRow>(fallbackUrl);
-    const fallbackGeos = pickFallbackGeos(fallbackRows, geoValues, 2);
-
-    if (fallbackGeos.length > 0) {
-      const narrowedRows = fallbackRows.filter((row) => fallbackGeos.includes((row.SpatialDim ?? '').toUpperCase()));
-      const narrowed = mapRowsToSeries(narrowedRows);
-      series = narrowed.series;
-      periods = narrowed.periods;
-
-      if (series.length > 0) {
-        warningNote = `Selected geographies (${geoValues.join(', ')}) had no data; showing ${fallbackGeos.join(', ')} instead.`;
-      }
-    }
-
-    if (series.length === 0) {
-      const generic = mapRowsToSeries(fallbackRows);
-      series = generic.series;
-      periods = generic.periods;
-    }
+    const resolved = resolveWhoSeries(rows, fallbackRows, geoValues);
+    series = resolved.series;
+    periods = resolved.periods;
+    warningNote = resolved.warningNote;
   }
 
-  const indicatorName = (await fetchIndicatorName(indicatorCode)) ?? topic.title;
+  const indicatorName = indicatorNameFromSnapshot ?? (await fetchIndicatorName(indicatorCode)) ?? topic.title;
 
   if (series.length === 0) {
     return {

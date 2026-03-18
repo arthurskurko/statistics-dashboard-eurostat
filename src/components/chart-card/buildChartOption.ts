@@ -369,6 +369,6 @@ export function buildChartOption({
         progressive: useLightweightRendering ? 500 : 0,
         progressiveThreshold: useLightweightRendering ? 1000 : undefined,
       };
-    }) as any),
+    }) as NonNullable<EChartsOption['series']>),
   };
 }
