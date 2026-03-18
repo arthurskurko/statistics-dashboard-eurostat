@@ -55,7 +55,7 @@ function hashString(value: string): number {
   return hash;
 }
 
-export function ChartCard({
+function ChartCardComponent({
   cardId,
   topicId,
   onRemove,
@@ -285,17 +285,30 @@ export function ChartCard({
     [filteredPeriods, filteredSeries, query.data],
   );
 
-  const baseSeries = filteredSeries.filter((series) => !series.label.includes('(forecast)'));
+  const baseSeries = useMemo(
+    () => filteredSeries.filter((series) => !series.label.includes('(forecast)')),
+    [filteredSeries],
+  );
 
-  const seriesMax = baseSeries.map((series) => ({
-    label: series.label,
-    max: Math.max(...series.points.map((point) => point.value), 0),
-  }));
-  const overallMax = Math.max(...seriesMax.map((series) => series.max), 0);
-  const largeThreshold = overallMax * 0.25;
-  const largeSeries = seriesMax.filter((series) => series.max >= largeThreshold).map((series) => series.label);
-  const smallSeries = seriesMax.filter((series) => series.max < largeThreshold).map((series) => series.label);
-  const showDualAxisButton = largeSeries.length > 0 && smallSeries.length > 0;
+  const { largeSeries, showDualAxisButton } = useMemo(() => {
+    const seriesMax = baseSeries.map((series) => ({
+      label: series.label,
+      max: Math.max(...series.points.map((point) => point.value), 0),
+    }));
+    const overallMax = Math.max(...seriesMax.map((series) => series.max), 0);
+    const largeThreshold = overallMax * 0.25;
+    const nextLargeSeries = seriesMax
+      .filter((series) => series.max >= largeThreshold)
+      .map((series) => series.label);
+    const smallSeries = seriesMax
+      .filter((series) => series.max < largeThreshold)
+      .map((series) => series.label);
+
+    return {
+      largeSeries: nextLargeSeries,
+      showDualAxisButton: nextLargeSeries.length > 0 && smallSeries.length > 0,
+    };
+  }, [baseSeries]);
 
   React.useEffect(() => {
     if (!query.data?.extraDimensions) return;
@@ -339,7 +352,6 @@ export function ChartCard({
     try {
       return {
         option: buildChartOption({
-          topicId,
           topic,
             data: filteredTopicData,
             effectiveSeries: filteredSeries,
@@ -366,7 +378,6 @@ export function ChartCard({
     largeSeries,
     showDualAxisButton,
     topic,
-    topicId,
     compactMobileLayout,
   ]);
 
@@ -931,3 +942,5 @@ export function ChartCard({
     </article>
   );
 }
+
+export const ChartCard = React.memo(ChartCardComponent);

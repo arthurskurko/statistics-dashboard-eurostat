@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
 import { ChartCard } from './components/ChartCard';
 import { EmptyState } from './components/EmptyState';
@@ -66,9 +66,9 @@ export default function App() {
     });
   }
 
-  function removeCard(cardId: string) {
+  const removeCard = useCallback((cardId: string) => {
     setCards((currentCards) => currentCards.filter((card) => card.id !== cardId));
-  }
+  }, [setCards]);
 
   function clearCards() {
     setCards([]);

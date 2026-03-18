@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChartCard } from './components/ChartCard';
 import { EmptyState } from './components/EmptyState';
 import { StatChip } from './components/StatChip';
@@ -59,6 +59,10 @@ export default function WorldBankApp() {
   function clearCards() {
     setCards([]);
   }
+
+  const removeCard = useCallback((cardId: string) => {
+    setCards((currentCards) => currentCards.filter((entry) => entry.id !== cardId));
+  }, [setCards]);
 
   return (
     <div className="batcave-page min-h-screen px-4 py-6 sm:px-6 lg:px-8">
@@ -127,7 +131,7 @@ export default function WorldBankApp() {
                 key={card.id}
                 cardId={card.id}
                 topicId={card.topicId}
-                onRemove={(cardId) => setCards((currentCards) => currentCards.filter((entry) => entry.id !== cardId))}
+                onRemove={removeCard}
                 providerId="worldbank"
                 providerName="World Bank"
                 topicMap={WORLD_BANK_TOPIC_MAP}

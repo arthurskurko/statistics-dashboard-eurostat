@@ -16,6 +16,9 @@ type JsonStatDataset = {
   value: number[] | Record<string, number | null>;
   label?: string;
   dimension: Record<string, JsonStatDimension>;
+  extension?: {
+    annotation?: Array<{ type?: string; title?: string }>;
+  };
 };
 
 type DimensionInfo = {
@@ -376,7 +379,6 @@ export async function fetchTopicData(
 
   // Safety guard: never request the full dataset without at least one geo filter.
   if (geoValues.length === 0) {
-    // eslint-disable-next-line no-console
     console.warn('fetchTopicData: geoValues empty, defaulting to EE to avoid huge download');
     geoValues = ['EE'];
   }
@@ -422,9 +424,6 @@ export async function fetchTopicData(
       extraFilters: filters,
       geoValues: overrideGeoValues ?? geoValues,
     });
-    // eslint-disable-next-line no-console
-    console.log('fetchTopicData url', url);
-
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Eurostat request failed with status ${response.status}.`);
@@ -609,9 +608,9 @@ export async function fetchTopicData(
   }
 
   const getObsCount = (dataset: JsonStatDataset): number | undefined => {
-    const ann = (dataset as any).extension?.annotation;
+    const ann = dataset.extension?.annotation;
     if (!Array.isArray(ann)) return undefined;
-    const obs = ann.find((a: any) => a.type === 'OBS_COUNT')?.title;
+    const obs = ann.find((annotation) => annotation.type === 'OBS_COUNT')?.title;
     const num = Number(String(obs).replace(/\D/g, ''));
     return Number.isFinite(num) ? num : undefined;
   };
@@ -772,21 +771,11 @@ export async function fetchTopicData(
         const fc = (await resp.json()) as { forecast?: number[] };
         if (Array.isArray(fc.forecast) && fc.forecast.length > 0) {
           precomputedForecast = fc.forecast;
-          // eslint-disable-next-line no-console
-          console.log('Using precomputed forecast for', topicId, 'len', precomputedForecast.length);
         }
       }
     } catch {
       // ignore and fall back to computed forecast
     }
-  } else {
-    // eslint-disable-next-line no-console
-    console.log('Skipping precomputed forecast for', topicId, 'because filters are active:', extraFilters);
-  }
-
-  if (!precomputedForecast) {
-    // eslint-disable-next-line no-console
-    console.log('No precomputed forecast; using built-in extrapolation for', topicId);
   }
 
   // Forecast function: estimate future values from recent year-on-year ratios.
@@ -879,8 +868,6 @@ export async function fetchTopicData(
       const dangerouslyLow = firstForecast <= 0 || firstForecast < lastReal * 0.35;
       const containsZero = forecastValues.some((v) => v <= 0);
       if (dangerouslyLow || containsZero) {
-        // eslint-disable-next-line no-console
-        console.log('Ignoring precomputed forecast for', topicId, 'because it collapses; using built-in extrapolation instead');
         forecastValues = computeForecast(basePoints);
       }
     } else {
@@ -936,25 +923,6 @@ export async function fetchTopicData(
     warning =
       warning ??
       'No observations were returned for this topic. This can happen if the dataset filters are out of date, the API is temporarily unavailable, or the dataset is not available for the selected filters.';
-  }
-
-  // debug: show final state for induced abortions (should include forecast year)
-  if (topicId === 'induced-abortions' || topicId === 'inflation') {
-    // eslint-disable-next-line no-console
-    console.log('DEBUG fetchTopicData final', {
-      topicId,
-      periods,
-      series: series.map((s) => ({
-        label: s.label,
-        lastPoint: s.points.at(-1),
-        length: s.points.length,
-        lastThree: s.points.slice(-3),
-      })),
-    });
-
-    // Log which series are considered forecast series
-    // eslint-disable-next-line no-console
-    console.log('DEBUG forecast-series', series.filter((s) => s.label.includes('(forecast)')).map((s) => s.label));
   }
 
   recordFetchStats(topicId, {

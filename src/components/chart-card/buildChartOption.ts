@@ -6,7 +6,6 @@ type AxisNameTextStyleOption = { rich?: Record<string, unknown> };
 import { formatValue } from './helpers';
 
 type BuildChartOptionArgs = {
-  topicId: string;
   topic: TopicDefinition;
   data: TopicData;
   effectiveSeries: DataSeries[];
@@ -19,7 +18,6 @@ type BuildChartOptionArgs = {
 };
 
 export function buildChartOption({
-  topicId,
   topic,
   data,
   effectiveSeries,
@@ -85,25 +83,6 @@ export function buildChartOption({
     if (process.env.NODE_ENV === 'development') {
       console.warn('All series were assigned the same color; overriding with palette for distinct series.');
     }
-  }
-
-  if (process.env.NODE_ENV === 'development' && topicId === 'yth_demo_070') {
-    console.log('colorMap entries', Array.from(colorMap.entries()));
-    console.log(
-      'series color lookup',
-      effectiveSeries.map((series) => {
-        const normalized = normalizeSeriesLabel(series.label.replace(/ \(forecast\)$/, ''));
-        return { label: series.label, normalized, color: colorMap.get(normalized) };
-      }),
-    );
-  }
-
-  if (topicId === 'induced-abortions') {
-    console.log(
-      'DEBUG induced:',
-      data.periods,
-      effectiveSeries.map((series) => ({ label: series.label, points: series.points.slice(-3) })),
-    );
   }
 
   const filterSuffix = activeFilterLabels.length > 0 ? ` (${activeFilterLabels.slice(0, 3).join(', ')}${activeFilterLabels.length > 3 ? ', …' : ''})` : '';
@@ -191,15 +170,16 @@ export function buildChartOption({
   const smallSeriesColor = seriesByAxis[0]?.[0] ?? '#4c9aff';
   const largeSeriesColor = seriesByAxis[1]?.[0] ?? '#f97316';
   const totalRenderedPoints = seriesWithAxis.length * xAxis.length;
-  const useLightweightRendering = totalRenderedPoints > 500;
+  const useLightweightRendering = totalRenderedPoints > 300;
+  const disableAnimation = compactMobileLayout || totalRenderedPoints > 120;
   const axisLabelFontSize = compactMobileLayout ? 10 : 12;
   const legendFontSize = compactMobileLayout ? 9 : 10;
   const axisNameSmallLabel = compactMobileLayout ? 'Small' : 'Small values';
   const axisNameLargeLabel = compactMobileLayout ? 'Large' : 'Large values';
 
   return {
-    animation: !useLightweightRendering,
-    animationDuration: useLightweightRendering ? 0 : 400,
+    animation: !disableAnimation,
+    animationDuration: disableAnimation ? 0 : 250,
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
