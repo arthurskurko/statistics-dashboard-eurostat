@@ -200,56 +200,63 @@ function drawBranch(ctx: CanvasRenderingContext2D, branch: LightningBranch) {
   }
 }
 
-function drawBranchInModal(
+function drawBranchInModalHorizontal(
   ctx: CanvasRenderingContext2D,
   branch: LightningBranch,
   width: number,
   height: number,
+  pulse: number,
 ) {
   if (branch.points.length < 2 || branch.life <= 0) return;
+
   const alpha = Math.max(0, Math.min(1, branch.life));
   const { r, g, b } = branch.colorRgb;
-
-  const size = Math.min(width, height);
   const centerX = width * 0.5;
-  const centerY = height * 0.5;
-  const scale = (size / 176) * 2.55;
+  const baselineY = height * 0.56;
+  const pulseScale = 0.9 + pulse * 0.2;
+  const root = branch.points[0];
+  const rootAngle = Math.atan2(root.y - FRACTAL_CENTER.y, root.x - FRACTAL_CENTER.x);
+  const rootX = centerX + Math.cos(rootAngle) * width * 0.42;
+  const direction = Math.sin(rootAngle) >= 0 ? -1 : 1;
 
-  const projectCircle = (point: Vec2): Vec2 => {
-    const dx = point.x - FRACTAL_CENTER.x;
-    const dy = point.y - FRACTAL_CENTER.y;
+  const mapPoint = (point: Vec2): Vec2 => {
+    const dx = point.x - root.x;
+    const dy = point.y - root.y;
     return {
-      x: centerX + dx * scale,
-      y: centerY + dy * scale,
+      x: rootX + dx * 2.05,
+      y: baselineY + direction * (Math.abs(dy) * 1.95 + Math.abs(dx) * 0.14),
     };
   };
 
+  const mapped: Vec2[] = branch.points.map(mapPoint);
+  if (mapped.length < 2) return;
+
   ctx.beginPath();
-  const firstL = projectCircle(branch.points[0]);
-  ctx.moveTo(firstL.x, firstL.y);
-  for (let i = 1; i < branch.points.length; i += 1) {
-    const p = projectCircle(branch.points[i]);
-    ctx.lineTo(p.x, p.y);
+  ctx.moveTo(mapped[0].x, mapped[0].y);
+  for (let i = 1; i < mapped.length; i += 1) {
+    const prev = mapped[i - 1];
+    const cur = mapped[i];
+    const midX = (prev.x + cur.x) * 0.5;
+    const midY = (prev.y + cur.y) * 0.5;
+    ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
   }
-  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.18 + alpha * 0.6})`;
-  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.24 + alpha * 0.48})`;
-  ctx.shadowBlur = 10 + alpha * 13;
-  ctx.lineWidth = branch.width * 1.7;
+  const tip = mapped[mapped.length - 1];
+  ctx.lineTo(tip.x, tip.y);
+
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.18 + alpha * 0.56) * pulseScale})`;
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.2 + alpha * 0.42) * pulseScale})`;
+  ctx.shadowBlur = (5 + alpha * 7) * pulseScale;
+  ctx.lineWidth = Math.max(0.9, branch.width * 1.35);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // In modal, emphasize branch terminals a bit more for readability.
-  const tip = branch.points[branch.points.length - 1];
-  if (tip) {
-    const tipP = projectCircle(tip);
-    ctx.beginPath();
-    ctx.arc(tipP.x, tipP.y, Math.max(1.3, branch.tipSize * (1 + alpha * 0.6)), 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.36 + alpha * 0.58})`;
-    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.34 + alpha * 0.48})`;
-    ctx.shadowBlur = 10 + alpha * 10;
-    ctx.fill();
-  }
+  ctx.beginPath();
+  ctx.arc(tip.x, tip.y, Math.max(1.1, branch.tipSize * 0.95 * pulseScale), 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(0.24 + alpha * 0.5) * pulseScale})`;
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.2 + alpha * 0.42) * pulseScale})`;
+  ctx.shadowBlur = (6 + alpha * 7) * pulseScale;
+  ctx.fill();
 }
 
 export function GlobalMusicTransport() {
@@ -275,7 +282,9 @@ export function GlobalMusicTransport() {
 
   React.useEffect(() => {
     modalOpenRef.current = modalOpen;
-    if (modalOpen) ensureRenderLoop();
+    if (modalOpen) {
+      ensureRenderLoop();
+    }
   }, [modalOpen, ensureRenderLoop]);
 
   React.useEffect(() => {
@@ -303,7 +312,8 @@ export function GlobalMusicTransport() {
         const seeds = buildSeedPoints(detail.cardId, detail.stepInfo);
         if (seeds.length > 0) {
           for (let index = 0; index < seeds.length; index += 1) {
-            pendingSeedsRef.current.push({ seedPoint: seeds[index], index, total: seeds.length });
+            const seedPoint = seeds[index];
+            pendingSeedsRef.current.push({ seedPoint, index, total: seeds.length });
           }
           ensureRenderLoop();
         }
@@ -374,37 +384,24 @@ export function GlobalMusicTransport() {
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, rect.width, rect.height);
+      const modalPulse = 0.5 + 0.5 * Math.sin(timestamp * 0.01);
       if (modalCtx && modalRect) {
         modalCtx.setTransform(modalDpr, 0, 0, modalDpr, 0, 0);
         modalCtx.clearRect(0, 0, modalRect.width, modalRect.height);
-        modalCtx.fillStyle = 'rgba(2, 10, 26, 0.55)';
+        modalCtx.fillStyle = 'rgba(2, 10, 26, 0.92)';
         modalCtx.fillRect(0, 0, modalRect.width, modalRect.height);
-        const glowRadius = Math.min(modalRect.width, modalRect.height) * 0.42;
-        const glow = modalCtx.createRadialGradient(
-          modalRect.width * 0.5,
-          modalRect.height * 0.5,
-          glowRadius * 0.12,
-          modalRect.width * 0.5,
-          modalRect.height * 0.5,
-          glowRadius,
-        );
-        glow.addColorStop(0, 'rgba(251, 191, 36, 0.2)');
-        glow.addColorStop(0.62, 'rgba(251, 191, 36, 0.06)');
-        glow.addColorStop(1, 'rgba(251, 191, 36, 0)');
-        modalCtx.fillStyle = glow;
-        modalCtx.beginPath();
-        modalCtx.arc(modalRect.width * 0.5, modalRect.height * 0.5, glowRadius, 0, Math.PI * 2);
-        modalCtx.fill();
       }
 
       const branches = lightningRef.current;
+      let modalDrawBudget = 140;
       let writeIndex = 0;
       for (let readIndex = 0; readIndex < branches.length; readIndex += 1) {
         const branch = branches[readIndex];
         if (branch.life <= 0.02) continue;
         drawBranch(ctx, branch);
-        if (modalCtx && modalRect) {
-          drawBranchInModal(modalCtx, branch, modalRect.width, modalRect.height);
+        if (modalCtx && modalRect && modalDrawBudget > 0) {
+          drawBranchInModalHorizontal(modalCtx, branch, modalRect.width, modalRect.height, modalPulse);
+          modalDrawBudget -= 1;
         }
         branch.life -= branch.decay * fadeFactor;
         branches[writeIndex] = branch;
@@ -535,9 +532,8 @@ export function GlobalMusicTransport() {
                 X
               </button>
             </div>
-            <div className="relative h-[420px] w-full bg-[radial-gradient(circle_at_50%_25%,rgba(59,130,246,0.16),rgba(15,23,42,0.82)_48%,rgba(2,6,23,0.98)_100%)]">
+            <div className="relative h-[420px] w-full bg-slate-950/95">
               <canvas ref={modalCanvasRef} className="h-full w-full" aria-hidden />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-emerald-900/18 via-emerald-800/8 to-transparent" />
             </div>
           </div>
         </div>
