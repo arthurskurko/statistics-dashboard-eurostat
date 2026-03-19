@@ -19,8 +19,10 @@ export type FractalFrameParams = {
   tempoBpm?: number;
 };
 
-const MAX_SEEDS_PER_FRAME = 4;
-const MAX_BRANCHES_RETAINED = 560;
+const MAX_SEEDS_PER_FRAME_COMPACT = 2;
+const MAX_SEEDS_PER_FRAME_MODAL = 4;
+const MAX_BRANCHES_RETAINED_COMPACT = 320;
+const MAX_BRANCHES_RETAINED_MODAL = 560;
 const MODAL_DRAW_BUDGET = 140;
 const MAX_PENDING_SEEDS = 260;
 const STALE_PENDING_SEED_MAX_AGE_MS = 2200;
@@ -60,9 +62,13 @@ export class FractalEngine {
       tempoBpm,
     } = params;
 
+    const modalActive = Boolean(modalCtx && modalWidth && modalHeight && modalDpr);
+    const maxSeedsPerFrame = modalActive ? MAX_SEEDS_PER_FRAME_MODAL : MAX_SEEDS_PER_FRAME_COMPACT;
+    const maxBranchesRetained = modalActive ? MAX_BRANCHES_RETAINED_MODAL : MAX_BRANCHES_RETAINED_COMPACT;
+
     this.simulation.prepareFrame(
-      MAX_SEEDS_PER_FRAME,
-      MAX_BRANCHES_RETAINED,
+      maxSeedsPerFrame,
+      maxBranchesRetained,
       timestampMs,
       STALE_PENDING_SEED_MAX_AGE_MS,
       MAX_PENDING_SEEDS,
@@ -75,10 +81,14 @@ export class FractalEngine {
       clearModalCanvas(modalCtx, modalWidth, modalHeight, modalDpr);
     }
 
+    const branches = this.simulation.getBranches();
+    const compactHighDensity = !modalActive && branches.length > 220;
+
     let modalDrawBudget = MODAL_DRAW_BUDGET;
-    for (const branch of this.simulation.getBranches()) {
+    for (let index = 0; index < branches.length; index += 1) {
+      const branch = branches[index];
       if (branch.life <= 0.02) continue;
-      if (!suppressMainDrawing) {
+      if (!suppressMainDrawing && (!compactHighDensity || index % 2 === 0)) {
         drawMainBranch(mainCtx, branch);
       }
       if (modalCtx && modalWidth && modalHeight && modalDrawBudget > 0) {

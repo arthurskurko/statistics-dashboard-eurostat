@@ -109,7 +109,7 @@ export function GlobalMusicTransport() {
         return;
       }
 
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
       const rect = canvas.getBoundingClientRect();
       const nextWidth = Math.max(1, Math.round(rect.width * dpr));
       const nextHeight = Math.max(1, Math.round(rect.height * dpr));
@@ -127,9 +127,8 @@ export function GlobalMusicTransport() {
       const modalCanvas = modalCanvasRef.current;
       let modalCtx: CanvasRenderingContext2D | null = null;
       let modalRect: DOMRect | null = null;
-      let modalDpr = dpr;
+      let modalDpr = Math.min(window.devicePixelRatio || 1, 2);
       if (modalOpenRef.current && modalCanvas) {
-        modalDpr = Math.min(window.devicePixelRatio || 1, 2);
         modalRect = modalCanvas.getBoundingClientRect();
         const modalWidth = Math.max(1, Math.round(modalRect.width * modalDpr));
         const modalHeight = Math.max(1, Math.round(modalRect.height * modalDpr));

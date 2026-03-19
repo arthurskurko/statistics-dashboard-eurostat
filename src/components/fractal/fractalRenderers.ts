@@ -38,8 +38,8 @@ export function drawMainBranch(ctx: CanvasRenderingContext2D, branch: FractalBra
   const alpha = Math.max(0, Math.min(1, branch.life));
   const { r, g, b } = branch.colorRgb;
   ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.16 + alpha * 0.62})`;
-  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.24 + alpha * 0.44})`;
-  ctx.shadowBlur = 8 + alpha * 11;
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.18 + alpha * 0.3})`;
+  ctx.shadowBlur = 4 + alpha * 5;
   ctx.lineWidth = branch.width;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -50,8 +50,8 @@ export function drawMainBranch(ctx: CanvasRenderingContext2D, branch: FractalBra
     ctx.beginPath();
     ctx.arc(tip.x, tip.y, branch.tipSize * (0.7 + alpha * 0.65), 0, Math.PI * 2);
     ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.32 + alpha * 0.6})`;
-    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.3 + alpha * 0.5})`;
-    ctx.shadowBlur = 6 + alpha * 8;
+    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.2 + alpha * 0.34})`;
+    ctx.shadowBlur = 3 + alpha * 4;
     ctx.fill();
   }
 }
