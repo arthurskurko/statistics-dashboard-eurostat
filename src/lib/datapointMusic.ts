@@ -251,21 +251,27 @@ export class DataPointMusicPlayer {
   }
 
   setTempo(bpm: number): void {
-    this.settings.tempoBpm = Math.max(10, Math.min(240, bpm));
+    const nextTempo = Math.max(10, Math.min(240, Math.round(bpm)));
+    if (this.settings.tempoBpm === nextTempo) return;
+    this.settings.tempoBpm = nextTempo;
     if (this.running) {
       this.restartLoop();
     }
   }
 
   setPhaseOffset(offset: number): void {
-    this.phaseOffset = Math.floor(offset);
+    const nextOffset = Math.floor(offset);
+    if (this.phaseOffset === nextOffset) return;
+    this.phaseOffset = nextOffset;
     if (this.running) {
       this.restartLoop();
     }
   }
 
   setSwing(swing: number): void {
-    this.settings.swing = Math.max(0, Math.min(0.5, swing));
+    const nextSwing = Math.max(0, Math.min(0.5, swing));
+    if (Math.abs(this.settings.swing - nextSwing) < 0.0001) return;
+    this.settings.swing = nextSwing;
     if (this.running) {
       this.restartLoop();
     }

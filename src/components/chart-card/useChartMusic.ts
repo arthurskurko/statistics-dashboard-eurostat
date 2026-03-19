@@ -284,11 +284,20 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
 
   React.useEffect(
     () => () => {
-      emitGlobalMusicState(false, null);
+      window.dispatchEvent(
+        new CustomEvent(GLOBAL_MUSIC_STATE_EVENT, {
+          detail: {
+            cardId,
+            providerId,
+            playing: false,
+            stepInfo: null,
+          },
+        }),
+      );
       musicPlayerRef.current?.dispose();
       musicPlayerRef.current = null;
     },
-    [emitGlobalMusicState],
+    [cardId, providerId],
   );
 
   React.useEffect(() => {
