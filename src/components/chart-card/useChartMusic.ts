@@ -5,6 +5,8 @@ import { DataPointMusicPlayer, type MusicPlaybackMode } from '../../lib/datapoin
 const VISUAL_STEP_UPDATE_MIN_INTERVAL_MS = 90;
 const GLOBAL_TEMPO_SYNC_EVENT = 'datapoint-music-tempo-sync-change';
 const GLOBAL_TEMPO_EVENT = 'datapoint-music-tempo-change';
+const GLOBAL_MUSIC_STATE_EVENT = 'datapoint-music-global-state';
+const GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT = 'datapoint-music-global-toggle-request';
 
 let globalTempoSyncEnabledState = false;
 let globalTempoBpmState = 120;
@@ -15,12 +17,12 @@ type UseChartMusicArgs = {
   filteredSeries: DataSeries[];
 };
 
-export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs) {
+export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMusicArgs) {
   const [musicPlaying, setMusicPlaying] = React.useState(false);
   const [currentMusicStep, setCurrentMusicStep] = React.useState<
     | {
         step: number;
-        points: Array<{ seriesLabel: string; label: string; value: number }>;
+        points: Array<{ seriesLabel: string; label: string; value: number; color: string }>;
       }
     | null
   >(null);
@@ -44,6 +46,76 @@ export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs)
 
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
   const lastVisualStepUpdateMsRef = React.useRef(0);
+
+  const seriesColorByLabel = React.useMemo(() => {
+    const baseColors = new Map<string, string>([
+      ['Estonia', '#00e676'],
+      ['Estonia - Total', '#00e676'],
+      ['Estonia - Males', '#a855f7'],
+      ['Estonia - Females', '#facc15'],
+      ['European Union - 27 countries (from 2020)', '#4c9aff'],
+    ]);
+
+    const normalizeSeriesLabel = (label: string) => {
+      const estonia = /Estonia/i.test(label);
+      if (!estonia) return label;
+
+      if (/\bTotal\b/i.test(label) || /^Estonia\s*$/i.test(label)) return 'Estonia - Total';
+      if (/\bMales?\b/i.test(label)) return 'Estonia - Males';
+      if (/\bFemales?\b/i.test(label)) return 'Estonia - Females';
+      return label;
+    };
+
+    const palette = ['#00e676', '#4c9aff', '#f97316', '#a855f7', '#facc15', '#ec4899', '#22c55e', '#38bdf8', '#f43f5e'];
+    const colorMap = new Map<string, string>(baseColors);
+    const usedColors = new Set<string>(colorMap.values());
+    let nextPaletteIndex = 0;
+
+    filteredSeries
+      .map((series) => normalizeSeriesLabel(series.label.replace(/ \(forecast\)$/, '')))
+      .filter((label, index, arr) => arr.indexOf(label) === index)
+      .forEach((baseLabel) => {
+        if (!colorMap.has(baseLabel)) {
+          while (usedColors.has(palette[nextPaletteIndex % palette.length])) {
+            nextPaletteIndex += 1;
+          }
+          const color = palette[nextPaletteIndex % palette.length];
+          usedColors.add(color);
+          colorMap.set(baseLabel, color);
+          nextPaletteIndex += 1;
+        }
+      });
+
+    const byRawSeriesLabel = new Map<string, string>();
+    filteredSeries.forEach((series) => {
+      const normalizedLabel = normalizeSeriesLabel(series.label.replace(/ \(forecast\)$/, ''));
+      byRawSeriesLabel.set(series.label, colorMap.get(normalizedLabel) ?? '#4c9aff');
+    });
+
+    return byRawSeriesLabel;
+  }, [filteredSeries]);
+
+  const emitGlobalMusicState = React.useCallback(
+    (
+      playing: boolean,
+      stepInfo?: {
+        step: number;
+        points: Array<{ seriesLabel: string; label: string; value: number; color: string }>;
+      } | null,
+    ) => {
+      window.dispatchEvent(
+        new CustomEvent(GLOBAL_MUSIC_STATE_EVENT, {
+          detail: {
+            cardId,
+            providerId,
+            playing,
+            stepInfo: stepInfo ?? null,
+          },
+        }),
+      );
+    },
+    [cardId, providerId],
+  );
 
   const setMusicTempo = React.useCallback(
     (value: number) => {
@@ -98,9 +170,19 @@ export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs)
         return;
       }
       lastVisualStepUpdateMsRef.current = now;
-      setCurrentMusicStep(info);
+      const stepInfoWithColor = {
+        step: info.step,
+        points: info.points.map((point) => ({
+          ...point,
+          color: seriesColorByLabel.get(point.seriesLabel) ?? '#f59e0b',
+        })),
+      };
+      setCurrentMusicStep(stepInfoWithColor);
+      if (musicPlaying) {
+        emitGlobalMusicState(true, stepInfoWithColor);
+      }
     },
-    [],
+    [emitGlobalMusicState, musicPlaying, seriesColorByLabel],
   );
 
   React.useEffect(() => {
@@ -201,10 +283,11 @@ export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs)
 
   React.useEffect(
     () => () => {
+      emitGlobalMusicState(false, null);
       musicPlayerRef.current?.dispose();
       musicPlayerRef.current = null;
     },
-    [],
+    [emitGlobalMusicState],
   );
 
   React.useEffect(() => {
@@ -255,15 +338,35 @@ export function useChartMusic({ providerId, filteredSeries }: UseChartMusicArgs)
       await player.unlockAudio();
       const playing = await player.toggle();
       setMusicPlaying(playing);
+      if (playing) {
+        emitGlobalMusicState(true, currentMusicStep);
+      }
       if (!playing) {
         setMusicModalOpen(false);
         setCurrentMusicStep(null);
+        emitGlobalMusicState(false, null);
       }
     } catch (error) {
       console.error('Could not start data music:', error);
       setMusicPlaying(false);
+      emitGlobalMusicState(false, null);
     }
-  }, []);
+  }, [currentMusicStep, emitGlobalMusicState]);
+
+  React.useEffect(() => {
+    const onGlobalToggleRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ cardId?: string; scope?: 'playing-all' }>).detail;
+      if (!detail) return;
+      if (detail.scope === 'playing-all' && !musicPlaying) return;
+      if (!detail.scope && detail.cardId !== cardId) return;
+      void toggleMusicPlayback();
+    };
+
+    window.addEventListener(GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT, onGlobalToggleRequest);
+    return () => {
+      window.removeEventListener(GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT, onGlobalToggleRequest);
+    };
+  }, [cardId, musicPlaying, toggleMusicPlayback]);
 
   return {
     musicPlayerRef,

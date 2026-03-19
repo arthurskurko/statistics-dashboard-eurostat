@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChartCard } from './components/ChartCard';
 import { EmptyState } from './components/EmptyState';
+import { GlobalMusicTransport } from './components/GlobalMusicTransport';
 import { StatChip } from './components/StatChip';
 import { TopicPicker } from './components/TopicPicker';
 import { THEMES, type ThemeId } from './features/dashboard/themes';
@@ -323,6 +324,7 @@ export default function UnifiedDashboardApp() {
           </section>
         ) : null}
       </div>
+      <GlobalMusicTransport />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { EmptyState } from './EmptyState';
+import { GlobalMusicTransport } from './GlobalMusicTransport';
 import { StatChip } from './StatChip';
 import { THEMES, type ThemeId } from '../features/dashboard/themes';
 
@@ -101,6 +102,7 @@ export function ProviderDashboardLayout<T extends { id: string }>({
           </section>
         ) : null}
       </div>
+      <GlobalMusicTransport />
     </div>
   );
 }
