@@ -45,7 +45,39 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
   const [globalRecordingBusy, setGlobalRecordingBusy] = React.useState(false);
 
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
+  const lastSeriesSignatureRef = React.useRef<string>('');
   const lastVisualStepUpdateMsRef = React.useRef(0);
+
+  const seriesSignature = React.useMemo(() => {
+    let hash = 2166136261 >>> 0;
+    const mix = (value: string | number) => {
+      const str = typeof value === 'number' ? String(value) : value;
+      for (let i = 0; i < str.length; i += 1) {
+        hash ^= str.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+    };
+
+    mix(filteredSeries.length);
+    for (let index = 0; index < filteredSeries.length; index += 1) {
+      const series = filteredSeries[index];
+      mix(series.id);
+      mix(series.label);
+      mix(series.points.length);
+      const first = series.points[0];
+      const last = series.points[series.points.length - 1];
+      if (first) {
+        mix(first.label);
+        mix(first.value);
+      }
+      if (last) {
+        mix(last.label);
+        mix(last.value);
+      }
+    }
+
+    return String(hash >>> 0);
+  }, [filteredSeries]);
 
   const seriesColorByLabel = React.useMemo(() => {
     const baseColors = new Map<string, string>([
@@ -226,46 +258,46 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
   React.useEffect(() => {
     if (!musicPlayerRef.current) {
       musicPlayerRef.current = new DataPointMusicPlayer(filteredSeries, {
-        tempoBpm: musicTempo,
-        playbackMode: musicPlaybackMode,
-        scale: musicScale,
-        octaveShift: musicOctaveShift,
-        instrumentOverride: musicInstrument,
-        arpeggiate: musicArpeggiate,
-        swing: musicSwing,
-        delayTime: musicDelayTime,
-        delayFeedback: musicDelayFeedback,
-        reverbWet: musicReverbWet,
-        reverbDecay: musicReverbDecay,
-        volume: musicVolume,
         onStep: handleMusicStep,
       });
-      musicPlayerRef.current.setPhaseOffset(musicPhaseOffset);
+      lastSeriesSignatureRef.current = seriesSignature;
       return;
     }
 
     musicPlayerRef.current.setStepCallback(handleMusicStep);
-    musicPlayerRef.current.setSeries(filteredSeries);
-    musicPlayerRef.current.setTempo(musicTempo);
-    musicPlayerRef.current.setPlaybackMode(musicPlaybackMode);
-    musicPlayerRef.current.setSwing(musicSwing);
-    musicPlayerRef.current.setScale(musicScale);
-    musicPlayerRef.current.setOctaveShift(musicOctaveShift);
-    musicPlayerRef.current.setInstrumentOverride(musicInstrument);
-    musicPlayerRef.current.setArpeggiate(musicArpeggiate);
-    musicPlayerRef.current.setDelayTime(musicDelayTime);
-    musicPlayerRef.current.setDelayFeedback(musicDelayFeedback);
-    musicPlayerRef.current.setReverbWet(musicReverbWet);
-    musicPlayerRef.current.setReverbDecay(musicReverbDecay);
-    musicPlayerRef.current.setVolume(musicVolume);
-    musicPlayerRef.current.setPhaseOffset(musicPhaseOffset);
+    if (lastSeriesSignatureRef.current !== seriesSignature) {
+      musicPlayerRef.current.setSeries(filteredSeries);
+      lastSeriesSignatureRef.current = seriesSignature;
+    }
 
     if (filteredSeries.length === 0 && musicPlaying) {
       setMusicPlaying(false);
     }
   }, [
     filteredSeries,
+    seriesSignature,
     musicPlaying,
+    handleMusicStep,
+  ]);
+
+  React.useEffect(() => {
+    const player = musicPlayerRef.current;
+    if (!player) return;
+
+    player.setTempo(musicTempo);
+    player.setPlaybackMode(musicPlaybackMode);
+    player.setSwing(musicSwing);
+    player.setScale(musicScale);
+    player.setOctaveShift(musicOctaveShift);
+    player.setInstrumentOverride(musicInstrument);
+    player.setArpeggiate(musicArpeggiate);
+    player.setDelayTime(musicDelayTime);
+    player.setDelayFeedback(musicDelayFeedback);
+    player.setReverbWet(musicReverbWet);
+    player.setReverbDecay(musicReverbDecay);
+    player.setVolume(musicVolume);
+    player.setPhaseOffset(musicPhaseOffset);
+  }, [
     musicTempo,
     musicPlaybackMode,
     musicSwing,
@@ -279,7 +311,6 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
     musicReverbDecay,
     musicVolume,
     musicPhaseOffset,
-    handleMusicStep,
   ]);
 
   React.useEffect(

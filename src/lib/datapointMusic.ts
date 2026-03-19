@@ -254,17 +254,19 @@ export class DataPointMusicPlayer {
     const nextTempo = Math.max(10, Math.min(240, Math.round(bpm)));
     if (this.settings.tempoBpm === nextTempo) return;
     this.settings.tempoBpm = nextTempo;
-    if (this.running) {
-      this.restartLoop();
-    }
   }
 
   setPhaseOffset(offset: number): void {
     const nextOffset = Math.floor(offset);
     if (this.phaseOffset === nextOffset) return;
+    const previousOffset = this.phaseOffset;
     this.phaseOffset = nextOffset;
+
     if (this.running) {
-      this.restartLoop();
+      const context = this.getAudioContext();
+      const baseSec = 60 / this.settings.tempoBpm;
+      const deltaSec = ((nextOffset - previousOffset) / 16) * baseSec;
+      this.nextStepTime = Math.max(context.currentTime + 0.008, this.nextStepTime + deltaSec);
     }
   }
 
@@ -272,9 +274,6 @@ export class DataPointMusicPlayer {
     const nextSwing = Math.max(0, Math.min(0.5, swing));
     if (Math.abs(this.settings.swing - nextSwing) < 0.0001) return;
     this.settings.swing = nextSwing;
-    if (this.running) {
-      this.restartLoop();
-    }
   }
 
   setScale(scale: MusicScale): void {
@@ -306,7 +305,7 @@ export class DataPointMusicPlayer {
   setVolume(volume: number): void {
     this.settings.volume = Math.max(0, Math.min(1, volume));
     if (this.masterGain) {
-      this.masterGain.gain.value = Math.min(1.2, Math.max(0, this.settings.volume));
+      this.smoothAudioParam(this.masterGain.gain, Math.min(1.2, Math.max(0, this.settings.volume)), 0.02);
     }
   }
 
@@ -397,10 +396,9 @@ export class DataPointMusicPlayer {
 
   private startLoop(): void {
     const context = this.getAudioContext();
-    const baseSec = 60 / this.settings.tempoBpm;
-    const phaseSec = (this.phaseOffset / 16) * baseSec;
-
-    this.nextStepTime = context.currentTime + phaseSec;
+    const phaseBaseSec = 60 / this.settings.tempoBpm;
+    const phaseSec = (this.phaseOffset / 16) * phaseBaseSec;
+    this.nextStepTime = Math.max(this.nextStepTime, context.currentTime + phaseSec);
 
     const scheduleAhead = () => {
       if (!this.running) return;
@@ -410,6 +408,7 @@ export class DataPointMusicPlayer {
         const step = this.stepIndex;
         this.playStep(step, this.nextStepTime);
 
+        const baseSec = 60 / this.settings.tempoBpm;
         const swingFactor = 1 + (step % 2 === 1 ? this.settings.swing : -this.settings.swing);
         this.nextStepTime += baseSec * swingFactor;
         this.stepIndex += 1;
@@ -424,13 +423,6 @@ export class DataPointMusicPlayer {
     if (this.schedulerId !== null) {
       window.clearInterval(this.schedulerId);
       this.schedulerId = null;
-    }
-  }
-
-  private restartLoop(): void {
-    this.stopLoop();
-    if (this.running) {
-      this.startLoop();
     }
   }
 
@@ -482,16 +474,16 @@ export class DataPointMusicPlayer {
     if (!this.delayNode || !this.delayFeedback || !this.delayWet || !this.dryGain) return;
 
     // Apply delay settings
-    this.delayNode.delayTime.value = this.settings.delayTime;
-    this.delayFeedback.gain.value = this.settings.delayFeedback;
+    this.smoothAudioParam(this.delayNode.delayTime, this.settings.delayTime, 0.025);
+    this.smoothAudioParam(this.delayFeedback.gain, this.settings.delayFeedback, 0.025);
 
     const wet = this.settings.delayWet;
-    this.delayWet.gain.value = wet;
-    this.dryGain.gain.value = 1 - wet;
+    this.smoothAudioParam(this.delayWet.gain, wet, 0.02);
+    this.smoothAudioParam(this.dryGain.gain, 1 - wet, 0.02);
 
     // Apply reverb wet mix
     if (this.reverbWet) {
-      this.reverbWet.gain.value = this.settings.reverbWet;
+      this.smoothAudioParam(this.reverbWet.gain, this.settings.reverbWet, 0.03);
     }
 
     // Rebuild impulse only when decay changes (expensive)
@@ -502,6 +494,13 @@ export class DataPointMusicPlayer {
       }
       this.convolver.buffer = this.cachedImpulse;
     }
+  }
+
+  private smoothAudioParam(param: AudioParam, value: number, timeConstant = 0.02): void {
+    const context = this.getAudioContext();
+    const now = context.currentTime;
+    param.cancelScheduledValues(now);
+    param.setTargetAtTime(value, now, timeConstant);
   }
 
   private createReverbImpulse(decay: number): AudioBuffer {
