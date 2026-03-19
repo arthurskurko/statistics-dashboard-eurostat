@@ -6,6 +6,7 @@ import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
 import type { TopicData, TopicDefinition } from '../features/dashboard/types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { fetchTopicData } from '../lib/eurostat';
+import { getRenderSafetyLimits } from '../lib/renderSafety';
 import { buildChartOption } from './chart-card/buildChartOption';
 import { ChartCardToolbar } from './chart-card/ChartCardToolbar';
 import { ChartCardHeader } from './chart-card/ChartCardHeader';
@@ -41,10 +42,6 @@ type ChartCardProps = {
 };
 
 const MAX_SERIES_TO_RENDER = 16;
-const MAX_PERIODS_TO_RENDER = 900;
-const MAX_TOTAL_POINTS_TO_RENDER = 8000;
-const OPEN_METEO_MAX_PERIODS_TO_RENDER = 2200;
-const OPEN_METEO_MAX_TOTAL_POINTS_TO_RENDER = 12000;
 const DEFAULT_EUROSTAT_GEOS = ['EE', 'EU27_2020'];
 const DEFAULT_EUROSTAT_SOURCE_URL_BUILDER = (datasetCode: string) =>
   `https://ec.europa.eu/eurostat/databrowser/view/${datasetCode}/default/table?lang=en`;
@@ -52,19 +49,6 @@ const DEFAULT_EUROSTAT_SOURCE_URL_BUILDER = (datasetCode: string) =>
 function areStringArraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((value, index) => value === b[index]);
-}
-
-function getRenderSafetyLimits(providerId: string) {
-  if (providerId === 'openmeteo') {
-    return {
-      maxPeriods: OPEN_METEO_MAX_PERIODS_TO_RENDER,
-      maxTotalPoints: OPEN_METEO_MAX_TOTAL_POINTS_TO_RENDER,
-    };
-  }
-  return {
-    maxPeriods: MAX_PERIODS_TO_RENDER,
-    maxTotalPoints: MAX_TOTAL_POINTS_TO_RENDER,
-  };
 }
 
 function ChartCardComponent({
@@ -255,10 +239,15 @@ function ChartCardComponent({
     const seriesCount = filteredTopicData.series.length;
     const periodCount = filteredTopicData.periods.length;
     const totalPoints = filteredTopicData.series.reduce((sum, entry) => sum + entry.points.length, 0);
+    const renderCells = seriesCount * periodCount;
 
-    if (periodCount > renderLimits.maxPeriods || totalPoints > renderLimits.maxTotalPoints) {
+    if (
+      periodCount > renderLimits.maxPeriods ||
+      totalPoints > renderLimits.maxTotalPoints ||
+      renderCells > renderLimits.maxRenderCells
+    ) {
       return (
-        `Dataset too large to render safely (periods: ${periodCount}, points: ${totalPoints}). ` +
+        `Dataset too large to render safely (series: ${seriesCount}, periods: ${periodCount}, points: ${totalPoints}, cells: ${renderCells}). ` +
         'Reduce geographies or apply stricter filters before charting.'
       );
     }
