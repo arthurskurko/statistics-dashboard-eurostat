@@ -13,7 +13,7 @@ const GLOBAL_MUSIC_STATE_EVENT = 'datapoint-music-global-state';
 const GLOBAL_TEMPO_EVENT = 'datapoint-music-tempo-change';
 const GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT = 'datapoint-music-global-toggle-request';
 const COMPACT_MIN_FRAME_INTERVAL_MS = 1000 / 24;
-const MODAL_MIN_FRAME_INTERVAL_MS = 1000 / 20;
+const MODAL_MIN_FRAME_INTERVAL_MS = 1000 / 16;
 
 export function GlobalMusicTransport() {
   const [playingCount, setPlayingCount] = React.useState(0);
@@ -131,7 +131,7 @@ export function GlobalMusicTransport() {
       const modalCanvas = modalCanvasRef.current;
       let modalCtx: CanvasRenderingContext2D | null = null;
       let modalRect: DOMRect | null = null;
-      let modalDpr = Math.min(window.devicePixelRatio || 1, 1.35);
+      let modalDpr = Math.min(window.devicePixelRatio || 1, 1);
       if (modalOpenRef.current && modalCanvas) {
         modalRect = modalCanvas.getBoundingClientRect();
         const modalWidth = Math.max(1, Math.round(modalRect.width * modalDpr));
@@ -292,7 +292,7 @@ export function GlobalMusicTransport() {
       </div>
 
       {modalOpen ? (
-        <div className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+        <div className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/80 p-4">
           <div className="relative w-full max-w-[600px] overflow-hidden rounded-3xl border border-amber-400/30 bg-slate-950/90 shadow-2xl shadow-amber-900/30">
             <div className="flex items-center justify-between border-b border-amber-400/20 px-4 py-3 text-amber-100">
               <div className="text-sm uppercase tracking-[0.15em] text-amber-200/90">Fractal Forest + Lightning</div>

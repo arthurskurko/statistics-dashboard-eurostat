@@ -113,8 +113,8 @@ export function drawModalHorizontalBranch(
   }
 
   ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.21 + alpha * 0.56) * pulseScale})`;
-  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.06 + alpha * 0.14) * pulseScale})`;
-  ctx.shadowBlur = (0.5 + alpha * 1.0) * pulseScale;
+  ctx.shadowColor = 'rgba(0, 0, 0, 0)';
+  ctx.shadowBlur = 0;
   ctx.lineWidth = Math.max(0.4, (branch.width * 1.24) / Math.max(scaleX, Math.abs(scaleY)));
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -123,7 +123,7 @@ export function drawModalHorizontalBranch(
   ctx.restore();
 
   const tip = branch.points[branch.points.length - 1];
-  if (tip && alpha > 0.22) {
+  if (tip && alpha > 0.26 && branch.generation <= 1) {
     const tx = tip.x - seedRoot.x;
     const ty = tip.y - seedRoot.y;
     const rx = tx * cosR - ty * sinR;
@@ -133,8 +133,8 @@ export function drawModalHorizontalBranch(
     ctx.beginPath();
     ctx.arc(tipX, tipY, Math.max(0.95, branch.tipSize * 0.68 * pulseScale), 0, Math.PI * 2);
     ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(0.2 + alpha * 0.3) * pulseScale})`;
-    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.08 + alpha * 0.12) * pulseScale})`;
-    ctx.shadowBlur = (0.8 + alpha * 1.2) * pulseScale;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0)';
+    ctx.shadowBlur = 0;
     ctx.fill();
   }
 }

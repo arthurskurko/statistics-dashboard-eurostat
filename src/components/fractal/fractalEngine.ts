@@ -20,9 +20,9 @@ export type FractalFrameParams = {
 };
 
 const MAX_SEEDS_PER_FRAME_COMPACT = 2;
-const MAX_SEEDS_PER_FRAME_MODAL = 4;
+const MAX_SEEDS_PER_FRAME_MODAL = 3;
 const MAX_BRANCHES_RETAINED_COMPACT = 320;
-const MAX_BRANCHES_RETAINED_MODAL = 500;
+const MAX_BRANCHES_RETAINED_MODAL = 380;
 const MAX_PENDING_SEEDS = 260;
 const STALE_PENDING_SEED_MAX_AGE_MS = 2200;
 
@@ -148,7 +148,7 @@ export class FractalEngine {
       const keepByLength = branch.pathLength >= 6;
       const drawInModal =
         !modalHighDensity ||
-        ((keepByGeneration && keepByLength && h < 78) || shouldDrawModalSample(branch));
+        ((keepByGeneration && keepByLength && h < 62) || shouldDrawModalSample(branch));
       if (modalCtx && modalWidth && modalHeight && drawInModal) {
         drawModalHorizontalBranch(modalCtx, branch, modalWidth, modalHeight, pulse);
       }
