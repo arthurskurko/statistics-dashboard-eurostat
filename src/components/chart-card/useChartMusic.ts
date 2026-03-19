@@ -356,10 +356,18 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
 
   React.useEffect(() => {
     const onGlobalToggleRequest = (event: Event) => {
-      const detail = (event as CustomEvent<{ cardId?: string; scope?: 'playing-all' }>).detail;
+      const detail = (event as CustomEvent<{ cardId?: string; scope?: 'playing-all' | 'resume-many'; cardIds?: string[] }>).detail;
       if (!detail) return;
-      if (detail.scope === 'playing-all' && !musicPlaying) return;
-      if (!detail.scope && detail.cardId !== cardId) return;
+
+      if (detail.scope === 'playing-all') {
+        if (!musicPlaying) return;
+      } else if (detail.scope === 'resume-many') {
+        if (musicPlaying) return;
+        if (!Array.isArray(detail.cardIds) || !detail.cardIds.includes(cardId)) return;
+      } else if (detail.cardId !== cardId) {
+        return;
+      }
+
       void toggleMusicPlayback();
     };
 

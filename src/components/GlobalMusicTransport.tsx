@@ -15,6 +15,11 @@ const GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT = 'datapoint-music-global-toggle-request
 const COMPACT_MIN_FRAME_INTERVAL_MS = 1000 / 24;
 const MODAL_MIN_FRAME_INTERVAL_MS = 1000 / 16;
 
+type GlobalMusicToggleRequest =
+  | { scope: 'playing-all' }
+  | { scope: 'resume-many'; cardIds: string[] }
+  | { cardId: string };
+
 export function GlobalMusicTransport() {
   const [playingCount, setPlayingCount] = React.useState(0);
   const [lastCardId, setLastCardId] = React.useState<string | null>(null);
@@ -29,6 +34,7 @@ export function GlobalMusicTransport() {
   const lastModalFrameTimeRef = React.useRef<number | null>(null);
   const currentTempoRef = React.useRef(120);
   const playingCardIdsRef = React.useRef(new Set<string>());
+  const pausedCardIdsRef = React.useRef<string[]>([]);
   const playingCountRef = React.useRef(0);
   const lastCardIdRef = React.useRef<string | null>(null);
   const modalOpenRef = React.useRef(false);
@@ -74,6 +80,7 @@ export function GlobalMusicTransport() {
 
       if (detail.playing) {
         playingCardIdsRef.current.add(detail.cardId);
+        pausedCardIdsRef.current = pausedCardIdsRef.current.filter((cardId) => cardId !== detail.cardId);
         if (lastCardIdRef.current !== detail.cardId) {
           lastCardIdRef.current = detail.cardId;
           setLastCardId(detail.cardId);
@@ -109,6 +116,8 @@ export function GlobalMusicTransport() {
   }, [ensureRenderLoop]);
 
   React.useEffect(() => {
+    const fractalEngine = fractalEngineRef.current;
+
     const render = (timestamp: number) => {
       const canvas = canvasRef.current;
       if (!canvas) {
@@ -134,7 +143,7 @@ export function GlobalMusicTransport() {
       const modalCanvas = modalCanvasRef.current;
       let modalCtx: CanvasRenderingContext2D | null = null;
       let modalRect: DOMRect | null = null;
-      let modalDpr = Math.min(window.devicePixelRatio || 1, 1);
+      const modalDpr = Math.min(window.devicePixelRatio || 1, 1);
       if (modalOpenRef.current && modalCanvas) {
         modalRect = modalCanvas.getBoundingClientRect();
         const modalWidth = Math.max(1, Math.round(modalRect.width * modalDpr));
@@ -169,7 +178,7 @@ export function GlobalMusicTransport() {
         lastCompactFrameTimeRef.current = null;
       }
 
-      fractalEngineRef.current.renderFrame({
+      fractalEngine.renderFrame({
         mainCtx: ctx,
         mainWidth: rect.width,
         mainHeight: rect.height,
@@ -185,7 +194,7 @@ export function GlobalMusicTransport() {
       });
 
       const hasWork =
-        fractalEngineRef.current.hasWork() ||
+        fractalEngine.hasWork() ||
         modalOpenRef.current;
 
       if (!hasWork) {
@@ -207,22 +216,34 @@ export function GlobalMusicTransport() {
       lastFrameTimeRef.current = null;
       lastCompactFrameTimeRef.current = null;
       lastModalFrameTimeRef.current = null;
-      fractalEngineRef.current.clear();
+      fractalEngine.clear();
     };
   }, [ensureRenderLoop]);
 
   const handleToggle = React.useCallback(() => {
     if (playingCount > 0) {
+      pausedCardIdsRef.current = [...playingCardIdsRef.current];
       window.dispatchEvent(
-        new CustomEvent(GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT, {
+        new CustomEvent<GlobalMusicToggleRequest>(GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT, {
           detail: { scope: 'playing-all' as const },
         }),
       );
       return;
     }
+
+    if (pausedCardIdsRef.current.length > 0) {
+      window.dispatchEvent(
+        new CustomEvent<GlobalMusicToggleRequest>(GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT, {
+          detail: { scope: 'resume-many' as const, cardIds: [...pausedCardIdsRef.current] },
+        }),
+      );
+      pausedCardIdsRef.current = [];
+      return;
+    }
+
     if (!lastCardId) return;
     window.dispatchEvent(
-      new CustomEvent(GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT, {
+      new CustomEvent<GlobalMusicToggleRequest>(GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT, {
         detail: { cardId: lastCardId },
       }),
     );
