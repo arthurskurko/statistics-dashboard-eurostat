@@ -25,7 +25,7 @@ const MAX_BRANCHES_RETAINED_COMPACT = 320;
 const MAX_PENDING_SEEDS = 260;
 const STALE_PENDING_SEED_MAX_AGE_MS = 2200;
 const MAX_MODAL_SEEDS_PER_FRAME = 2;
-const MAX_MODAL_TREES_RETAINED = 16;
+const MAX_MODAL_TREES_RETAINED = 8;
 
 function shouldDrawCompactSample(branch: { points: Array<{ x: number; y: number }>; colorRgb: { r: number; g: number; b: number } }): boolean {
   const root = branch.points[0];
@@ -130,7 +130,7 @@ export class FractalEngine {
     }
     this.simulation.ageAndCompact(fadeFactor);
     if (modalActive) {
-      this.modalSimulation.ageAndCompact(fadeFactor * 0.78);
+      this.modalSimulation.ageAndCompact(fadeFactor * 0.55);
     }
   }
 }

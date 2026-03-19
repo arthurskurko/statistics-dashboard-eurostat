@@ -3,6 +3,87 @@ import type { ModalFractalTree } from './fractalModalSimulation';
 
 const FRACTAL_CENTER: Vec2 = { x: 88, y: 88 };
 
+type ModalBackgroundCache = {
+  width: number;
+  height: number;
+  canvas: HTMLCanvasElement;
+};
+
+let modalBackgroundCache: ModalBackgroundCache | null = null;
+
+function starNoise(x: number, y: number): number {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+  return n - Math.floor(n);
+}
+
+function getModalBackgroundCanvas(width: number, height: number): HTMLCanvasElement {
+  if (modalBackgroundCache && modalBackgroundCache.width === width && modalBackgroundCache.height === height) {
+    return modalBackgroundCache.canvas;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    modalBackgroundCache = { width: canvas.width, height: canvas.height, canvas };
+    return canvas;
+  }
+
+  const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  skyGradient.addColorStop(0, 'rgba(3, 14, 36, 0.96)');
+  skyGradient.addColorStop(0.72, 'rgba(2, 10, 26, 0.93)');
+  skyGradient.addColorStop(1, 'rgba(2, 10, 26, 0.98)');
+  ctx.fillStyle = skyGradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const fadeBand = 150;
+  const fadeStart = Math.max(0, canvas.height - fadeBand);
+  const step = Math.max(16, Math.round(Math.min(canvas.width, canvas.height) / 24));
+  ctx.fillStyle = 'rgb(215, 232, 255)';
+
+  for (let y = 6; y < canvas.height; y += step) {
+    for (let x = 6; x < canvas.width; x += step) {
+      const gate = starNoise(x * 0.77, y * 0.61);
+      if (gate < 0.84) continue;
+
+      const jitterX = (starNoise(x + 11.3, y + 7.7) - 0.5) * step * 0.65;
+      const jitterY = (starNoise(x + 19.9, y + 3.1) - 0.5) * step * 0.65;
+      const starX = x + jitterX;
+      const starY = y + jitterY;
+      if (starY < 0 || starY > canvas.height) continue;
+
+      const fadeToBottom =
+        starY <= fadeStart ? 1 : Math.max(0, 1 - (starY - fadeStart) / Math.max(1, fadeBand));
+      if (fadeToBottom <= 0) continue;
+
+      const twinkle = 0.35 + starNoise(x + 41.2, y + 53.8) * 0.65;
+      const alpha = (0.18 + twinkle * 0.55) * fadeToBottom;
+      const radius = gate > 0.965 ? 1.25 : gate > 0.925 ? 0.95 : 0.7;
+
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(starX, starY, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // Ensure stars are mostly gone near the lower 150px of the modal.
+  const bottomFade = ctx.createLinearGradient(0, fadeStart, 0, canvas.height);
+  bottomFade.addColorStop(0, 'rgba(2, 10, 26, 0)');
+  bottomFade.addColorStop(1, 'rgba(2, 10, 26, 0.98)');
+  ctx.fillStyle = bottomFade;
+  ctx.fillRect(0, fadeStart, canvas.width, Math.max(1, canvas.height - fadeStart));
+
+  modalBackgroundCache = {
+    width: canvas.width,
+    height: canvas.height,
+    canvas,
+  };
+  return canvas;
+}
+
 export type MainBranchDrawOptions = {
   lightweight?: boolean;
 };
@@ -28,8 +109,8 @@ export function clearModalCanvas(
 ): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = 'rgba(2, 10, 26, 0.92)';
-  ctx.fillRect(0, 0, width, height);
+  const background = getModalBackgroundCanvas(width, height);
+  ctx.drawImage(background, 0, 0, width, height);
 }
 
 export function drawMainBranch(

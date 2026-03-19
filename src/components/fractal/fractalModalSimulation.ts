@@ -92,7 +92,7 @@ function createModalFractalTree(seedPoint: ModalSeedPoint, index: number, total:
   const intensity = Math.max(0.08, seedPoint.value);
   const segments: ModalFractalSegment[] = [];
 
-  const centerSpread = total > 1 ? (index / Math.max(1, total - 1) - 0.5) * 8 : 0;
+  const centerSpread = total > 1 ? (index / Math.max(1, total - 1) - 0.5) * 13 : 0;
   const trunkRoot: Vec2 = {
     x: MODAL_TREE_CENTER_X + centerSpread,
     y: MODAL_TREE_BASELINE_Y,
@@ -134,7 +134,7 @@ function createModalFractalTree(seedPoint: ModalSeedPoint, index: number, total:
   return {
     segments,
     life: 1,
-    decay: 0.011 + random() * 0.009,
+    decay: 0.004 + random() * 0.004,
     colorRgb: parseHexColor(seedPoint.color),
     seedId: seedPoint.seed,
   };
