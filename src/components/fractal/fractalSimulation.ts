@@ -10,6 +10,7 @@ type PendingSeed = {
   seedPoint: SeedPoint;
   index: number;
   total: number;
+  enqueuedAtMs: number;
 };
 
 const FRACTAL_CENTER: Vec2 = { x: 88, y: 88 };
@@ -147,14 +148,20 @@ export class FractalSimulation {
   private readonly pendingSeeds: PendingSeed[] = [];
 
   enqueueStep(packet: FractalStepPacket): void {
+    const nowMs = performance.now();
     const seeds = buildSeedPoints(packet);
     for (let index = 0; index < seeds.length; index += 1) {
       this.pendingSeeds.push({
         seedPoint: seeds[index],
         index,
         total: seeds.length,
+        enqueuedAtMs: nowMs,
       });
     }
+  }
+
+  clearPendingSeeds(): void {
+    this.pendingSeeds.length = 0;
   }
 
   clear(): void {
@@ -166,7 +173,22 @@ export class FractalSimulation {
     return this.pendingSeeds.length > 0 || this.branches.length > 0;
   }
 
-  prepareFrame(maxSeedsPerFrame: number, maxBranchesRetained: number): void {
+  prepareFrame(
+    maxSeedsPerFrame: number,
+    maxBranchesRetained: number,
+    nowMs: number,
+    staleSeedMaxAgeMs: number,
+    maxPendingSeeds: number,
+  ): void {
+    const staleCutoff = nowMs - staleSeedMaxAgeMs;
+    while (this.pendingSeeds.length > 0 && this.pendingSeeds[0].enqueuedAtMs < staleCutoff) {
+      this.pendingSeeds.shift();
+    }
+
+    if (this.pendingSeeds.length > maxPendingSeeds) {
+      this.pendingSeeds.splice(0, this.pendingSeeds.length - maxPendingSeeds);
+    }
+
     let generated = 0;
     while (generated < maxSeedsPerFrame && this.pendingSeeds.length > 0) {
       const pending = this.pendingSeeds.shift();

@@ -37,9 +37,24 @@ export function GlobalMusicTransport() {
   React.useEffect(() => {
     modalOpenRef.current = modalOpen;
     if (modalOpen) {
+      // Avoid replay bursts in modal by dropping stale queued seeds at open time.
+      fractalEngineRef.current.clearPendingSeeds();
       ensureRenderLoop();
     }
   }, [modalOpen, ensureRenderLoop]);
+
+  React.useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // When tab is backgrounded, queued visual seeds can build up and burst on return.
+        fractalEngineRef.current.clearPendingSeeds();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   React.useEffect(() => {
     const onGlobalMusicState = (event: Event) => {
@@ -134,6 +149,7 @@ export function GlobalMusicTransport() {
         mainWidth: rect.width,
         mainHeight: rect.height,
         mainDpr: dpr,
+        suppressMainDrawing: modalOpenRef.current,
         modalCtx,
         modalWidth: modalRect?.width,
         modalHeight: modalRect?.height,

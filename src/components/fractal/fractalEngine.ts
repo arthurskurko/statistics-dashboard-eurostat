@@ -9,6 +9,7 @@ export type FractalFrameParams = {
   mainWidth: number;
   mainHeight: number;
   mainDpr: number;
+  suppressMainDrawing?: boolean;
   modalCtx?: CanvasRenderingContext2D | null;
   modalWidth?: number;
   modalHeight?: number;
@@ -21,6 +22,8 @@ export type FractalFrameParams = {
 const MAX_SEEDS_PER_FRAME = 4;
 const MAX_BRANCHES_RETAINED = 560;
 const MODAL_DRAW_BUDGET = 140;
+const MAX_PENDING_SEEDS = 260;
+const STALE_PENDING_SEED_MAX_AGE_MS = 2200;
 
 export class FractalEngine {
   private readonly simulation = new FractalSimulation();
@@ -33,6 +36,10 @@ export class FractalEngine {
     this.simulation.clear();
   }
 
+  clearPendingSeeds(): void {
+    this.simulation.clearPendingSeeds();
+  }
+
   hasWork(): boolean {
     return this.simulation.hasWork();
   }
@@ -43,6 +50,7 @@ export class FractalEngine {
       mainWidth,
       mainHeight,
       mainDpr,
+      suppressMainDrawing,
       modalCtx,
       modalWidth,
       modalHeight,
@@ -52,7 +60,13 @@ export class FractalEngine {
       tempoBpm,
     } = params;
 
-    this.simulation.prepareFrame(MAX_SEEDS_PER_FRAME, MAX_BRANCHES_RETAINED);
+    this.simulation.prepareFrame(
+      MAX_SEEDS_PER_FRAME,
+      MAX_BRANCHES_RETAINED,
+      timestampMs,
+      STALE_PENDING_SEED_MAX_AGE_MS,
+      MAX_PENDING_SEEDS,
+    );
 
     clearMainCanvas(mainCtx, mainWidth, mainHeight, mainDpr);
     const pulse = computeTempoPulse(timestampMs, tempoBpm);
@@ -64,7 +78,9 @@ export class FractalEngine {
     let modalDrawBudget = MODAL_DRAW_BUDGET;
     for (const branch of this.simulation.getBranches()) {
       if (branch.life <= 0.02) continue;
-      drawMainBranch(mainCtx, branch);
+      if (!suppressMainDrawing) {
+        drawMainBranch(mainCtx, branch);
+      }
       if (modalCtx && modalWidth && modalHeight && modalDrawBudget > 0) {
         drawModalHorizontalBranch(modalCtx, branch, modalWidth, modalHeight, pulse);
         modalDrawBudget -= 1;
