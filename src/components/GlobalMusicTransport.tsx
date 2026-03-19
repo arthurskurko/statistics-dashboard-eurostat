@@ -44,7 +44,10 @@ export function GlobalMusicTransport() {
       // Avoid replay bursts in modal by dropping stale queued seeds at open time.
       fractalEngineRef.current.clearPendingSeeds();
       ensureRenderLoop();
+      return;
     }
+    // Compact fractals are disabled; clear engine state when modal closes.
+    fractalEngineRef.current.clear();
   }, [modalOpen, ensureRenderLoop]);
 
   React.useEffect(() => {
@@ -85,7 +88,7 @@ export function GlobalMusicTransport() {
         setPlayingCount(nextPlayingCount);
       }
 
-      if (detail.playing && detail.stepInfo) {
+      if (detail.playing && detail.stepInfo && modalOpenRef.current) {
         fractalEngineRef.current.enqueueStep({ cardId: detail.cardId, stepInfo: detail.stepInfo });
         ensureRenderLoop();
       }
@@ -171,7 +174,7 @@ export function GlobalMusicTransport() {
         mainWidth: rect.width,
         mainHeight: rect.height,
         mainDpr: dpr,
-        suppressMainDrawing: modalOpenRef.current,
+        suppressMainDrawing: true,
         modalCtx,
         modalWidth: modalRect?.width,
         modalHeight: modalRect?.height,
@@ -232,14 +235,10 @@ export function GlobalMusicTransport() {
     <>
       <div className="pointer-events-none fixed bottom-2 right-2 z-50 sm:bottom-3 sm:right-3">
       <div className="relative h-44 w-44 sm:h-48 sm:w-48">
-        <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_center,rgba(251,191,36,0.24),rgba(251,191,36,0.08)_55%,rgba(251,191,36,0.03)_78%,transparent_96%)]" />
+        <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_center,rgba(251,191,36,0.12),rgba(251,191,36,0.04)_58%,transparent_90%)]" />
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 h-full w-full"
-          style={{
-            opacity: hasPlayableTarget ? 1 : 0.35,
-            transition: 'opacity 220ms ease',
-          }}
+          className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
           aria-hidden
         />
         <div className="absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-300/40 bg-slate-900/62" aria-hidden />
