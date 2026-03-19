@@ -208,11 +208,12 @@ export class FractalSimulation {
   }
 
   ageAndCompact(fadeFactor: number, minLife = 0.02): void {
+    const smoothedFadeFactor = Math.max(0.65, Math.min(1.25, fadeFactor));
     let writeIndex = 0;
     for (let readIndex = 0; readIndex < this.branches.length; readIndex += 1) {
       const branch = this.branches[readIndex];
       if (branch.life <= minLife) continue;
-      branch.life -= branch.decay * fadeFactor;
+      branch.life -= branch.decay * smoothedFadeFactor;
       this.branches[writeIndex] = branch;
       writeIndex += 1;
     }

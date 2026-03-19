@@ -12,6 +12,7 @@ type GlobalMusicState = {
 const GLOBAL_MUSIC_STATE_EVENT = 'datapoint-music-global-state';
 const GLOBAL_TEMPO_EVENT = 'datapoint-music-tempo-change';
 const GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT = 'datapoint-music-global-toggle-request';
+const COMPACT_MIN_FRAME_INTERVAL_MS = 1000 / 24;
 
 export function GlobalMusicTransport() {
   const [playingCount, setPlayingCount] = React.useState(0);
@@ -23,6 +24,7 @@ export function GlobalMusicTransport() {
   const animationFrameRef = React.useRef<number | null>(null);
   const renderCallbackRef = React.useRef<((timestamp: number) => void) | null>(null);
   const lastFrameTimeRef = React.useRef<number | null>(null);
+  const lastCompactFrameTimeRef = React.useRef<number | null>(null);
   const currentTempoRef = React.useRef(120);
   const playingCardIdsRef = React.useRef(new Set<string>());
   const playingCountRef = React.useRef(0);
@@ -143,6 +145,18 @@ export function GlobalMusicTransport() {
       lastFrameTimeRef.current = timestamp;
       const fadeFactor = elapsed / 16;
 
+      const compactMode = !modalOpenRef.current;
+      if (compactMode) {
+        const lastCompactTs = lastCompactFrameTimeRef.current;
+        if (typeof lastCompactTs === 'number' && timestamp - lastCompactTs < COMPACT_MIN_FRAME_INTERVAL_MS) {
+          animationFrameRef.current = window.requestAnimationFrame(render);
+          return;
+        }
+        lastCompactFrameTimeRef.current = timestamp;
+      } else {
+        lastCompactFrameTimeRef.current = null;
+      }
+
       fractalEngineRef.current.renderFrame({
         mainCtx: ctx,
         mainWidth: rect.width,
@@ -159,7 +173,6 @@ export function GlobalMusicTransport() {
       });
 
       const hasWork =
-        playingCountRef.current > 0 ||
         fractalEngineRef.current.hasWork() ||
         modalOpenRef.current;
 
@@ -180,6 +193,7 @@ export function GlobalMusicTransport() {
       animationFrameRef.current = null;
       renderCallbackRef.current = null;
       lastFrameTimeRef.current = null;
+      lastCompactFrameTimeRef.current = null;
       fractalEngineRef.current.clear();
     };
   }, [ensureRenderLoop]);

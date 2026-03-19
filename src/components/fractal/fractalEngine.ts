@@ -27,6 +27,20 @@ const MODAL_DRAW_BUDGET = 140;
 const MAX_PENDING_SEEDS = 260;
 const STALE_PENDING_SEED_MAX_AGE_MS = 2200;
 
+function shouldDrawCompactSample(branch: { points: Array<{ x: number; y: number }>; colorRgb: { r: number; g: number; b: number } }): boolean {
+  const root = branch.points[0];
+  const tip = branch.points[branch.points.length - 1] ?? root;
+  // Stable geometry-based sampling avoids frame-to-frame on/off flicker from index parity.
+  const hash =
+    ((Math.floor((root?.x ?? 0) * 17) * 73856093) ^
+      (Math.floor((root?.y ?? 0) * 19) * 19349663) ^
+      (Math.floor((tip?.x ?? 0) * 13) * 83492791) ^
+      (Math.floor((tip?.y ?? 0) * 11) * 29765731) ^
+      (branch.colorRgb.r * 31 + branch.colorRgb.g * 17 + branch.colorRgb.b * 13)) >>>
+    0;
+  return (hash & 1) === 0;
+}
+
 export class FractalEngine {
   private readonly simulation = new FractalSimulation();
 
@@ -88,8 +102,8 @@ export class FractalEngine {
     for (let index = 0; index < branches.length; index += 1) {
       const branch = branches[index];
       if (branch.life <= 0.02) continue;
-      if (!suppressMainDrawing && (!compactHighDensity || index % 2 === 0)) {
-        drawMainBranch(mainCtx, branch);
+      if (!suppressMainDrawing && (!compactHighDensity || shouldDrawCompactSample(branch))) {
+        drawMainBranch(mainCtx, branch, { lightweight: !modalActive });
       }
       if (modalCtx && modalWidth && modalHeight && modalDrawBudget > 0) {
         drawModalHorizontalBranch(modalCtx, branch, modalWidth, modalHeight, pulse);
