@@ -39,7 +39,7 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
   const [musicDelayFeedback, setMusicDelayFeedback] = React.useState(0.35);
   const [musicReverbWet, setMusicReverbWet] = React.useState(0.18);
   const [musicReverbDecay, setMusicReverbDecay] = React.useState(2.4);
-  const [musicVolume, setMusicVolume] = React.useState(1);
+  const [musicVolume, setMusicVolume] = React.useState(0.8);
   const [musicPhaseOffset, setMusicPhaseOffset] = React.useState(0);
   const [globalRecording, setGlobalRecording] = React.useState(() => DataPointMusicPlayer.isGlobalRecording());
   const [globalRecordingBusy, setGlobalRecordingBusy] = React.useState(false);

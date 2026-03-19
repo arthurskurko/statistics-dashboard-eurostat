@@ -37,6 +37,13 @@ const INSTRUMENTS: OscillatorType[] = ['sine', 'triangle', 'square', 'sawtooth']
 const MAX_SIMULTANEOUS_SERIES = 6;
 const SCHEDULER_INTERVAL_MS = 25;
 const SCHEDULER_LOOKAHEAD_SEC = 0.12;
+const WAVEFORM_GAIN_MULTIPLIER: Record<OscillatorType, number> = {
+  sine: 1.0,
+  triangle: 0.9,
+  sawtooth: 0.66,
+  square: 0.58,
+  custom: 0.8,
+};
 
 const BASE_MIDI = 48; // C3
 
@@ -132,7 +139,7 @@ export class DataPointMusicPlayer {
     delayWet: 0.18,
     reverbWet: 0.18,
     reverbDecay: 2.4,
-    volume: 1,
+    volume: 0.8,
   };
 
   constructor(series: DataSeries[], settings?: Partial<MusicSettings>) {
@@ -293,7 +300,7 @@ export class DataPointMusicPlayer {
   setVolume(volume: number): void {
     this.settings.volume = Math.max(0, Math.min(1, volume));
     if (this.masterGain) {
-      this.masterGain.gain.value = Math.min(2, Math.max(0, this.settings.volume * 1.6));
+      this.masterGain.gain.value = Math.min(1.2, Math.max(0, this.settings.volume));
     }
   }
 
@@ -431,7 +438,7 @@ export class DataPointMusicPlayer {
     if (this.masterGain) return;
 
     this.masterGain = context.createGain();
-    this.masterGain.gain.value = Math.min(2, Math.max(0, this.settings.volume * 1.6));
+    this.masterGain.gain.value = Math.min(1.2, Math.max(0, this.settings.volume));
     this.masterGain.connect(context.destination);
     DataPointMusicPlayer.activeMasterGains.add(this.masterGain);
     if (DataPointMusicPlayer.sharedRecordingDestination) {
@@ -628,7 +635,9 @@ export class DataPointMusicPlayer {
         oscillator.frequency.linearRampToValueAtTime(nextFrequency, now + duration);
       }
 
-      const baseGain = 0.25 + index * 0.06;
+      const waveformGain = WAVEFORM_GAIN_MULTIPLIER[entry.waveform] ?? 0.8;
+      const seriesGain = 1 / Math.sqrt(index + 1);
+      const baseGain = 0.28 * waveformGain * seriesGain;
       gain.gain.setValueAtTime(0.0001, now);
       gain.gain.exponentialRampToValueAtTime(baseGain, now + 0.012);
       if (this.settings.playbackMode === 'line') {

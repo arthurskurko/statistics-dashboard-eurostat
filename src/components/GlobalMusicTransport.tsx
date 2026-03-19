@@ -294,7 +294,7 @@ export function GlobalMusicTransport() {
         <div className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/80 p-4">
           <div className="relative w-full max-w-[600px] overflow-hidden rounded-3xl border border-amber-400/30 bg-slate-950/90 shadow-2xl shadow-amber-900/30">
             <div className="flex items-center justify-between border-b border-amber-400/20 px-4 py-3 text-amber-100">
-              <div className="text-sm uppercase tracking-[0.15em] text-amber-200/90">Fractal Forest + Lightning</div>
+              <div className="text-sm uppercase tracking-[0.15em] text-amber-200/90">Fractal Forest</div>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
