@@ -53,6 +53,18 @@ To refresh the full WHO indicator catalog used by the WHO dashboard picker:
 npm run generate-who-catalog
 ```
 
+To build a larger World Bank fallback catalog (default source is World Development Indicators, source 2):
+
+```sh
+npm run generate-worldbank-catalog
+```
+
+Optional: choose a different source and page size.
+
+```sh
+node scripts/generate_worldbank_catalog.cjs --source 2 --per-page 500
+```
+
 By default the script processes a small built‑in list of datasets
 (abortions, migration, inflation); you can also specify additional
 Eurostat dataset codes on the command line:
