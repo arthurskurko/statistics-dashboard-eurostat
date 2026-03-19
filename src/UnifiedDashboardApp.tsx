@@ -104,11 +104,11 @@ const PROVIDERS: ProviderConfig[] = [
     title: 'WHO indicators',
     badgeText: 'WHO dashboard builder',
     descriptionText:
-      'WHO data in this deployment is served from offline snapshots generated during build time. Search WHO indicator codes and compare Estonia with regional or global benchmarks.',
+      'Search the full WHO indicator catalog and compare Estonia with regional or global benchmarks. Local development uses live WHO API requests via proxy; deployments can use pre-generated snapshots.',
     sourceLabel: 'WHO GHO OData',
     fallbackDescriptionPrefix: 'WHO indicator',
     sourceLinkLabel: 'WHO indicator',
-    catalogPath: 'popular-who.json',
+    catalogPath: 'who-catalog.json',
     popularPath: 'popular-who.json',
     topics: WHO_TOPICS,
     topicMap: WHO_TOPIC_MAP,
