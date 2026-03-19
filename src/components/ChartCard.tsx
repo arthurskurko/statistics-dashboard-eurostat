@@ -43,6 +43,8 @@ type ChartCardProps = {
 const MAX_SERIES_TO_RENDER = 16;
 const MAX_PERIODS_TO_RENDER = 900;
 const MAX_TOTAL_POINTS_TO_RENDER = 8000;
+const OPEN_METEO_MAX_PERIODS_TO_RENDER = 2200;
+const OPEN_METEO_MAX_TOTAL_POINTS_TO_RENDER = 12000;
 const DEFAULT_EUROSTAT_GEOS = ['EE', 'EU27_2020'];
 const DEFAULT_EUROSTAT_SOURCE_URL_BUILDER = (datasetCode: string) =>
   `https://ec.europa.eu/eurostat/databrowser/view/${datasetCode}/default/table?lang=en`;
@@ -50,6 +52,19 @@ const DEFAULT_EUROSTAT_SOURCE_URL_BUILDER = (datasetCode: string) =>
 function areStringArraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((value, index) => value === b[index]);
+}
+
+function getRenderSafetyLimits(providerId: string) {
+  if (providerId === 'openmeteo') {
+    return {
+      maxPeriods: OPEN_METEO_MAX_PERIODS_TO_RENDER,
+      maxTotalPoints: OPEN_METEO_MAX_TOTAL_POINTS_TO_RENDER,
+    };
+  }
+  return {
+    maxPeriods: MAX_PERIODS_TO_RENDER,
+    maxTotalPoints: MAX_TOTAL_POINTS_TO_RENDER,
+  };
 }
 
 function ChartCardComponent({
@@ -235,11 +250,13 @@ function ChartCardComponent({
   const renderSafetyWarning = useMemo(() => {
     if (!filteredTopicData) return null;
 
+    const renderLimits = getRenderSafetyLimits(providerId);
+
     const seriesCount = filteredTopicData.series.length;
     const periodCount = filteredTopicData.periods.length;
     const totalPoints = filteredTopicData.series.reduce((sum, entry) => sum + entry.points.length, 0);
 
-    if (periodCount > MAX_PERIODS_TO_RENDER || totalPoints > MAX_TOTAL_POINTS_TO_RENDER) {
+    if (periodCount > renderLimits.maxPeriods || totalPoints > renderLimits.maxTotalPoints) {
       return (
         `Dataset too large to render safely (periods: ${periodCount}, points: ${totalPoints}). ` +
         'Reduce geographies or apply stricter filters before charting.'
@@ -254,7 +271,7 @@ function ChartCardComponent({
     }
 
     return null;
-  }, [filteredTopicData]);
+  }, [filteredTopicData, providerId]);
 
   const baseSeries = useMemo(
     () => filteredSeries.filter((series) => !series.label.includes('(forecast)')),
