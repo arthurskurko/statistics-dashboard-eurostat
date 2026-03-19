@@ -41,6 +41,8 @@ type ChartCardProps = {
 };
 
 const MAX_SERIES_TO_RENDER = 16;
+const MAX_PERIODS_TO_RENDER = 900;
+const MAX_TOTAL_POINTS_TO_RENDER = 8000;
 const DEFAULT_EUROSTAT_GEOS = ['EE', 'EU27_2020'];
 const DEFAULT_EUROSTAT_SOURCE_URL_BUILDER = (datasetCode: string) =>
   `https://ec.europa.eu/eurostat/databrowser/view/${datasetCode}/default/table?lang=en`;
@@ -230,6 +232,30 @@ function ChartCardComponent({
     [filteredPeriods, filteredSeries, query.data],
   );
 
+  const renderSafetyWarning = useMemo(() => {
+    if (!filteredTopicData) return null;
+
+    const seriesCount = filteredTopicData.series.length;
+    const periodCount = filteredTopicData.periods.length;
+    const totalPoints = filteredTopicData.series.reduce((sum, entry) => sum + entry.points.length, 0);
+
+    if (periodCount > MAX_PERIODS_TO_RENDER || totalPoints > MAX_TOTAL_POINTS_TO_RENDER) {
+      return (
+        `Dataset too large to render safely (periods: ${periodCount}, points: ${totalPoints}). ` +
+        'Reduce geographies or apply stricter filters before charting.'
+      );
+    }
+
+    if (seriesCount > MAX_SERIES_TO_RENDER) {
+      return (
+        `Dataset includes ${seriesCount} series, which exceeds the safe chart limit of ${MAX_SERIES_TO_RENDER}. ` +
+        'Apply filters or choose fewer geographies.'
+      );
+    }
+
+    return null;
+  }, [filteredTopicData]);
+
   const baseSeries = useMemo(
     () => filteredSeries.filter((series) => !series.label.includes('(forecast)')),
     [filteredSeries],
@@ -334,7 +360,7 @@ function ChartCardComponent({
   });
 
   const chartBuild = useMemo(() => {
-    if (!filteredTopicData || filteredTopicData.series.length === 0) {
+    if (!filteredTopicData || filteredTopicData.series.length === 0 || renderSafetyWarning) {
       return { option: undefined, error: null as string | null };
     }
 
@@ -370,6 +396,7 @@ function ChartCardComponent({
     largeSeries,
     showDualAxisButton,
     topic,
+    renderSafetyWarning,
   ]);
 
   const latestValues = useMemo(
@@ -509,6 +536,11 @@ function ChartCardComponent({
           <p className="max-w-2xl text-sm leading-6 text-rose-100/90">
             Splitting by unit with more than 3 selected units can crash the chart. Please reduce your selection.
           </p>
+        </div>
+      ) : renderSafetyWarning ? (
+        <div className="flex flex-1 flex-col items-start justify-center gap-4 rounded-3xl border border-amber-500/20 bg-amber-500/10 p-6 text-amber-100">
+          <div className="text-lg font-semibold">Dataset too large to render</div>
+          <p className="max-w-2xl text-sm leading-6 text-amber-100/90">{renderSafetyWarning}</p>
         </div>
       ) : query.data && query.data.series.length === 0 ? (
         <div className="flex flex-1 flex-col items-start justify-center gap-4 rounded-3xl border border-rose-400/20 bg-rose-400/10 p-6 text-rose-100">

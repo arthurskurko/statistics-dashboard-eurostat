@@ -30,6 +30,7 @@ type DimensionInfo = {
 
 const EUROSTAT_BASE =
   'https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data';
+const EUROSTAT_MAX_GEO_VALUES = 6;
 
 // Some Eurostat datasets are enormous unless you narrow them by a common filter.
 // When users request these datasets without additional filtering, apply a sane
@@ -314,6 +315,21 @@ export async function fetchTopicData(
   if (geoValues.length === 0) {
     console.warn('fetchTopicData: geoValues empty, defaulting to EE to avoid huge download');
     geoValues = ['EE'];
+  }
+
+  if (geoValues.length > EUROSTAT_MAX_GEO_VALUES) {
+    return {
+      title: topic?.title ?? topicId,
+      subtitle: topic?.description ?? `Eurostat dataset ${topicId}`,
+      unitSuffix: topic?.unitSuffix,
+      decimals: topic?.decimals ?? 0,
+      sourceUrl:
+        topic?.sourceUrl ??
+        `https://ec.europa.eu/eurostat/databrowser/view/${topicId}/default/table?lang=en`,
+      series: [],
+      periods: [],
+      warning: `Too many geographies selected (${geoValues.length}). Please select up to ${EUROSTAT_MAX_GEO_VALUES} geographies.`,
+    };
   }
 
   if (!topic) {

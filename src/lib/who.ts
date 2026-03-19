@@ -48,6 +48,10 @@ const WHO_COUNTRIES_STORAGE_KEY = 'who-countries-cache.v1';
 const WHO_PROXY_ROOTS = resolveWhoProxyRoots();
 const WHO_MODE = (import.meta.env.VITE_WHO_MODE ?? 'auto').toLowerCase();
 const WHO_SNAPSHOT_BASE = `${import.meta.env.BASE_URL}who-snapshots`;
+const WHO_MAX_GEO_VALUES = 5;
+const WHO_MAX_SERIES = 28;
+const WHO_MAX_PERIODS = 900;
+const WHO_MAX_TOTAL_POINTS = 8000;
 const IS_LOCAL_DEV =
   import.meta.env.DEV &&
   typeof window !== 'undefined' &&
@@ -601,6 +605,21 @@ export async function fetchWhoTopicData(
   const geoValues = (options?.geoValues?.length ? options.geoValues : topic.geoValues) ?? ['EST', 'EUR'];
 
   const countries = await fetchWhoCountries();
+
+  if (geoValues.length > WHO_MAX_GEO_VALUES) {
+    return {
+      title: topic.title,
+      subtitle: topic.description,
+      decimals: topic.decimals ?? 2,
+      unitSuffix: topic.unitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: countries,
+      warning: `Too many geographies selected (${geoValues.length}). Please select up to ${WHO_MAX_GEO_VALUES} geographies for WHO indicators.`,
+    };
+  }
+
   const numericFilter = 'NumericValue ne null';
 
   let series: DataSeries[] = [];
@@ -669,6 +688,27 @@ export async function fetchWhoTopicData(
       availableGeos: countries,
       warning:
         'No WHO observations were returned for this indicator and selected geographies. Try another geography or indicator code.',
+    };
+  }
+
+  const totalPointCount = series.reduce((sum, entry) => sum + entry.points.length, 0);
+  if (
+    series.length > WHO_MAX_SERIES ||
+    periods.length > WHO_MAX_PERIODS ||
+    totalPointCount > WHO_MAX_TOTAL_POINTS
+  ) {
+    return {
+      title: indicatorName,
+      subtitle: topic.description,
+      decimals: topic.decimals ?? 2,
+      unitSuffix: topic.unitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: countries,
+      warning:
+        `Dataset too large to process safely (series: ${series.length}, periods: ${periods.length}, points: ${totalPointCount}). ` +
+        'Narrow geographies or choose a smaller indicator.',
     };
   }
 

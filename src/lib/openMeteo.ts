@@ -25,6 +25,10 @@ const OPEN_METEO_BASE_RETRY_MS = 1000;
 const OPEN_METEO_MAX_CONCURRENT_REQUESTS = 2;
 const OPEN_METEO_HISTORY_DAYS = 4 * 365;
 const OPEN_METEO_MAX_POINTS_PER_SERIES = 1200;
+const OPEN_METEO_MAX_GEO_VALUES = 6;
+const OPEN_METEO_MAX_SERIES = 28;
+const OPEN_METEO_MAX_PERIODS = 900;
+const OPEN_METEO_MAX_TOTAL_POINTS = 8000;
 
 const openMeteoResponseCache = new Map<string, { expiresAt: number; payload: OpenMeteoDailyResponse }>();
 const openMeteoInFlight = new Map<string, Promise<OpenMeteoDailyResponse>>();
@@ -347,6 +351,20 @@ export async function fetchOpenMeteoTopicData(
     };
   }
 
+  if (selectedGeos.length > OPEN_METEO_MAX_GEO_VALUES) {
+    return {
+      title: topic.title,
+      subtitle: topic.description,
+      decimals: topic.decimals ?? 1,
+      unitSuffix: topic.unitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
+      warning: `Too many geographies selected (${selectedGeos.length}). Please select up to ${OPEN_METEO_MAX_GEO_VALUES} geographies.`,
+    };
+  }
+
   const rows = await Promise.all(selectedGeos.map((geo) => fetchGeoSeries(geo, variableName)));
   const series = rows.map((row) => row.series).filter((entry) => entry.points.length > 0);
 
@@ -357,6 +375,7 @@ export async function fetchOpenMeteoTopicData(
 
   const periods = [...periodSet].sort((a, b) => inferSortKey(a) - inferSortKey(b));
   const unitSuffix = topic.unitSuffix ?? rows.find((row) => row.unitSuffix)?.unitSuffix;
+  const totalPointCount = series.reduce((sum, entry) => sum + entry.points.length, 0);
 
   if (series.length === 0) {
     return {
@@ -369,6 +388,26 @@ export async function fetchOpenMeteoTopicData(
       periods: [],
       availableGeos: OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
       warning: 'No observations were returned for this variable and selected geographies.',
+    };
+  }
+
+  if (
+    series.length > OPEN_METEO_MAX_SERIES ||
+    periods.length > OPEN_METEO_MAX_PERIODS ||
+    totalPointCount > OPEN_METEO_MAX_TOTAL_POINTS
+  ) {
+    return {
+      title: topic.title,
+      subtitle: topic.description,
+      decimals: topic.decimals ?? 1,
+      unitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
+      warning:
+        `Dataset too large to process safely (series: ${series.length}, periods: ${periods.length}, points: ${totalPointCount}). ` +
+        'Reduce geographies or choose a smaller variable.',
     };
   }
 

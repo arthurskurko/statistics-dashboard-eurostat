@@ -30,6 +30,10 @@ type WorldBankMeta = {
 
 const WORLD_BANK_BASE = 'https://api.worldbank.org/v2';
 const COUNTRIES_STORAGE_KEY = 'worldbank-countries-cache.v1';
+const WORLD_BANK_MAX_GEO_VALUES = 6;
+const WORLD_BANK_MAX_SERIES = 28;
+const WORLD_BANK_MAX_PERIODS = 900;
+const WORLD_BANK_MAX_TOTAL_POINTS = 8000;
 
 function computeForecast(
   points: DataPoint[],
@@ -203,6 +207,21 @@ export async function fetchWorldBankTopicData(
   const geoValues = (options?.geoValues?.length ? options.geoValues : topic.geoValues) ?? ['EST', 'EUU'];
 
   const countries = await fetchWorldBankCountries();
+
+  if (geoValues.length > WORLD_BANK_MAX_GEO_VALUES) {
+    return {
+      title: topic.title,
+      subtitle: topic.description,
+      decimals: topic.decimals ?? 2,
+      unitSuffix: topic.unitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: countries,
+      warning: `Too many geographies selected (${geoValues.length}). Please select up to ${WORLD_BANK_MAX_GEO_VALUES} geographies.`,
+    };
+  }
+
   const countryPath = geoValues.map((geo) => geo.toLowerCase()).join(';');
 
   const url = new URL(`${WORLD_BANK_BASE}/country/${countryPath}/indicator/${indicatorCode}`);
@@ -212,6 +231,7 @@ export async function fetchWorldBankTopicData(
   const rows = await fetchAllPages<WorldBankDataRow>(url);
   const nonNullRows = rows.filter((row) => row.value != null);
   const { series, periods } = mapRowsToSeries(nonNullRows);
+  const totalPointCount = series.reduce((sum, entry) => sum + entry.points.length, 0);
 
   const indicatorTitle = rows[0]?.indicator?.value?.trim() || topic.title;
   const unit = rows.find((row) => row.unit && row.unit.trim())?.unit?.trim();
@@ -230,6 +250,26 @@ export async function fetchWorldBankTopicData(
       availableGeos: countries,
       warning:
         'No observations were returned for this indicator and the selected countries. Try another country or indicator.',
+    };
+  }
+
+  if (
+    series.length > WORLD_BANK_MAX_SERIES ||
+    periods.length > WORLD_BANK_MAX_PERIODS ||
+    totalPointCount > WORLD_BANK_MAX_TOTAL_POINTS
+  ) {
+    return {
+      title: indicatorTitle,
+      subtitle: topic.description,
+      decimals: typeof decimal === 'number' ? decimal : topic.decimals ?? 2,
+      unitSuffix: resolvedUnitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: countries,
+      warning:
+        `Dataset too large to process safely (series: ${series.length}, periods: ${periods.length}, points: ${totalPointCount}). ` +
+        'Reduce geographies or choose a smaller indicator.',
     };
   }
 
