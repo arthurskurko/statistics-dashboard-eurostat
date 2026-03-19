@@ -48,6 +48,10 @@ const WHO_COUNTRIES_STORAGE_KEY = 'who-countries-cache.v1';
 const WHO_PROXY_ROOTS = resolveWhoProxyRoots();
 const WHO_MODE = (import.meta.env.VITE_WHO_MODE ?? 'auto').toLowerCase();
 const WHO_SNAPSHOT_BASE = `${import.meta.env.BASE_URL}who-snapshots`;
+const IS_LOCAL_DEV =
+  import.meta.env.DEV &&
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
 let whoSnapshotIndexPromise: Promise<WhoSnapshotIndex | null> | null = null;
 const whoSnapshotDataPromises = new Map<string, Promise<WhoSnapshotData | null>>();
@@ -55,7 +59,10 @@ const whoSnapshotDataPromises = new Map<string, Promise<WhoSnapshotData | null>>
 type WhoFetchMode = 'direct' | 'proxy';
 
 function shouldTrySnapshots(): boolean {
-  return WHO_MODE === 'auto' || WHO_MODE === 'snapshot';
+  if (WHO_MODE === 'snapshot') return true;
+  // In local dev we want fresh WHO data from the dev proxy, not pre-generated snapshots.
+  if (WHO_MODE === 'auto' && IS_LOCAL_DEV) return false;
+  return WHO_MODE === 'auto';
 }
 
 function isSnapshotOnlyMode(): boolean {
@@ -202,7 +209,13 @@ function computeForecast(points: DataPoint[], horizon: number): number[] {
 
 async function fetchWhoAllPages<T>(url: URL): Promise<T[]> {
   const modeSequence: WhoFetchMode[] =
-    WHO_MODE === 'direct' ? ['direct'] : WHO_MODE === 'proxy' ? ['proxy'] : ['direct', 'proxy'];
+    WHO_MODE === 'direct'
+      ? ['direct']
+      : WHO_MODE === 'proxy'
+        ? ['proxy']
+        : IS_LOCAL_DEV
+          ? ['proxy']
+          : ['direct', 'proxy'];
 
   let lastError: Error | null = null;
 

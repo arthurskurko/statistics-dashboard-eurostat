@@ -11,7 +11,12 @@ import { fetchWorldBankTopicData } from './lib/worldBank';
 const STORAGE_KEY = 'worldbank-statistics-dashboard.cards';
 const DEFAULT_CHARTS_KEY = 'worldbank-statistics-dashboard.defaultCharts';
 const THEME_STORAGE_KEY = 'worldbank-statistics-dashboard.theme';
-const DEFAULT_CHART_TOPIC_IDS = ['wb-pop-total', 'wb-unemployment', 'wb-inflation'];
+const DEFAULT_CHART_TOPIC_IDS = [
+  'wb-pop-total',
+  'wb-unemployment',
+  'wb-labor-force-participation',
+  'wb-inflation',
+];
 const WORLD_BANK_DEFAULT_GEOS = ['EST', 'EUU'];
 const WORLD_BANK_SOURCE_URL_BUILDER = (datasetCode: string) =>
   `https://data.worldbank.org/indicator/${datasetCode}`;
