@@ -1,4 +1,5 @@
 import type { FractalBranch, Vec2 } from './fractalTypes';
+import type { ModalFractalTree } from './fractalModalSimulation';
 
 const FRACTAL_CENTER: Vec2 = { x: 88, y: 88 };
 
@@ -137,4 +138,44 @@ export function drawModalHorizontalBranch(
     ctx.shadowBlur = 0;
     ctx.fill();
   }
+}
+
+export function drawModalRecursiveTree(
+  ctx: CanvasRenderingContext2D,
+  tree: ModalFractalTree,
+  width: number,
+  height: number,
+  pulse: number,
+): void {
+  if (tree.life <= 0 || tree.segments.length === 0) return;
+
+  const alpha = Math.max(0, Math.min(1, tree.life));
+  const pulseScale = 0.92 + pulse * 0.12;
+  const { r, g, b } = tree.colorRgb;
+
+  // Tree geometry is authored in a fixed 176x176 space.
+  const scale = Math.max(0.8, Math.min(width / 176, height / 176) * 0.95);
+  const offsetX = width * 0.5 - 88 * scale;
+  const offsetY = height * 0.98 - 170 * scale;
+
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+
+  for (let index = 0; index < tree.segments.length; index += 1) {
+    const segment = tree.segments[index];
+    const generationFade = Math.max(0.18, 1 - segment.generation * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(segment.a.x, segment.a.y);
+    ctx.lineTo(segment.b.x, segment.b.y);
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.15 + alpha * 0.62) * pulseScale * generationFade})`;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0)';
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = Math.max(0.32, segment.width / Math.max(1, scale * 0.55));
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  ctx.restore();
 }

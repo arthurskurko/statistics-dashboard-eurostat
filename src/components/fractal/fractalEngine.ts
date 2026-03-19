@@ -1,4 +1,5 @@
-import { drawMainBranch, drawModalHorizontalBranch, clearMainCanvas, clearModalCanvas, computeTempoPulse } from './fractalRenderers';
+import { drawMainBranch, drawModalRecursiveTree, clearMainCanvas, clearModalCanvas, computeTempoPulse } from './fractalRenderers';
+import { FractalModalSimulation } from './fractalModalSimulation';
 import { FractalSimulation } from './fractalSimulation';
 import type { FractalStepPacket } from './fractalTypes';
 
@@ -20,11 +21,11 @@ export type FractalFrameParams = {
 };
 
 const MAX_SEEDS_PER_FRAME_COMPACT = 2;
-const MAX_SEEDS_PER_FRAME_MODAL = 3;
 const MAX_BRANCHES_RETAINED_COMPACT = 320;
-const MAX_BRANCHES_RETAINED_MODAL = 380;
 const MAX_PENDING_SEEDS = 260;
 const STALE_PENDING_SEED_MAX_AGE_MS = 2200;
+const MAX_MODAL_SEEDS_PER_FRAME = 2;
+const MAX_MODAL_TREES_RETAINED = 16;
 
 function shouldDrawCompactSample(branch: { points: Array<{ x: number; y: number }>; colorRgb: { r: number; g: number; b: number } }): boolean {
   const root = branch.points[0];
@@ -40,56 +41,27 @@ function shouldDrawCompactSample(branch: { points: Array<{ x: number; y: number 
   return (hash & 1) === 0;
 }
 
-function shouldDrawModalSample(branch: { points: Array<{ x: number; y: number }>; colorRgb: { r: number; g: number; b: number } }): boolean {
-  const root = branch.points[0];
-  const tip = branch.points[branch.points.length - 1] ?? root;
-  const hash =
-    ((Math.floor((root?.x ?? 0) * 23) * 2654435761) ^
-      (Math.floor((root?.y ?? 0) * 29) * 2246822519) ^
-      (Math.floor((tip?.x ?? 0) * 31) * 3266489917) ^
-      (Math.floor((tip?.y ?? 0) * 37) * 668265263) ^
-      (branch.colorRgb.r * 19 + branch.colorRgb.g * 11 + branch.colorRgb.b * 7)) >>>
-    0;
-  return (hash % 10) < 7;
-}
-
-function modalBranchHash(branch: {
-  points: Array<{ x: number; y: number }>;
-  colorRgb: { r: number; g: number; b: number };
-  seedId?: number;
-  generation?: number;
-}): number {
-  const root = branch.points[0];
-  const tip = branch.points[branch.points.length - 1] ?? root;
-  return (
-    ((Math.floor((root?.x ?? 0) * 23) * 2654435761) ^
-      (Math.floor((root?.y ?? 0) * 29) * 2246822519) ^
-      (Math.floor((tip?.x ?? 0) * 31) * 3266489917) ^
-      (Math.floor((tip?.y ?? 0) * 37) * 668265263) ^
-      (branch.colorRgb.r * 19 + branch.colorRgb.g * 11 + branch.colorRgb.b * 7) ^
-      ((branch.seedId ?? 0) * 31) ^
-      ((branch.generation ?? 0) * 131)) >>>
-    0
-  );
-}
-
 export class FractalEngine {
   private readonly simulation = new FractalSimulation();
+  private readonly modalSimulation = new FractalModalSimulation();
 
   enqueueStep(packet: FractalStepPacket): void {
     this.simulation.enqueueStep(packet);
+    this.modalSimulation.enqueueStep(packet);
   }
 
   clear(): void {
     this.simulation.clear();
+    this.modalSimulation.clear();
   }
 
   clearPendingSeeds(): void {
     this.simulation.clearPendingSeeds();
+    this.modalSimulation.clearPendingSeeds();
   }
 
   hasWork(): boolean {
-    return this.simulation.hasWork();
+    return this.simulation.hasWork() || this.modalSimulation.hasWork();
   }
 
   renderFrame(params: FractalFrameParams): void {
@@ -109,16 +81,24 @@ export class FractalEngine {
     } = params;
 
     const modalActive = Boolean(modalCtx && modalWidth && modalHeight && modalDpr);
-    const maxSeedsPerFrame = modalActive ? MAX_SEEDS_PER_FRAME_MODAL : MAX_SEEDS_PER_FRAME_COMPACT;
-    const maxBranchesRetained = modalActive ? MAX_BRANCHES_RETAINED_MODAL : MAX_BRANCHES_RETAINED_COMPACT;
 
     this.simulation.prepareFrame(
-      maxSeedsPerFrame,
-      maxBranchesRetained,
+      MAX_SEEDS_PER_FRAME_COMPACT,
+      MAX_BRANCHES_RETAINED_COMPACT,
       timestampMs,
       STALE_PENDING_SEED_MAX_AGE_MS,
       MAX_PENDING_SEEDS,
     );
+
+    if (modalActive) {
+      this.modalSimulation.prepareFrame(
+        MAX_MODAL_SEEDS_PER_FRAME,
+        MAX_MODAL_TREES_RETAINED,
+        timestampMs,
+        STALE_PENDING_SEED_MAX_AGE_MS,
+        MAX_PENDING_SEEDS,
+      );
+    }
 
     if (!suppressMainDrawing) {
       clearMainCanvas(mainCtx, mainWidth, mainHeight, mainDpr);
@@ -130,8 +110,7 @@ export class FractalEngine {
     }
 
     const branches = this.simulation.getBranches();
-    const compactHighDensity = !modalActive && branches.length > 220;
-    const modalHighDensity = modalActive && branches.length > 180;
+    const compactHighDensity = branches.length > 220;
 
     for (let index = 0; index < branches.length; index += 1) {
       const branch = branches[index];
@@ -139,20 +118,19 @@ export class FractalEngine {
       if (!suppressMainDrawing && (!compactHighDensity || shouldDrawCompactSample(branch))) {
         drawMainBranch(mainCtx, branch, { lightweight: !modalActive });
       }
-      const h = modalBranchHash(branch) % 100;
-      const keepByGeneration =
-        branch.generation <= 0 ? h < 98 :
-        branch.generation === 1 ? h < 88 :
-        branch.generation === 2 ? h < 68 :
-        h < 42;
-      const keepByLength = branch.pathLength >= 6;
-      const drawInModal =
-        !modalHighDensity ||
-        ((keepByGeneration && keepByLength && h < 62) || shouldDrawModalSample(branch));
-      if (modalCtx && modalWidth && modalHeight && drawInModal) {
-        drawModalHorizontalBranch(modalCtx, branch, modalWidth, modalHeight, pulse);
+    }
+
+    if (modalCtx && modalWidth && modalHeight) {
+      const modalTrees = this.modalSimulation.getTrees();
+      for (let treeIndex = 0; treeIndex < modalTrees.length; treeIndex += 1) {
+        const tree = modalTrees[treeIndex];
+        if (tree.life <= 0.02) continue;
+        drawModalRecursiveTree(modalCtx, tree, modalWidth, modalHeight, pulse);
       }
     }
-    this.simulation.ageAndCompact(modalActive ? fadeFactor * 0.72 : fadeFactor);
+    this.simulation.ageAndCompact(fadeFactor);
+    if (modalActive) {
+      this.modalSimulation.ageAndCompact(fadeFactor * 0.78);
+    }
   }
 }
