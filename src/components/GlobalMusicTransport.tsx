@@ -22,6 +22,7 @@ type LightningBranch = {
   life: number;
   decay: number;
   width: number;
+  tipSize: number;
   colorRgb: { r: number; g: number; b: number };
 };
 
@@ -138,14 +139,15 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
       life: 1,
       decay: 0.013 + random() * 0.01,
       width,
+      tipSize: 1.2 + intensity * 1.35,
       colorRgb: parseHexColor(seedPoint.color),
     });
 
     if (depth <= 0) return;
 
-    const branchChance = 0.5 + intensity * 0.24;
+    const branchChance = 0.56 + intensity * 0.26;
     if (random() < branchChance) {
-      const childCount = random() < 0.45 ? 1 : random() < 0.86 ? 2 : 3;
+      const childCount = random() < 0.3 ? 1 : random() < 0.78 ? 2 : 3;
       for (let child = 0; child < childCount; child += 1) {
         const anchorIndex = Math.max(1, Math.floor(points.length * (0.32 + random() * 0.38)));
         const anchor = points[Math.min(anchorIndex, points.length - 1)] ?? current;
@@ -161,7 +163,7 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
     x: FRACTAL_CENTER.x + Math.cos(baseAngle) * entryRadius,
     y: FRACTAL_CENTER.y + Math.sin(baseAngle) * entryRadius,
   };
-  const depth = 3 + Math.floor(intensity * 2.8);
+  const depth = 3 + Math.floor(intensity * 3.2);
   const rootLength = 22 + intensity * 30;
   const rootWidth = 1 + intensity * 1.5;
   grow(root, baseAngle, rootLength, depth, rootWidth);
@@ -185,12 +187,77 @@ function drawBranch(ctx: CanvasRenderingContext2D, branch: LightningBranch) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.stroke();
+
+  // Render a glowing terminal tip so branch endings are readable at small size.
+  const tip = branch.points[branch.points.length - 1];
+  if (tip) {
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, branch.tipSize * (0.7 + alpha * 0.65), 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.32 + alpha * 0.6})`;
+    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.3 + alpha * 0.5})`;
+    ctx.shadowBlur = 6 + alpha * 8;
+    ctx.fill();
+  }
+}
+
+function drawBranchInModal(
+  ctx: CanvasRenderingContext2D,
+  branch: LightningBranch,
+  width: number,
+  height: number,
+) {
+  if (branch.points.length < 2 || branch.life <= 0) return;
+  const alpha = Math.max(0, Math.min(1, branch.life));
+  const { r, g, b } = branch.colorRgb;
+
+  const size = Math.min(width, height);
+  const centerX = width * 0.5;
+  const centerY = height * 0.5;
+  const scale = (size / 176) * 2.55;
+
+  const projectCircle = (point: Vec2): Vec2 => {
+    const dx = point.x - FRACTAL_CENTER.x;
+    const dy = point.y - FRACTAL_CENTER.y;
+    return {
+      x: centerX + dx * scale,
+      y: centerY + dy * scale,
+    };
+  };
+
+  ctx.beginPath();
+  const firstL = projectCircle(branch.points[0]);
+  ctx.moveTo(firstL.x, firstL.y);
+  for (let i = 1; i < branch.points.length; i += 1) {
+    const p = projectCircle(branch.points[i]);
+    ctx.lineTo(p.x, p.y);
+  }
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.18 + alpha * 0.6})`;
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.24 + alpha * 0.48})`;
+  ctx.shadowBlur = 10 + alpha * 13;
+  ctx.lineWidth = branch.width * 1.7;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // In modal, emphasize branch terminals a bit more for readability.
+  const tip = branch.points[branch.points.length - 1];
+  if (tip) {
+    const tipP = projectCircle(tip);
+    ctx.beginPath();
+    ctx.arc(tipP.x, tipP.y, Math.max(1.3, branch.tipSize * (1 + alpha * 0.6)), 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.36 + alpha * 0.58})`;
+    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.34 + alpha * 0.48})`;
+    ctx.shadowBlur = 10 + alpha * 10;
+    ctx.fill();
+  }
 }
 
 export function GlobalMusicTransport() {
   const [playingCount, setPlayingCount] = React.useState(0);
   const [lastCardId, setLastCardId] = React.useState<string | null>(null);
+  const [modalOpen, setModalOpen] = React.useState(false);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const modalCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const lightningRef = React.useRef<LightningBranch[]>([]);
   const pendingSeedsRef = React.useRef<PendingSeed[]>([]);
   const animationFrameRef = React.useRef<number | null>(null);
@@ -199,11 +266,17 @@ export function GlobalMusicTransport() {
   const playingCardIdsRef = React.useRef(new Set<string>());
   const playingCountRef = React.useRef(0);
   const lastCardIdRef = React.useRef<string | null>(null);
+  const modalOpenRef = React.useRef(false);
 
   const ensureRenderLoop = React.useCallback(() => {
     if (animationFrameRef.current !== null || !renderCallbackRef.current) return;
     animationFrameRef.current = window.requestAnimationFrame(renderCallbackRef.current);
   }, []);
+
+  React.useEffect(() => {
+    modalOpenRef.current = modalOpen;
+    if (modalOpen) ensureRenderLoop();
+  }, [modalOpen, ensureRenderLoop]);
 
   React.useEffect(() => {
     const onGlobalMusicState = (event: Event) => {
@@ -266,6 +339,22 @@ export function GlobalMusicTransport() {
         return;
       }
 
+      const modalCanvas = modalCanvasRef.current;
+      let modalCtx: CanvasRenderingContext2D | null = null;
+      let modalRect: DOMRect | null = null;
+      let modalDpr = dpr;
+      if (modalOpenRef.current && modalCanvas) {
+        modalDpr = Math.min(window.devicePixelRatio || 1, 2);
+        modalRect = modalCanvas.getBoundingClientRect();
+        const modalWidth = Math.max(1, Math.round(modalRect.width * modalDpr));
+        const modalHeight = Math.max(1, Math.round(modalRect.height * modalDpr));
+        if (modalCanvas.width !== modalWidth || modalCanvas.height !== modalHeight) {
+          modalCanvas.width = modalWidth;
+          modalCanvas.height = modalHeight;
+        }
+        modalCtx = modalCanvas.getContext('2d');
+      }
+
       const elapsed = lastFrameTimeRef.current ? Math.min(42, timestamp - lastFrameTimeRef.current) : 16;
       lastFrameTimeRef.current = timestamp;
       const fadeFactor = elapsed / 16;
@@ -285,6 +374,28 @@ export function GlobalMusicTransport() {
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, rect.width, rect.height);
+      if (modalCtx && modalRect) {
+        modalCtx.setTransform(modalDpr, 0, 0, modalDpr, 0, 0);
+        modalCtx.clearRect(0, 0, modalRect.width, modalRect.height);
+        modalCtx.fillStyle = 'rgba(2, 10, 26, 0.55)';
+        modalCtx.fillRect(0, 0, modalRect.width, modalRect.height);
+        const glowRadius = Math.min(modalRect.width, modalRect.height) * 0.42;
+        const glow = modalCtx.createRadialGradient(
+          modalRect.width * 0.5,
+          modalRect.height * 0.5,
+          glowRadius * 0.12,
+          modalRect.width * 0.5,
+          modalRect.height * 0.5,
+          glowRadius,
+        );
+        glow.addColorStop(0, 'rgba(251, 191, 36, 0.2)');
+        glow.addColorStop(0.62, 'rgba(251, 191, 36, 0.06)');
+        glow.addColorStop(1, 'rgba(251, 191, 36, 0)');
+        modalCtx.fillStyle = glow;
+        modalCtx.beginPath();
+        modalCtx.arc(modalRect.width * 0.5, modalRect.height * 0.5, glowRadius, 0, Math.PI * 2);
+        modalCtx.fill();
+      }
 
       const branches = lightningRef.current;
       let writeIndex = 0;
@@ -292,6 +403,9 @@ export function GlobalMusicTransport() {
         const branch = branches[readIndex];
         if (branch.life <= 0.02) continue;
         drawBranch(ctx, branch);
+        if (modalCtx && modalRect) {
+          drawBranchInModal(modalCtx, branch, modalRect.width, modalRect.height);
+        }
         branch.life -= branch.decay * fadeFactor;
         branches[writeIndex] = branch;
         writeIndex += 1;
@@ -301,7 +415,8 @@ export function GlobalMusicTransport() {
       const hasWork =
         playingCountRef.current > 0 ||
         pendingSeedsRef.current.length > 0 ||
-        branches.length > 0;
+        branches.length > 0 ||
+        modalOpenRef.current;
 
       if (!hasWork) {
         animationFrameRef.current = null;
@@ -341,9 +456,11 @@ export function GlobalMusicTransport() {
   }, [lastCardId, playingCount]);
 
   const hasPlayableTarget = playingCount > 0 || Boolean(lastCardId);
+  const showEnlargeAction = playingCount > 0;
 
   return (
-    <div className="pointer-events-none fixed bottom-2 right-2 z-50 sm:bottom-3 sm:right-3">
+    <>
+      <div className="pointer-events-none fixed bottom-2 right-2 z-50 sm:bottom-3 sm:right-3">
       <div className="relative h-44 w-44 sm:h-48 sm:w-48">
         <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_center,rgba(251,191,36,0.24),rgba(251,191,36,0.08)_55%,rgba(251,191,36,0.03)_78%,transparent_96%)]" />
         <canvas
@@ -357,26 +474,74 @@ export function GlobalMusicTransport() {
         />
         <div className="absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-300/40 bg-slate-900/62" aria-hidden />
 
-        <button
-          type="button"
-          onClick={handleToggle}
-          disabled={!hasPlayableTarget}
-          className="pointer-events-auto absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-amber-300/50 bg-slate-900/90 text-amber-200 shadow-lg shadow-amber-600/20 backdrop-blur-sm transition hover:scale-[1.03] hover:border-amber-200/70 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-55"
-          title={playingCount > 0 ? `Pause all playing charts (${playingCount})` : lastCardId ? `Play music for ${lastCardId}` : 'Start chart music to activate'}
-          aria-label={playingCount > 0 ? 'Pause all playing music' : 'Play music'}
-        >
-          {playingCount > 0 ? (
-            <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden>
-              <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
-              <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
+        <div className="pointer-events-auto absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center">
+          <button
+            type="button"
+            onClick={handleToggle}
+            disabled={!hasPlayableTarget}
+            className={`flex h-14 items-center justify-center border border-amber-300/50 bg-slate-900/90 text-amber-200 shadow-lg shadow-amber-600/20 backdrop-blur-sm transition-all duration-200 hover:border-amber-200/70 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-55 ${showEnlargeAction ? 'w-12 rounded-r-none border-r-0' : 'w-14 rounded-full'}`}
+            title={playingCount > 0 ? `Pause all playing charts (${playingCount})` : lastCardId ? `Play music for ${lastCardId}` : 'Start chart music to activate'}
+            aria-label={playingCount > 0 ? 'Pause all playing music' : 'Play music'}
+          >
+            {playingCount > 0 ? (
+              <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden>
+                <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
+                <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="ml-0.5 h-6 w-6" aria-hidden>
+                <path d="M8 5.5L19 12L8 18.5V5.5Z" fill="currentColor" />
+              </svg>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="flex h-14 items-center justify-center overflow-hidden rounded-r-full border border-amber-300/45 bg-slate-900/90 text-amber-200 shadow-lg shadow-amber-600/15 transition-all duration-200 hover:border-amber-200/70 hover:text-amber-100"
+            style={{
+              width: showEnlargeAction ? '3rem' : '0rem',
+              opacity: showEnlargeAction ? 1 : 0,
+              pointerEvents: showEnlargeAction ? 'auto' : 'none',
+              borderLeftWidth: showEnlargeAction ? '1px' : '0px',
+              borderLeftColor: 'rgba(252, 211, 77, 0.35)',
+            }}
+            title="Enlarge fractal view"
+            aria-label="Open fractal modal"
+            disabled={!showEnlargeAction}
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+              <path d="M4 9V4H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              <path d="M20 9V4H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              <path d="M4 15V20H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              <path d="M20 15V20H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" className="ml-0.5 h-6 w-6" aria-hidden>
-              <path d="M8 5.5L19 12L8 18.5V5.5Z" fill="currentColor" />
-            </svg>
-          )}
-        </button>
+          </button>
+        </div>
       </div>
-    </div>
+      </div>
+
+      {modalOpen ? (
+        <div className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-[600px] overflow-hidden rounded-3xl border border-amber-400/30 bg-slate-950/90 shadow-2xl shadow-amber-900/30">
+            <div className="flex items-center justify-between border-b border-amber-400/20 px-4 py-3 text-amber-100">
+              <div className="text-sm uppercase tracking-[0.15em] text-amber-200/90">Fractal Forest + Lightning</div>
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="rounded-full border border-amber-300/45 px-2.5 py-1 text-sm font-semibold text-amber-200 transition hover:border-amber-200/80 hover:text-amber-100"
+                aria-label="Close fractal modal"
+              >
+                X
+              </button>
+            </div>
+            <div className="relative h-[420px] w-full bg-[radial-gradient(circle_at_50%_25%,rgba(59,130,246,0.16),rgba(15,23,42,0.82)_48%,rgba(2,6,23,0.98)_100%)]">
+              <canvas ref={modalCanvasRef} className="h-full w-full" aria-hidden />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-emerald-900/18 via-emerald-800/8 to-transparent" />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
