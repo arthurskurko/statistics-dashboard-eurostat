@@ -110,11 +110,12 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
             providerId,
             playing,
             stepInfo: stepInfo ?? null,
+            tempoBpm: musicTempo,
           },
         }),
       );
     },
-    [cardId, providerId],
+    [cardId, musicTempo, providerId],
   );
 
   const setMusicTempo = React.useCallback(
