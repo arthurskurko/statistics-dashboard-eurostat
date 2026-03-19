@@ -24,9 +24,15 @@ export type ModalFractalTree = {
   segments: ModalFractalSegment[];
   life: number;
   decay: number;
+  growth: number;
+  growthRate: number;
+  retiring: boolean;
   colorRgb: { r: number; g: number; b: number };
   seedId: number;
 };
+
+const RETIRING_DECAY_MULTIPLIER = 4.2;
+const HARD_TREE_SAFETY_CAP = 40;
 
 const MODAL_TREE_CENTER_X = 88;
 const MODAL_TREE_BASELINE_Y = 180;
@@ -134,7 +140,10 @@ function createModalFractalTree(seedPoint: ModalSeedPoint, index: number, total:
   return {
     segments,
     life: 1,
-    decay: 0.004 + random() * 0.004,
+    decay: 0.0018 + random() * 0.0022,
+    growth: 0,
+    growthRate: 0.06 + random() * 0.05,
+    retiring: false,
     colorRgb: parseHexColor(seedPoint.color),
     seedId: seedPoint.seed,
   };
@@ -180,8 +189,11 @@ export class FractalModalSimulation {
       this.pendingSeeds.splice(0, this.pendingSeeds.length - maxPendingSeeds);
     }
 
+    const backlogPressure = this.pendingSeeds.length;
+    const effectiveSeedsPerFrame = backlogPressure > 28 ? Math.max(1, maxSeedsPerFrame - 1) : maxSeedsPerFrame;
+
     let generated = 0;
-    while (generated < maxSeedsPerFrame && this.pendingSeeds.length > 0) {
+    while (generated < effectiveSeedsPerFrame && this.pendingSeeds.length > 0) {
       const pending = this.pendingSeeds.shift();
       if (!pending) break;
       this.trees.push(createModalFractalTree(pending.seedPoint, pending.index, pending.total));
@@ -189,7 +201,17 @@ export class FractalModalSimulation {
     }
 
     if (this.trees.length > maxTreesRetained) {
-      this.trees.splice(0, this.trees.length - maxTreesRetained);
+      let overflow = this.trees.length - maxTreesRetained;
+      for (let index = 0; index < this.trees.length && overflow > 0; index += 1) {
+        const tree = this.trees[index];
+        if (tree.retiring) continue;
+        tree.retiring = true;
+        overflow -= 1;
+      }
+    }
+
+    if (this.trees.length > HARD_TREE_SAFETY_CAP) {
+      this.trees.splice(0, this.trees.length - HARD_TREE_SAFETY_CAP);
     }
   }
 
@@ -197,13 +219,15 @@ export class FractalModalSimulation {
     return this.trees;
   }
 
-  ageAndCompact(fadeFactor: number, minLife = 0.02): void {
+  ageAndCompact(fadeFactor: number, minLife = 0.008): void {
     const smoothedFadeFactor = Math.max(0.65, Math.min(1.25, fadeFactor));
     let writeIndex = 0;
     for (let readIndex = 0; readIndex < this.trees.length; readIndex += 1) {
       const tree = this.trees[readIndex];
       if (tree.life <= minLife) continue;
-      tree.life -= tree.decay * smoothedFadeFactor;
+      tree.growth = Math.min(1, tree.growth + tree.growthRate * smoothedFadeFactor);
+      const decayRate = tree.retiring ? tree.decay * RETIRING_DECAY_MULTIPLIER : tree.decay;
+      tree.life -= decayRate * smoothedFadeFactor;
       this.trees[writeIndex] = tree;
       writeIndex += 1;
     }

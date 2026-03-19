@@ -124,7 +124,7 @@ export class FractalEngine {
       const modalTrees = this.modalSimulation.getTrees();
       for (let treeIndex = 0; treeIndex < modalTrees.length; treeIndex += 1) {
         const tree = modalTrees[treeIndex];
-        if (tree.life <= 0.02) continue;
+        if (tree.life <= 0.008) continue;
         drawModalRecursiveTree(modalCtx, tree, modalWidth, modalHeight, pulse);
       }
     }

@@ -17,13 +17,16 @@ function starNoise(x: number, y: number): number {
 }
 
 function getModalBackgroundCanvas(width: number, height: number): HTMLCanvasElement {
-  if (modalBackgroundCache && modalBackgroundCache.width === width && modalBackgroundCache.height === height) {
+  const cacheWidth = Math.max(1, Math.round(width));
+  const cacheHeight = Math.max(1, Math.round(height));
+
+  if (modalBackgroundCache && modalBackgroundCache.width === cacheWidth && modalBackgroundCache.height === cacheHeight) {
     return modalBackgroundCache.canvas;
   }
 
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(width));
-  canvas.height = Math.max(1, Math.round(height));
+  canvas.width = cacheWidth;
+  canvas.height = cacheHeight;
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     modalBackgroundCache = { width: canvas.width, height: canvas.height, canvas };
@@ -77,8 +80,8 @@ function getModalBackgroundCanvas(width: number, height: number): HTMLCanvasElem
   ctx.fillRect(0, fadeStart, canvas.width, Math.max(1, canvas.height - fadeStart));
 
   modalBackgroundCache = {
-    width: canvas.width,
-    height: canvas.height,
+    width: cacheWidth,
+    height: cacheHeight,
     canvas,
   };
   return canvas;
@@ -231,8 +234,14 @@ export function drawModalRecursiveTree(
   if (tree.life <= 0 || tree.segments.length === 0) return;
 
   const alpha = Math.max(0, Math.min(1, tree.life));
+  const growth = Math.max(0, Math.min(1, tree.growth ?? 1));
+  const visibleSegments = Math.max(1, Math.ceil(tree.segments.length * growth));
+  const fadeIn = Math.min(1, growth * 1.35);
   const pulseScale = 0.92 + pulse * 0.12;
   const { r, g, b } = tree.colorRgb;
+  const color = `rgb(${r}, ${g}, ${b})`;
+  const densityLevel = visibleSegments > 360 ? 3 : visibleSegments > 260 ? 2 : visibleSegments > 180 ? 1 : 0;
+  const baseAlpha = (0.12 + alpha * 0.64) * fadeIn * pulseScale;
 
   // Tree geometry is authored in a fixed 176x176 space.
   const scale = Math.max(0.8, Math.min(width / 176, height / 176) * 0.95);
@@ -242,21 +251,27 @@ export function drawModalRecursiveTree(
   ctx.save();
   ctx.translate(offsetX, offsetY);
   ctx.scale(scale, scale);
+  ctx.shadowColor = 'rgba(0, 0, 0, 0)';
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = color;
 
-  for (let index = 0; index < tree.segments.length; index += 1) {
+  for (let index = 0; index < visibleSegments; index += 1) {
     const segment = tree.segments[index];
+    if (densityLevel >= 1 && segment.generation >= 6 && ((tree.seedId + index * 19) & 3) !== 0) continue;
+    if (densityLevel >= 2 && segment.generation >= 5 && (tree.seedId + index * 13) % 3 !== 0) continue;
+    if (densityLevel >= 3 && segment.generation >= 4 && ((tree.seedId + index * 11) & 1) !== 0) continue;
+
     const generationFade = Math.max(0.18, 1 - segment.generation * 0.08);
+    ctx.globalAlpha = baseAlpha * generationFade;
     ctx.beginPath();
     ctx.moveTo(segment.a.x, segment.a.y);
     ctx.lineTo(segment.b.x, segment.b.y);
-    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.15 + alpha * 0.62) * pulseScale * generationFade})`;
-    ctx.shadowColor = 'rgba(0, 0, 0, 0)';
-    ctx.shadowBlur = 0;
     ctx.lineWidth = Math.max(0.32, segment.width / Math.max(1, scale * 0.55));
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.stroke();
   }
 
+  ctx.globalAlpha = 1;
   ctx.restore();
 }
