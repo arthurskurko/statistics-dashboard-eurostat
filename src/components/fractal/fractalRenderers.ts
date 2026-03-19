@@ -74,52 +74,67 @@ export function drawModalHorizontalBranch(
 ): void {
   if (branch.points.length < 2 || branch.life <= 0) return;
 
+  let pathLength = 0;
+  for (let i = 1; i < branch.points.length; i += 1) {
+    const a = branch.points[i - 1];
+    const b = branch.points[i];
+    pathLength += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  // Keep smaller branches too so trees read as fractals, not only trunk sticks.
+  if (pathLength < 4.2) return;
+
   const alpha = Math.max(0, Math.min(1, branch.life));
   const { r, g, b } = branch.colorRgb;
   const centerX = width * 0.5;
-  const baselineY = height * 0.56;
-  const pulseScale = 0.9 + pulse * 0.2;
-  const root = branch.points[0];
-  const rootAngle = Math.atan2(root.y - FRACTAL_CENTER.y, root.x - FRACTAL_CENTER.x);
-  const rootX = centerX + Math.cos(rootAngle) * width * 0.42;
-  const direction = Math.sin(rootAngle) >= 0 ? -1 : 1;
+  const baselineY = height * 0.5;
+  const pulseScale = 0.9 + pulse * 0.14;
+  const seedRoot = branch.seedRoot ?? branch.points[0];
+  const seedAngle = Math.atan2(seedRoot.y - FRACTAL_CENTER.y, seedRoot.x - FRACTAL_CENTER.x);
+  const rootX = centerX + Math.cos(seedAngle) * width * 0.54 + Math.sin(seedAngle) * width * 0.08;
+  const direction = Math.sin(seedAngle) >= 0 ? -1 : 1;
+  const targetAngle = direction < 0 ? -Math.PI / 2 : Math.PI / 2;
+  const rotateBy = targetAngle - seedAngle;
+  const cosR = Math.cos(rotateBy);
+  const sinR = Math.sin(rotateBy);
+  const scaleX = 2.4;
+  const scaleY = 2.75;
 
-  const mapPoint = (point: Vec2): Vec2 => {
-    const dx = point.x - root.x;
-    const dy = point.y - root.y;
-    return {
-      x: rootX + dx * 2.05,
-      y: baselineY + direction * (Math.abs(dy) * 1.95 + Math.abs(dx) * 0.14),
-    };
-  };
-
-  const mapped: Vec2[] = branch.points.map(mapPoint);
-  if (mapped.length < 2) return;
+  ctx.save();
+  ctx.translate(rootX, baselineY);
+  ctx.scale(scaleX, scaleY);
+  ctx.rotate(rotateBy);
+  ctx.translate(-seedRoot.x, -seedRoot.y);
 
   ctx.beginPath();
-  ctx.moveTo(mapped[0].x, mapped[0].y);
-  for (let i = 1; i < mapped.length; i += 1) {
-    const prev = mapped[i - 1];
-    const cur = mapped[i];
-    const midX = (prev.x + cur.x) * 0.5;
-    const midY = (prev.y + cur.y) * 0.5;
-    ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
+  ctx.moveTo(branch.points[0].x, branch.points[0].y);
+  for (let i = 1; i < branch.points.length; i += 1) {
+    const p = branch.points[i];
+    ctx.lineTo(p.x, p.y);
   }
-  const tip = mapped[mapped.length - 1];
-  ctx.lineTo(tip.x, tip.y);
 
-  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.18 + alpha * 0.56) * pulseScale})`;
-  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.2 + alpha * 0.42) * pulseScale})`;
-  ctx.shadowBlur = (5 + alpha * 7) * pulseScale;
-  ctx.lineWidth = Math.max(0.9, branch.width * 1.35);
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.21 + alpha * 0.56) * pulseScale})`;
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.06 + alpha * 0.14) * pulseScale})`;
+  ctx.shadowBlur = (0.5 + alpha * 1.0) * pulseScale;
+  ctx.lineWidth = Math.max(0.4, (branch.width * 1.24) / Math.max(scaleX, Math.abs(scaleY)));
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.stroke();
 
-  ctx.beginPath();
-  ctx.arc(tip.x, tip.y, Math.max(1.1, branch.tipSize * 0.95 * pulseScale), 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(0.24 + alpha * 0.5) * pulseScale})`;
-  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.2 + alpha * 0.42) * pulseScale})`;
-  ctx.shadowBlur = (6 + alpha * 7) * pulseScale;
-  ctx.fill();
+  ctx.restore();
+
+  const tip = branch.points[branch.points.length - 1];
+  if (tip && alpha > 0.22) {
+    const tx = tip.x - seedRoot.x;
+    const ty = tip.y - seedRoot.y;
+    const rx = tx * cosR - ty * sinR;
+    const ry = tx * sinR + ty * cosR;
+    const tipX = rootX + rx * scaleX;
+    const tipY = baselineY + ry * scaleY;
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, Math.max(0.95, branch.tipSize * 0.68 * pulseScale), 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(0.2 + alpha * 0.3) * pulseScale})`;
+    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.08 + alpha * 0.12) * pulseScale})`;
+    ctx.shadowBlur = (0.8 + alpha * 1.2) * pulseScale;
+    ctx.fill();
+  }
 }

@@ -24,4 +24,8 @@ export type FractalBranch = {
   width: number;
   tipSize: number;
   colorRgb: { r: number; g: number; b: number };
+  seedId: number;
+  seedRoot: Vec2;
+  generation: number;
+  pathLength: number;
 };

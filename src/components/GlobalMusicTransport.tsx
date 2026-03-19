@@ -13,6 +13,7 @@ const GLOBAL_MUSIC_STATE_EVENT = 'datapoint-music-global-state';
 const GLOBAL_TEMPO_EVENT = 'datapoint-music-tempo-change';
 const GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT = 'datapoint-music-global-toggle-request';
 const COMPACT_MIN_FRAME_INTERVAL_MS = 1000 / 24;
+const MODAL_MIN_FRAME_INTERVAL_MS = 1000 / 20;
 
 export function GlobalMusicTransport() {
   const [playingCount, setPlayingCount] = React.useState(0);
@@ -25,6 +26,7 @@ export function GlobalMusicTransport() {
   const renderCallbackRef = React.useRef<((timestamp: number) => void) | null>(null);
   const lastFrameTimeRef = React.useRef<number | null>(null);
   const lastCompactFrameTimeRef = React.useRef<number | null>(null);
+  const lastModalFrameTimeRef = React.useRef<number | null>(null);
   const currentTempoRef = React.useRef(120);
   const playingCardIdsRef = React.useRef(new Set<string>());
   const playingCountRef = React.useRef(0);
@@ -129,7 +131,7 @@ export function GlobalMusicTransport() {
       const modalCanvas = modalCanvasRef.current;
       let modalCtx: CanvasRenderingContext2D | null = null;
       let modalRect: DOMRect | null = null;
-      let modalDpr = Math.min(window.devicePixelRatio || 1, 2);
+      let modalDpr = Math.min(window.devicePixelRatio || 1, 1.35);
       if (modalOpenRef.current && modalCanvas) {
         modalRect = modalCanvas.getBoundingClientRect();
         const modalWidth = Math.max(1, Math.round(modalRect.width * modalDpr));
@@ -153,7 +155,14 @@ export function GlobalMusicTransport() {
           return;
         }
         lastCompactFrameTimeRef.current = timestamp;
+        lastModalFrameTimeRef.current = null;
       } else {
+        const lastModalTs = lastModalFrameTimeRef.current;
+        if (typeof lastModalTs === 'number' && timestamp - lastModalTs < MODAL_MIN_FRAME_INTERVAL_MS) {
+          animationFrameRef.current = window.requestAnimationFrame(render);
+          return;
+        }
+        lastModalFrameTimeRef.current = timestamp;
         lastCompactFrameTimeRef.current = null;
       }
 
@@ -194,6 +203,7 @@ export function GlobalMusicTransport() {
       renderCallbackRef.current = null;
       lastFrameTimeRef.current = null;
       lastCompactFrameTimeRef.current = null;
+      lastModalFrameTimeRef.current = null;
       fractalEngineRef.current.clear();
     };
   }, [ensureRenderLoop]);

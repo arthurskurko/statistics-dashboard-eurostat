@@ -90,11 +90,12 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
     };
   };
 
-  const grow = (start: Vec2, angle: number, length: number, depth: number, width: number) => {
+  const grow = (start: Vec2, angle: number, length: number, depth: number, width: number, generation: number, seedRoot: Vec2) => {
     const segmentCount = 4 + Math.floor(random() * 3);
     const points: Vec2[] = [start];
     let current = start;
     let driftAngle = angle;
+    let pathLength = 0;
 
     for (let i = 0; i < segmentCount; i += 1) {
       const jitter = (random() - 0.5) * (0.55 + intensity * 0.38);
@@ -104,6 +105,7 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
         x: current.x + Math.cos(driftAngle) * segLength,
         y: current.y + Math.sin(driftAngle) * segLength,
       });
+      pathLength += segLength;
       points.push(current);
     }
 
@@ -114,6 +116,10 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
       width,
       tipSize: 1.2 + intensity * 1.35,
       colorRgb: parseHexColor(seedPoint.color),
+      seedId: seedPoint.seed,
+      seedRoot,
+      generation,
+      pathLength,
     });
 
     if (depth <= 0) return;
@@ -126,7 +132,7 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
         const anchor = points[Math.min(anchorIndex, points.length - 1)] ?? current;
         const branchBias = child === 0 ? -1 : child === 1 ? 1 : 0;
         const childAngle = driftAngle + (random() - 0.5) * 1.35 + branchBias * (0.22 + random() * 0.12);
-        grow(anchor, childAngle, length * (0.74 + random() * 0.18), depth - 1, width * 0.78);
+        grow(anchor, childAngle, length * (0.74 + random() * 0.18), depth - 1, width * 0.78, generation + 1, seedRoot);
       }
     }
   };
@@ -139,7 +145,7 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
   const depth = 3 + Math.floor(intensity * 3.2);
   const rootLength = 22 + intensity * 30;
   const rootWidth = 1 + intensity * 1.5;
-  grow(root, baseAngle, rootLength, depth, rootWidth);
+  grow(root, baseAngle, rootLength, depth, rootWidth, 0, root);
   return branches;
 }
 
