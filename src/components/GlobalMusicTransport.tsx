@@ -22,7 +22,7 @@ type LightningBranch = {
   life: number;
   decay: number;
   width: number;
-  color: string;
+  colorRgb: { r: number; g: number; b: number };
 };
 
 type SeedPoint = {
@@ -33,6 +33,14 @@ type SeedPoint = {
 
 const FRACTAL_CENTER: Vec2 = { x: 88, y: 88 };
 const FRACTAL_MAX_RADIUS = 84;
+const MAX_SEEDS_PER_FRAME = 4;
+const MAX_BRANCHES_RETAINED = 560;
+
+type PendingSeed = {
+  seedPoint: SeedPoint;
+  index: number;
+  total: number;
+};
 
 function normalizeValues(values: number[]): number[] {
   if (values.length === 0) return [];
@@ -77,6 +85,18 @@ function buildSeedPoints(cardId: string, stepInfo: GlobalStepInfo | null): SeedP
   }));
 }
 
+function parseHexColor(color: string): { r: number; g: number; b: number } {
+  const compact = color.replace('#', '').trim();
+  if (!/^[0-9a-f]{6}$/i.test(compact)) {
+    return { r: 245, g: 158, b: 11 };
+  }
+  return {
+    r: Number.parseInt(compact.slice(0, 2), 16),
+    g: Number.parseInt(compact.slice(2, 4), 16),
+    b: Number.parseInt(compact.slice(4, 6), 16),
+  };
+}
+
 function createFractalBranches(seedPoint: SeedPoint, index: number, total: number): LightningBranch[] {
   const random = mulberry32(seedPoint.seed);
   const intensity = Math.max(0.08, seedPoint.value);
@@ -118,20 +138,20 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
       life: 1,
       decay: 0.013 + random() * 0.01,
       width,
-      color: seedPoint.color,
+      colorRgb: parseHexColor(seedPoint.color),
     });
 
     if (depth <= 0) return;
 
-    const branchChance = 0.42 + intensity * 0.2;
+    const branchChance = 0.5 + intensity * 0.24;
     if (random() < branchChance) {
-      const childCount = random() < 0.7 ? 1 : 2;
+      const childCount = random() < 0.45 ? 1 : random() < 0.86 ? 2 : 3;
       for (let child = 0; child < childCount; child += 1) {
         const anchorIndex = Math.max(1, Math.floor(points.length * (0.32 + random() * 0.38)));
         const anchor = points[Math.min(anchorIndex, points.length - 1)] ?? current;
-        const branchBias = child === 0 ? -1 : 1;
+        const branchBias = child === 0 ? -1 : child === 1 ? 1 : 0;
         const childAngle = driftAngle + (random() - 0.5) * 1.35 + branchBias * (0.22 + random() * 0.12);
-        grow(anchor, childAngle, length * (0.72 + random() * 0.2), depth - 1, width * 0.76);
+        grow(anchor, childAngle, length * (0.74 + random() * 0.18), depth - 1, width * 0.78);
       }
     }
   };
@@ -141,22 +161,11 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
     x: FRACTAL_CENTER.x + Math.cos(baseAngle) * entryRadius,
     y: FRACTAL_CENTER.y + Math.sin(baseAngle) * entryRadius,
   };
-  const depth = 3 + Math.floor(intensity * 2.2);
+  const depth = 3 + Math.floor(intensity * 2.8);
   const rootLength = 22 + intensity * 30;
   const rootWidth = 1 + intensity * 1.5;
   grow(root, baseAngle, rootLength, depth, rootWidth);
   return branches;
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const compact = hex.replace('#', '').trim();
-  if (!/^[0-9a-f]{6}$/i.test(compact)) {
-    return `rgba(245, 158, 11, ${alpha})`;
-  }
-  const r = Number.parseInt(compact.slice(0, 2), 16);
-  const g = Number.parseInt(compact.slice(2, 4), 16);
-  const b = Number.parseInt(compact.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
 }
 
 function drawBranch(ctx: CanvasRenderingContext2D, branch: LightningBranch) {
@@ -168,8 +177,9 @@ function drawBranch(ctx: CanvasRenderingContext2D, branch: LightningBranch) {
     ctx.lineTo(p.x, p.y);
   }
   const alpha = Math.max(0, Math.min(1, branch.life));
-  ctx.strokeStyle = hexToRgba(branch.color, 0.16 + alpha * 0.62);
-  ctx.shadowColor = hexToRgba(branch.color, 0.24 + alpha * 0.44);
+  const { r, g, b } = branch.colorRgb;
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.16 + alpha * 0.62})`;
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.24 + alpha * 0.44})`;
   ctx.shadowBlur = 8 + alpha * 11;
   ctx.lineWidth = branch.width;
   ctx.lineCap = 'round';
@@ -182,9 +192,18 @@ export function GlobalMusicTransport() {
   const [lastCardId, setLastCardId] = React.useState<string | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const lightningRef = React.useRef<LightningBranch[]>([]);
+  const pendingSeedsRef = React.useRef<PendingSeed[]>([]);
   const animationFrameRef = React.useRef<number | null>(null);
+  const renderCallbackRef = React.useRef<((timestamp: number) => void) | null>(null);
   const lastFrameTimeRef = React.useRef<number | null>(null);
   const playingCardIdsRef = React.useRef(new Set<string>());
+  const playingCountRef = React.useRef(0);
+  const lastCardIdRef = React.useRef<string | null>(null);
+
+  const ensureRenderLoop = React.useCallback(() => {
+    if (animationFrameRef.current !== null || !renderCallbackRef.current) return;
+    animationFrameRef.current = window.requestAnimationFrame(renderCallbackRef.current);
+  }, []);
 
   React.useEffect(() => {
     const onGlobalMusicState = (event: Event) => {
@@ -193,18 +212,27 @@ export function GlobalMusicTransport() {
 
       if (detail.playing) {
         playingCardIdsRef.current.add(detail.cardId);
-        setLastCardId(detail.cardId);
+        if (lastCardIdRef.current !== detail.cardId) {
+          lastCardIdRef.current = detail.cardId;
+          setLastCardId(detail.cardId);
+        }
       } else {
         playingCardIdsRef.current.delete(detail.cardId);
       }
 
-      setPlayingCount(playingCardIdsRef.current.size);
+      const nextPlayingCount = playingCardIdsRef.current.size;
+      if (nextPlayingCount !== playingCountRef.current) {
+        playingCountRef.current = nextPlayingCount;
+        setPlayingCount(nextPlayingCount);
+      }
 
       if (detail.playing && detail.stepInfo) {
         const seeds = buildSeedPoints(detail.cardId, detail.stepInfo);
         if (seeds.length > 0) {
-          const next = seeds.flatMap((seedPoint, index) => createFractalBranches(seedPoint, index, seeds.length));
-          lightningRef.current = [...lightningRef.current.slice(-380), ...next].slice(-560);
+          for (let index = 0; index < seeds.length; index += 1) {
+            pendingSeedsRef.current.push({ seedPoint: seeds[index], index, total: seeds.length });
+          }
+          ensureRenderLoop();
         }
       }
     };
@@ -213,7 +241,7 @@ export function GlobalMusicTransport() {
     return () => {
       window.removeEventListener(GLOBAL_MUSIC_STATE_EVENT, onGlobalMusicState);
     };
-  }, []);
+  }, [ensureRenderLoop]);
 
   React.useEffect(() => {
     const render = (timestamp: number) => {
@@ -242,28 +270,58 @@ export function GlobalMusicTransport() {
       lastFrameTimeRef.current = timestamp;
       const fadeFactor = elapsed / 16;
 
+      // Spread branch generation work across frames to avoid step-time spikes.
+      let generated = 0;
+      while (generated < MAX_SEEDS_PER_FRAME && pendingSeedsRef.current.length > 0) {
+        const pending = pendingSeedsRef.current.shift();
+        if (!pending) break;
+        const nextBranches = createFractalBranches(pending.seedPoint, pending.index, pending.total);
+        lightningRef.current.push(...nextBranches);
+        generated += 1;
+      }
+      if (lightningRef.current.length > MAX_BRANCHES_RETAINED) {
+        lightningRef.current.splice(0, lightningRef.current.length - MAX_BRANCHES_RETAINED);
+      }
+
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, rect.width, rect.height);
 
-      const liveBranches = lightningRef.current.filter((branch) => branch.life > 0.02);
-      lightningRef.current = liveBranches;
-      for (const branch of liveBranches) {
+      const branches = lightningRef.current;
+      let writeIndex = 0;
+      for (let readIndex = 0; readIndex < branches.length; readIndex += 1) {
+        const branch = branches[readIndex];
+        if (branch.life <= 0.02) continue;
         drawBranch(ctx, branch);
         branch.life -= branch.decay * fadeFactor;
+        branches[writeIndex] = branch;
+        writeIndex += 1;
+      }
+      branches.length = writeIndex;
+
+      const hasWork =
+        playingCountRef.current > 0 ||
+        pendingSeedsRef.current.length > 0 ||
+        branches.length > 0;
+
+      if (!hasWork) {
+        animationFrameRef.current = null;
+        return;
       }
 
       animationFrameRef.current = window.requestAnimationFrame(render);
     };
 
-    animationFrameRef.current = window.requestAnimationFrame(render);
+    renderCallbackRef.current = render;
+    ensureRenderLoop();
     return () => {
       if (animationFrameRef.current) {
         window.cancelAnimationFrame(animationFrameRef.current);
       }
       animationFrameRef.current = null;
+      renderCallbackRef.current = null;
       lastFrameTimeRef.current = null;
     };
-  }, []);
+  }, [ensureRenderLoop]);
 
   const handleToggle = React.useCallback(() => {
     if (playingCount > 0) {
