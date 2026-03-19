@@ -1,0 +1,116 @@
+import type { FractalBranch, Vec2 } from './fractalTypes';
+
+const FRACTAL_CENTER: Vec2 = { x: 88, y: 88 };
+
+export function computeTempoPulse(timestampMs: number, tempoBpm?: number): number {
+  if (typeof tempoBpm === 'number' && Number.isFinite(tempoBpm)) {
+    const freq = Math.max(30, Math.min(240, tempoBpm)) / 60;
+    return 0.5 + 0.5 * Math.sin((timestampMs / 1000) * Math.PI * 2 * freq);
+  }
+  return 0.5 + 0.5 * Math.sin(timestampMs * 0.01);
+}
+
+export function clearMainCanvas(ctx: CanvasRenderingContext2D, width: number, height: number, dpr: number): void {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+}
+
+export function clearModalCanvas(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  dpr: number,
+): void {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = 'rgba(2, 10, 26, 0.92)';
+  ctx.fillRect(0, 0, width, height);
+}
+
+export function drawMainBranch(ctx: CanvasRenderingContext2D, branch: FractalBranch): void {
+  if (branch.points.length < 2 || branch.life <= 0) return;
+  ctx.beginPath();
+  ctx.moveTo(branch.points[0].x, branch.points[0].y);
+  for (let i = 1; i < branch.points.length; i += 1) {
+    const p = branch.points[i];
+    ctx.lineTo(p.x, p.y);
+  }
+  const alpha = Math.max(0, Math.min(1, branch.life));
+  const { r, g, b } = branch.colorRgb;
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.16 + alpha * 0.62})`;
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.24 + alpha * 0.44})`;
+  ctx.shadowBlur = 8 + alpha * 11;
+  ctx.lineWidth = branch.width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  const tip = branch.points[branch.points.length - 1];
+  if (tip) {
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, branch.tipSize * (0.7 + alpha * 0.65), 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.32 + alpha * 0.6})`;
+    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.3 + alpha * 0.5})`;
+    ctx.shadowBlur = 6 + alpha * 8;
+    ctx.fill();
+  }
+}
+
+export function drawModalHorizontalBranch(
+  ctx: CanvasRenderingContext2D,
+  branch: FractalBranch,
+  width: number,
+  height: number,
+  pulse: number,
+): void {
+  if (branch.points.length < 2 || branch.life <= 0) return;
+
+  const alpha = Math.max(0, Math.min(1, branch.life));
+  const { r, g, b } = branch.colorRgb;
+  const centerX = width * 0.5;
+  const baselineY = height * 0.56;
+  const pulseScale = 0.9 + pulse * 0.2;
+  const root = branch.points[0];
+  const rootAngle = Math.atan2(root.y - FRACTAL_CENTER.y, root.x - FRACTAL_CENTER.x);
+  const rootX = centerX + Math.cos(rootAngle) * width * 0.42;
+  const direction = Math.sin(rootAngle) >= 0 ? -1 : 1;
+
+  const mapPoint = (point: Vec2): Vec2 => {
+    const dx = point.x - root.x;
+    const dy = point.y - root.y;
+    return {
+      x: rootX + dx * 2.05,
+      y: baselineY + direction * (Math.abs(dy) * 1.95 + Math.abs(dx) * 0.14),
+    };
+  };
+
+  const mapped: Vec2[] = branch.points.map(mapPoint);
+  if (mapped.length < 2) return;
+
+  ctx.beginPath();
+  ctx.moveTo(mapped[0].x, mapped[0].y);
+  for (let i = 1; i < mapped.length; i += 1) {
+    const prev = mapped[i - 1];
+    const cur = mapped[i];
+    const midX = (prev.x + cur.x) * 0.5;
+    const midY = (prev.y + cur.y) * 0.5;
+    ctx.quadraticCurveTo(prev.x, prev.y, midX, midY);
+  }
+  const tip = mapped[mapped.length - 1];
+  ctx.lineTo(tip.x, tip.y);
+
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.18 + alpha * 0.56) * pulseScale})`;
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.2 + alpha * 0.42) * pulseScale})`;
+  ctx.shadowBlur = (5 + alpha * 7) * pulseScale;
+  ctx.lineWidth = Math.max(0.9, branch.width * 1.35);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(tip.x, tip.y, Math.max(1.1, branch.tipSize * 0.95 * pulseScale), 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(0.24 + alpha * 0.5) * pulseScale})`;
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${(0.2 + alpha * 0.42) * pulseScale})`;
+  ctx.shadowBlur = (6 + alpha * 7) * pulseScale;
+  ctx.fill();
+}
