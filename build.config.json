@@ -1,8 +1,9 @@
 {
   "target": "local",
+  "assetVersion": 46,
   "baseByTarget": {
     "local": "/",
-    "test": "/statistics-test/",
+    "test": "/statistics/",
     "prod": "/statistics-full/"
   }
 }

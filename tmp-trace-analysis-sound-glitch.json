@@ -1,0 +1,726 @@
+{
+  "tracePath": "O:\\dev\\Statistics\\eurostat-estonia-dashboard\\Trace-20260320T022400-sound-glitch.json",
+  "eventCount": 476985,
+  "completeCount": 243727,
+  "runTask": {
+    "over16msCount": 363,
+    "over50msCount": 20,
+    "over16msMax": 375.03,
+    "over50msMax": 375.03
+  },
+  "gc": {
+    "count": 569,
+    "totalMs": 1472.6,
+    "maxMs": 55.06
+  },
+  "topByTotal": [
+    {
+      "name": "RunTask",
+      "count": 24902,
+      "totalMs": 14163.85,
+      "avgMs": 0.5688,
+      "maxMs": 375.03
+    },
+    {
+      "name": "v8.callFunction",
+      "count": 978,
+      "totalMs": 4374.85,
+      "avgMs": 4.4733,
+      "maxMs": 374.89
+    },
+    {
+      "name": "FunctionCall",
+      "count": 937,
+      "totalMs": 4351.81,
+      "avgMs": 4.6444,
+      "maxMs": 374.68
+    },
+    {
+      "name": "v8::Debugger::AsyncTaskRun",
+      "count": 81539,
+      "totalMs": 4166.61,
+      "avgMs": 0.0511,
+      "maxMs": 374.93
+    },
+    {
+      "name": "V8Console::runTask",
+      "count": 80948,
+      "totalMs": 2538.12,
+      "avgMs": 0.0314,
+      "maxMs": 166.39
+    },
+    {
+      "name": "PageAnimator::serviceScriptedAnimations",
+      "count": 88,
+      "totalMs": 691.72,
+      "avgMs": 7.8604,
+      "maxMs": 40.5
+    },
+    {
+      "name": "FireAnimationFrame",
+      "count": 370,
+      "totalMs": 687.31,
+      "avgMs": 1.8576,
+      "maxMs": 17.51
+    },
+    {
+      "name": "GPUTask",
+      "count": 270,
+      "totalMs": 529.9,
+      "avgMs": 1.9626,
+      "maxMs": 17.49
+    },
+    {
+      "name": "V8.StackGuard",
+      "count": 101,
+      "totalMs": 445.28,
+      "avgMs": 4.4087,
+      "maxMs": 374.18
+    },
+    {
+      "name": "V8.HandleInterrupts",
+      "count": 101,
+      "totalMs": 444.35,
+      "avgMs": 4.3995,
+      "maxMs": 374.18
+    },
+    {
+      "name": "TimerFire",
+      "count": 161,
+      "totalMs": 406.36,
+      "avgMs": 2.524,
+      "maxMs": 374.97
+    },
+    {
+      "name": "V8.InvokeApiInterruptCallbacks",
+      "count": 2,
+      "totalMs": 374.18,
+      "avgMs": 187.0885,
+      "maxMs": 374.18
+    },
+    {
+      "name": "CpuProfiler::StartProfiling",
+      "count": 1,
+      "totalMs": 373.99,
+      "avgMs": 373.991,
+      "maxMs": 373.99
+    },
+    {
+      "name": "V8.GC_MC_BACKGROUND_MARKING",
+      "count": 31,
+      "totalMs": 243.54,
+      "avgMs": 7.8561,
+      "maxMs": 46.73
+    },
+    {
+      "name": "V8.GC_SCAVENGER_BACKGROUND_SCAVENGE_PARALLEL",
+      "count": 30,
+      "totalMs": 230.07,
+      "avgMs": 7.6689,
+      "maxMs": 11.45
+    },
+    {
+      "name": "v8::Debugger::AsyncTaskScheduled",
+      "count": 27019,
+      "totalMs": 169.61,
+      "avgMs": 0.0063,
+      "maxMs": 0.57
+    },
+    {
+      "name": "MinorGC",
+      "count": 4,
+      "totalMs": 119.59,
+      "avgMs": 29.897,
+      "maxMs": 38.49
+    },
+    {
+      "name": "V8.GCScavenger",
+      "count": 4,
+      "totalMs": 119.32,
+      "avgMs": 29.829,
+      "maxMs": 38.43
+    },
+    {
+      "name": "V8.GC_SCAVENGER",
+      "count": 4,
+      "totalMs": 118.99,
+      "avgMs": 29.7475,
+      "maxMs": 38.42
+    },
+    {
+      "name": "V8.GC_HEAP_EXTERNAL_WEAK_GLOBAL_HANDLES",
+      "count": 5,
+      "totalMs": 104.2,
+      "avgMs": 20.8398,
+      "maxMs": 34.47
+    },
+    {
+      "name": "Paint",
+      "count": 73,
+      "totalMs": 88.4,
+      "avgMs": 1.2109,
+      "maxMs": 3.22
+    },
+    {
+      "name": "CppGC.ConcurrentMark",
+      "count": 18,
+      "totalMs": 66.68,
+      "avgMs": 3.7047,
+      "maxMs": 39.14
+    },
+    {
+      "name": "Commit",
+      "count": 88,
+      "totalMs": 59.49,
+      "avgMs": 0.676,
+      "maxMs": 2.93
+    },
+    {
+      "name": "v8::Debugger::AsyncTaskCanceled",
+      "count": 21785,
+      "totalMs": 58.06,
+      "avgMs": 0.0027,
+      "maxMs": 0.8
+    },
+    {
+      "name": "MajorGC",
+      "count": 1,
+      "totalMs": 55.06,
+      "avgMs": 55.065,
+      "maxMs": 55.06
+    },
+    {
+      "name": "V8.GCFinalizeMC",
+      "count": 1,
+      "totalMs": 55.01,
+      "avgMs": 55.011,
+      "maxMs": 55.01
+    },
+    {
+      "name": "V8.GC_MARK_COMPACTOR",
+      "count": 1,
+      "totalMs": 54.99,
+      "avgMs": 54.995,
+      "maxMs": 54.99
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE",
+      "count": 4,
+      "totalMs": 49.06,
+      "avgMs": 12.2643,
+      "maxMs": 14.83
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_PARALLEL_PHASE",
+      "count": 4,
+      "totalMs": 39.71,
+      "avgMs": 9.928,
+      "maxMs": 11.73
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_PARALLEL",
+      "count": 6,
+      "totalMs": 37.45,
+      "avgMs": 6.2422,
+      "maxMs": 10.91
+    },
+    {
+      "name": "UpdateLayoutTree",
+      "count": 106,
+      "totalMs": 36.81,
+      "avgMs": 0.3473,
+      "maxMs": 0.85
+    },
+    {
+      "name": "WidgetBaseInputHandler::OnHandleInputEvent",
+      "count": 50,
+      "totalMs": 29.14,
+      "avgMs": 0.5827,
+      "maxMs": 3.36
+    },
+    {
+      "name": "WebFrameWidgetImpl::HandleInputEvent",
+      "count": 50,
+      "totalMs": 28,
+      "avgMs": 0.56,
+      "maxMs": 3.34
+    },
+    {
+      "name": "V8.GC_MC_BACKGROUND_EVACUATE_COPY",
+      "count": 6,
+      "totalMs": 25.38,
+      "avgMs": 4.2293,
+      "maxMs": 4.76
+    },
+    {
+      "name": "Layout",
+      "count": 40,
+      "totalMs": 23.77,
+      "avgMs": 0.5942,
+      "maxMs": 1.09
+    },
+    {
+      "name": "EventDispatch",
+      "count": 121,
+      "totalMs": 23.37,
+      "avgMs": 0.1931,
+      "maxMs": 1
+    },
+    {
+      "name": "V8.GC_MC_BACKGROUND_SWEEPING",
+      "count": 10,
+      "totalMs": 21.6,
+      "avgMs": 2.16,
+      "maxMs": 4.55
+    },
+    {
+      "name": "Layerize",
+      "count": 88,
+      "totalMs": 17.77,
+      "avgMs": 0.2019,
+      "maxMs": 1.14
+    },
+    {
+      "name": "LocalFrameView::performLayout",
+      "count": 40,
+      "totalMs": 17.31,
+      "avgMs": 0.4328,
+      "maxMs": 0.88
+    },
+    {
+      "name": "PrePaint",
+      "count": 94,
+      "totalMs": 16.34,
+      "avgMs": 0.1739,
+      "maxMs": 2.34
+    }
+  ],
+  "frameFocus": [
+    {
+      "name": "v8.callFunction",
+      "count": 978,
+      "totalMs": 4374.85,
+      "avgMs": 4.4733,
+      "maxMs": 374.89
+    },
+    {
+      "name": "FunctionCall",
+      "count": 937,
+      "totalMs": 4351.81,
+      "avgMs": 4.6444,
+      "maxMs": 374.68
+    },
+    {
+      "name": "PageAnimator::serviceScriptedAnimations",
+      "count": 88,
+      "totalMs": 691.72,
+      "avgMs": 7.8604,
+      "maxMs": 40.5
+    },
+    {
+      "name": "FireAnimationFrame",
+      "count": 370,
+      "totalMs": 687.31,
+      "avgMs": 1.8576,
+      "maxMs": 17.51
+    },
+    {
+      "name": "GPUTask",
+      "count": 270,
+      "totalMs": 529.9,
+      "avgMs": 1.9626,
+      "maxMs": 17.49
+    },
+    {
+      "name": "Paint",
+      "count": 73,
+      "totalMs": 88.4,
+      "avgMs": 1.2109,
+      "maxMs": 3.22
+    },
+    {
+      "name": "Commit",
+      "count": 88,
+      "totalMs": 59.49,
+      "avgMs": 0.676,
+      "maxMs": 2.93
+    },
+    {
+      "name": "UpdateLayoutTree",
+      "count": 106,
+      "totalMs": 36.81,
+      "avgMs": 0.3473,
+      "maxMs": 0.85
+    },
+    {
+      "name": "Layout",
+      "count": 40,
+      "totalMs": 23.77,
+      "avgMs": 0.5942,
+      "maxMs": 1.09
+    }
+  ],
+  "topLong": [
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 375.03,
+      "tsMs": 312830496.78
+    },
+    {
+      "name": "TimerFire",
+      "cat": "devtools.timeline",
+      "durMs": 374.97,
+      "tsMs": 312830496.8
+    },
+    {
+      "name": "v8::Debugger::AsyncTaskRun",
+      "cat": "disabled-by-default-v8.inspector",
+      "durMs": 374.93,
+      "tsMs": 312830496.82
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 374.89,
+      "tsMs": 312830496.86
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 374.68,
+      "tsMs": 312830496.87
+    },
+    {
+      "name": "V8.StackGuard",
+      "cat": "v8.execute",
+      "durMs": 374.18,
+      "tsMs": 312830496.9
+    },
+    {
+      "name": "V8.HandleInterrupts",
+      "cat": "v8.execute",
+      "durMs": 374.18,
+      "tsMs": 312830496.9
+    },
+    {
+      "name": "V8.InvokeApiInterruptCallbacks",
+      "cat": "v8.execute",
+      "durMs": 374.18,
+      "tsMs": 312830496.91
+    },
+    {
+      "name": "CpuProfiler::StartProfiling",
+      "cat": "v8",
+      "durMs": 373.99,
+      "tsMs": 312830497.09
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 322.76,
+      "tsMs": 312832594.14
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 322.67,
+      "tsMs": 312832594.18
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 322.24,
+      "tsMs": 312832594.19
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 235.63,
+      "tsMs": 312831194.18
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 235.55,
+      "tsMs": 312831194.21
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 235.35,
+      "tsMs": 312831194.22
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 218.3,
+      "tsMs": 312833159.58
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 218.11,
+      "tsMs": 312833159.7
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 217.58,
+      "tsMs": 312833159.71
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 214.75,
+      "tsMs": 312831590.59
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 214.66,
+      "tsMs": 312831590.62
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 214.5,
+      "tsMs": 312831590.62
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 194.68,
+      "tsMs": 312834087.01
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 194.59,
+      "tsMs": 312834087.05
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 194.43,
+      "tsMs": 312834087.05
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 186.28,
+      "tsMs": 312832085.49
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 186.17,
+      "tsMs": 312832085.51
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 185.78,
+      "tsMs": 312832085.52
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 185.41,
+      "tsMs": 312833608.81
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 185.32,
+      "tsMs": 312833608.84
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 185.19,
+      "tsMs": 312833608.85
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 182.25,
+      "tsMs": 312834587.69
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 182.13,
+      "tsMs": 312834587.75
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 181.9,
+      "tsMs": 312834587.75
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 175.53,
+      "tsMs": 312830976.02
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 175.43,
+      "tsMs": 312830976.06
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 175.19,
+      "tsMs": 312830976.07
+    },
+    {
+      "name": "v8::Debugger::AsyncTaskRun",
+      "cat": "disabled-by-default-v8.inspector",
+      "durMs": 166.39,
+      "tsMs": 312832610.88
+    },
+    {
+      "name": "V8Console::runTask",
+      "cat": "disabled-by-default-v8.inspector",
+      "durMs": 166.39,
+      "tsMs": 312832610.88
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 161.9,
+      "tsMs": 312835089.18
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 161.79,
+      "tsMs": 312835089.23
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 161.5,
+      "tsMs": 312835089.23
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 137.9,
+      "tsMs": 312832955.11
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 137.8,
+      "tsMs": 312832955.16
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 137.63,
+      "tsMs": 312832955.17
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 134.43,
+      "tsMs": 312832310.69
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 134.29,
+      "tsMs": 312832310.74
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 134.23,
+      "tsMs": 312832310.74
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 124.3,
+      "tsMs": 312831843.94
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 124.12,
+      "tsMs": 312831843.97
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 123.97,
+      "tsMs": 312831843.98
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 119.54,
+      "tsMs": 312834833.62
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 119.44,
+      "tsMs": 312834833.65
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 119.29,
+      "tsMs": 312834833.65
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 118.58,
+      "tsMs": 312833816.32
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 118.48,
+      "tsMs": 312833816.37
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 118.41,
+      "tsMs": 312833816.37
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 111.45,
+      "tsMs": 312834374.8
+    },
+    {
+      "name": "v8.callFunction",
+      "cat": "v8",
+      "durMs": 111.36,
+      "tsMs": 312834374.84
+    },
+    {
+      "name": "FunctionCall",
+      "cat": "devtools.timeline",
+      "durMs": 111.06,
+      "tsMs": 312834374.84
+    },
+    {
+      "name": "RunTask",
+      "cat": "disabled-by-default-devtools.timeline",
+      "durMs": 100.37,
+      "tsMs": 312835311.61
+    }
+  ],
+  "musicFractalEventCount": 589
+}

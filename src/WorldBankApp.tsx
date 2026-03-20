@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChartCard } from './components/ChartCard';
-import { EmptyState } from './components/EmptyState';
-import { StatChip } from './components/StatChip';
+import { ProviderDashboardLayout } from './components/ProviderDashboardLayout';
 import { TopicPicker } from './components/TopicPicker';
-import { THEMES, type ThemeId } from './features/dashboard/themes';
+import type { ThemeId } from './features/dashboard/themes';
 import { WORLD_BANK_TOPICS, WORLD_BANK_TOPIC_MAP } from './features/dashboard/worldBankTopicCatalog';
 import type { DashboardCard } from './features/dashboard/types';
 import { useLocalStorage } from './hooks/useLocalStorage';
@@ -12,7 +11,12 @@ import { fetchWorldBankTopicData } from './lib/worldBank';
 const STORAGE_KEY = 'worldbank-statistics-dashboard.cards';
 const DEFAULT_CHARTS_KEY = 'worldbank-statistics-dashboard.defaultCharts';
 const THEME_STORAGE_KEY = 'worldbank-statistics-dashboard.theme';
-const DEFAULT_CHART_TOPIC_IDS = ['wb-pop-total', 'wb-unemployment', 'wb-inflation'];
+const DEFAULT_CHART_TOPIC_IDS = [
+  'wb-pop-total',
+  'wb-unemployment',
+  'wb-labor-force-participation',
+  'wb-inflation',
+];
 const WORLD_BANK_DEFAULT_GEOS = ['EST', 'EUU'];
 const WORLD_BANK_SOURCE_URL_BUILDER = (datasetCode: string) =>
   `https://data.worldbank.org/indicator/${datasetCode}`;
@@ -66,43 +70,12 @@ export default function WorldBankApp() {
   }, [setCards]);
 
   return (
-    <div className="batcave-page min-h-screen px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <section className="batcave-panel flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
-          <div className="text-xs uppercase tracking-[0.22em] text-slate-300">Interface theme</div>
-          <label className="flex items-center gap-2 text-sm text-slate-200">
-            <span className="text-slate-300">Mode</span>
-            <select
-              value={themeId}
-              onChange={(event) => setThemeId(event.target.value as ThemeId)}
-              className="bat-input rounded-xl px-3 py-2 text-sm text-white outline-none"
-            >
-              {THEMES.map((theme) => (
-                <option key={theme.id} value={theme.id}>
-                  {theme.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-center gap-2 text-xs">
-            <a href={basePath} className="bat-btn rounded-2xl px-3 py-1 font-medium">
-              Eurostat
-            </a>
-            <a href={`${basePath}dashboard`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
-              Unified
-            </a>
-            <span className="rounded-2xl border border-white/20 bg-white/10 px-3 py-1 font-medium text-white">
-              World Bank
-            </span>
-            <a href={`${basePath}who`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
-              WHO
-            </a>
-            <a href={`${basePath}meteo`} className="bat-btn rounded-2xl px-3 py-1 font-medium">
-              Open-Meteo
-            </a>
-          </div>
-        </section>
-
+    <ProviderDashboardLayout
+      basePath={basePath}
+      currentProvider="worldbank"
+      themeId={themeId}
+      onThemeChange={setThemeId}
+      picker={
         <TopicPicker
           selectedTopicId={selectedTopicId}
           onSelectedTopicIdChange={setSelectedTopicId}
@@ -118,38 +91,31 @@ export default function WorldBankApp() {
           titleText="World Bank indicators dashboard"
           descriptionText="Search World Bank indicator codes, add charts, and compare Estonia with aggregate or country peers."
         />
-
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatChip label="Charts on dashboard" value={cards.length} />
-          <StatChip label="Available topics" value={WORLD_BANK_TOPICS.length} />
-          <StatChip label="Unique topics added" value={activeTopics.size} />
-          <StatChip label="Data source" value="World Bank" />
-        </section>
-
-        {cards.length === 0 ? <EmptyState /> : null}
-
-        {cards.length > 0 ? (
-          <section className="grid gap-6 xl:grid-cols-2">
-            {cards.map((card) => (
-              <ChartCard
-                key={card.id}
-                cardId={card.id}
-                topicId={card.topicId}
-                onRemove={removeCard}
-                providerId="worldbank"
-                providerName="World Bank"
-                topicMap={WORLD_BANK_TOPIC_MAP}
-                fetchTopicDataFn={fetchWorldBankTopicData}
-                defaultGeoValues={WORLD_BANK_DEFAULT_GEOS}
-                fallbackDescriptionPrefix="World Bank indicator"
-                sourceUrlBuilder={WORLD_BANK_SOURCE_URL_BUILDER}
-                sourceLinkLabel="World Bank indicator"
-                supportsForecast
-              />
-            ))}
-          </section>
-        ) : null}
-      </div>
-    </div>
+      }
+      stats={[
+        { label: 'Charts on dashboard', value: cards.length },
+        { label: 'Available topics', value: WORLD_BANK_TOPICS.length },
+        { label: 'Unique topics added', value: activeTopics.size },
+        { label: 'Data source', value: 'World Bank' },
+      ]}
+      cards={cards}
+      renderCard={(card) => (
+        <ChartCard
+          key={card.id}
+          cardId={card.id}
+          topicId={card.topicId}
+          onRemove={removeCard}
+          providerId="worldbank"
+          providerName="World Bank"
+          topicMap={WORLD_BANK_TOPIC_MAP}
+          fetchTopicDataFn={fetchWorldBankTopicData}
+          defaultGeoValues={WORLD_BANK_DEFAULT_GEOS}
+          fallbackDescriptionPrefix="World Bank indicator"
+          sourceUrlBuilder={WORLD_BANK_SOURCE_URL_BUILDER}
+          sourceLinkLabel="World Bank indicator"
+          supportsForecast
+        />
+      )}
+    />
   );
 }

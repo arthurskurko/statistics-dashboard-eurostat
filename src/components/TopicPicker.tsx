@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CatalogCodeSearch } from './CatalogCodeSearch';
 import { TOPICS } from '../features/dashboard/topicCatalog';
 import type { TopicDefinition } from '../features/dashboard/types';
+import { loadCatalogEntries, type CatalogEntry } from '../lib/catalog';
+import { searchWorldBankIndicators } from '../lib/worldBankCatalogSearch';
 
 type TopicPickerProps = {
   selectedTopicId: string;
@@ -18,13 +21,9 @@ type TopicPickerProps = {
   descriptionText?: string;
 };
 
-type CatalogEntry = {
-  code: string;
-  title: string;
-  raw?: Record<string, unknown>;
-};
-
 const USAGE_STORAGE_KEY = 'dashboard.topicUsageByProvider';
+const WORLD_BANK_API_SEARCH_MIN_CHARS = 3;
+const WORLD_BANK_API_SEARCH_DEBOUNCE_MS = 350;
 
 function toNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -33,26 +32,6 @@ function toNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
-}
-
-function normalizeCatalogEntry(item: unknown): CatalogEntry | null {
-  if (!item || typeof item !== 'object') return null;
-  const record = item as Record<string, unknown>;
-
-  const code =
-    (typeof record.code === 'string' && record.code) ||
-    (typeof record.datasetCode === 'string' && record.datasetCode) ||
-    (typeof record.id === 'string' && record.id) ||
-    '';
-
-  const title =
-    (typeof record.title === 'string' && record.title) ||
-    (typeof record.name === 'string' && record.name) ||
-    (typeof record.display_name === 'string' && record.display_name) ||
-    code;
-
-  if (!code) return null;
-  return { code, title, raw: record };
 }
 
 function getOfficialPopularityScore(entry: CatalogEntry): number | null {
@@ -137,6 +116,46 @@ function incrementUsage(providerId: string, code: string): void {
   }
 }
 
+function getWorldBankTopicNames(entry: CatalogEntry): string[] {
+  const raw = entry.raw;
+  if (!raw || typeof raw !== 'object') return [];
+
+  const topicNames = raw.topicNames;
+  if (Array.isArray(topicNames)) {
+    return Array.from(
+      new Set(
+        topicNames
+          .map((topic) => (typeof topic === 'string' ? topic.trim() : ''))
+          .filter((topic) => topic.length > 0),
+      ),
+    );
+  }
+
+  const topics = raw.topics;
+  if (!Array.isArray(topics)) return [];
+
+  return Array.from(
+    new Set(
+      topics
+        .map((topic) => {
+          if (!topic || typeof topic !== 'object') return '';
+          const value = (topic as Record<string, unknown>).value;
+          return typeof value === 'string' ? value.trim() : '';
+        })
+        .filter((topic) => topic.length > 0),
+    ),
+  );
+}
+
+function matchesWorldBankTopicFilter(entry: CatalogEntry, selectedTopic: string): boolean {
+  if (!selectedTopic || selectedTopic === 'all') return true;
+  return getWorldBankTopicNames(entry).some((topic) => topic.toLowerCase() === selectedTopic.toLowerCase());
+}
+
+function dedupeCatalogEntries(entries: CatalogEntry[]): CatalogEntry[] {
+  return Array.from(new Map(entries.map((entry) => [entry.code, entry])).values());
+}
+
 export function TopicPicker({
   selectedTopicId,
   onSelectedTopicIdChange,
@@ -153,10 +172,14 @@ export function TopicPicker({
   descriptionText =
     'Choose a topic and add it to the dashboard. Each chart pulls live Eurostat data for Europe countries, with the EU aggregate shown alongside when available.',
 }: TopicPickerProps) {
+  const isWorldBankProvider = providerId === 'worldbank';
   const [customCode, setCustomCode] = useState('');
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [popularCatalog, setPopularCatalog] = useState<CatalogEntry[]>([]);
   const [usageByCode, setUsageByCode] = useState<Record<string, number>>({});
+  const [selectedCatalogTopic, setSelectedCatalogTopic] = useState('all');
+  const [apiSuggestions, setApiSuggestions] = useState<CatalogEntry[]>([]);
+  const [apiSearchState, setApiSearchState] = useState<'idle' | 'loading' | 'error'>('idle');
 
   const topicCodeById = useMemo(
     () =>
@@ -181,9 +204,30 @@ export function TopicPicker({
   }
 
   const searchLower = customCode.trim().toLowerCase();
-  const suggestions = Array.from(
+  const worldBankTopicOptions = useMemo(() => {
+    if (!isWorldBankProvider) return [];
+
+    const topicSet = new Set<string>();
+    for (const entry of catalog) {
+      for (const topic of getWorldBankTopicNames(entry)) {
+        topicSet.add(topic);
+      }
+    }
+
+    return Array.from(topicSet).sort((a, b) => a.localeCompare(b));
+  }, [catalog, isWorldBankProvider]);
+
+  const filteredCatalog = useMemo(
+    () =>
+      isWorldBankProvider && selectedCatalogTopic !== 'all'
+        ? catalog.filter((entry) => matchesWorldBankTopicFilter(entry, selectedCatalogTopic))
+        : catalog,
+    [catalog, isWorldBankProvider, selectedCatalogTopic],
+  );
+
+  const localSuggestions = Array.from(
     new Map(
-      catalog
+      filteredCatalog
         .filter((entry) =>
           searchLower.length > 0
             ? entry.code.toLowerCase().includes(searchLower) || entry.title.toLowerCase().includes(searchLower)
@@ -193,6 +237,17 @@ export function TopicPicker({
         .map((entry) => [entry.code, entry]),
     ).values(),
   ).slice(0, 10);
+
+  const suggestions = useMemo(() => {
+    if (!isWorldBankProvider) return localSuggestions;
+
+    const topicFilteredApiSuggestions =
+      selectedCatalogTopic === 'all'
+        ? apiSuggestions
+        : apiSuggestions.filter((entry) => matchesWorldBankTopicFilter(entry, selectedCatalogTopic));
+
+    return dedupeCatalogEntries([...localSuggestions, ...topicFilteredApiSuggestions]).slice(0, 10);
+  }, [apiSuggestions, isWorldBankProvider, localSuggestions, selectedCatalogTopic]);
 
   const popularTopics = useMemo(() => {
     const catalogByCode = new Map(catalog.map((entry) => [entry.code, entry]));
@@ -263,12 +318,17 @@ export function TopicPicker({
   }, [providerId]);
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}${catalogPath}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const entries = Array.isArray(data)
-          ? data.map(normalizeCatalogEntry).filter((entry): entry is CatalogEntry => entry !== null)
-          : [];
+    if (!isWorldBankProvider) {
+      setSelectedCatalogTopic('all');
+      setApiSuggestions([]);
+      setApiSearchState('idle');
+      return;
+    }
+  }, [isWorldBankProvider]);
+
+  useEffect(() => {
+    loadCatalogEntries(catalogPath)
+      .then((entries) => {
         setCatalog(entries);
       })
       .catch(() => {
@@ -282,18 +342,50 @@ export function TopicPicker({
       return;
     }
 
-    fetch(`${import.meta.env.BASE_URL}${popularPath}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const entries = Array.isArray(data)
-          ? data.map(normalizeCatalogEntry).filter((entry): entry is CatalogEntry => entry !== null)
-          : [];
+    loadCatalogEntries(popularPath)
+      .then((entries) => {
         setPopularCatalog(entries);
       })
       .catch(() => {
         setPopularCatalog([]);
       });
   }, [popularPath]);
+
+  useEffect(() => {
+    if (!isWorldBankProvider) return;
+
+    const query = customCode.trim();
+    if (query.length < WORLD_BANK_API_SEARCH_MIN_CHARS) {
+      setApiSuggestions([]);
+      setApiSearchState('idle');
+      return;
+    }
+
+    let isCancelled = false;
+    setApiSearchState('loading');
+
+    const timeoutId = window.setTimeout(() => {
+      searchWorldBankIndicators(query, {
+        limit: 10,
+        topicFilter: selectedCatalogTopic === 'all' ? undefined : selectedCatalogTopic,
+      })
+        .then((entries) => {
+          if (isCancelled) return;
+          setApiSuggestions(entries);
+          setApiSearchState('idle');
+        })
+        .catch(() => {
+          if (isCancelled) return;
+          setApiSuggestions([]);
+          setApiSearchState('error');
+        });
+    }, WORLD_BANK_API_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      isCancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [customCode, isWorldBankProvider, selectedCatalogTopic]);
 
   return (
     <section className="batcave-panel relative z-30 rounded-3xl p-6 shadow-card backdrop-blur-xl">
@@ -313,7 +405,7 @@ export function TopicPicker({
         <div className="w-full xl:max-w-3xl">
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="flex min-w-[16rem] flex-1 flex-col gap-2 text-sm text-slate-300">
+              <label className="flex min-w-0 flex-1 flex-col gap-2 text-sm text-slate-300 sm:min-w-[16rem]">
                 Topic
                 <select
                   value={selectedTopicId}
@@ -341,55 +433,53 @@ export function TopicPicker({
             </div>
 
             <div className="flex flex-col gap-2">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                <div className="relative min-w-[16rem] flex-1">
-                  <input
-                    type="text"
-                    value={customCode}
-                    onChange={(event) => setCustomCode(event.target.value)}
-                    placeholder="Search catalog or enter code"
-                    className="bat-input h-12 w-full rounded-2xl px-4 text-white outline-none transition"
-                  />
+              {isWorldBankProvider ? (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs uppercase tracking-[0.16em] text-slate-300 sm:max-w-sm">
+                    Indicator topic
+                    <select
+                      value={selectedCatalogTopic}
+                      onChange={(event) => setSelectedCatalogTopic(event.target.value)}
+                      className="bat-input h-11 rounded-2xl px-3 text-sm normal-case tracking-normal text-white outline-none transition"
+                    >
+                      <option value="all">All topics</option>
+                      {worldBankTopicOptions.map((topic) => (
+                        <option key={topic} value={topic}>
+                          {topic}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                  {suggestions.length > 0 ? (
-                    <div className="bat-suggestions absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-auto rounded-2xl p-3 text-sm text-slate-200 backdrop-blur">
-                      <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Suggestions</div>
-                      <ul className="space-y-1">
-                        {suggestions.map((entry) => (
-                          <li key={entry.code}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCustomCode(entry.code);
-                                onSelectedTopicIdChange(entry.code);
-                                trackDatasetUsage(entry.code);
-                                onAddTopicById(entry.code);
-                              }}
-                              className="w-full rounded-lg px-2 py-1 text-left text-xs transition hover:bg-white/10 hover:text-white"
-                            >
-                              <span className="font-semibold">{entry.code}</span> - {entry.title}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
+                  <div className="text-xs text-slate-400 sm:pb-1">
+                    {customCode.trim().length >= WORLD_BANK_API_SEARCH_MIN_CHARS && apiSearchState === 'loading'
+                      ? 'Searching live World Bank API...'
+                      : apiSearchState === 'error'
+                        ? 'Live API search unavailable, using local fallback catalog.'
+                        : `Fallback catalog: ${catalog.length} indicators`}
+                  </div>
                 </div>
+              ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const code = customCode.trim();
-                    if (!code) return;
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                <CatalogCodeSearch
+                  customCode={customCode}
+                  onCustomCodeChange={setCustomCode}
+                  suggestions={suggestions}
+                  inputWrapperClassName="relative min-w-0 flex-1 sm:min-w-[16rem]"
+                  onSuggestionSelect={(code) => {
+                    setCustomCode(code);
+                    onSelectedTopicIdChange(code);
+                    trackDatasetUsage(code);
+                    onAddTopicById(code);
+                  }}
+                  onAddByCode={(code) => {
                     onSelectedTopicIdChange(code);
                     trackDatasetUsage(code);
                     onAddTopicById(code);
                     setCustomCode('');
                   }}
-                  className="bat-btn h-12 rounded-2xl px-5 font-medium"
-                >
-                  Add by code
-                </button>
+                />
                 <button
                   type="button"
                   onClick={onClear}

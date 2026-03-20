@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CatalogCodeSearch } from './CatalogCodeSearch';
 import { TOPIC_MAP, TOPICS } from '../features/dashboard/topicCatalog';
 import type { TopicDefinition } from '../features/dashboard/types';
+import { loadCatalogEntries, type CatalogEntry } from '../lib/catalog';
 
 export type FetchStats = Record<
   string,
@@ -49,11 +51,6 @@ function readStats(): FetchStats {
   }
 }
 
-type CatalogEntry = {
-  code: string;
-  title: string;
-};
-
 export function AdminPanel({
   defaultTopicIds,
   setDefaultTopicIds,
@@ -65,6 +62,17 @@ export function AdminPanel({
   const [selectedTopicId, setSelectedTopicId] = useState(defaultTopicIds[0] ?? TOPICS[0]?.id ?? '');
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [customCode, setCustomCode] = useState('');
+  const suggestions = useMemo(
+    () =>
+      catalog
+        .filter((entry) => {
+          const search = customCode.trim().toLowerCase();
+          if (!search) return false;
+          return entry.code.toLowerCase().includes(search) || entry.title.toLowerCase().includes(search);
+        })
+        .slice(0, 10),
+    [catalog, customCode],
+  );
 
   const defaultTopics = useMemo(() => {
     return defaultTopicIds
@@ -92,9 +100,8 @@ export function AdminPanel({
   }, []);
 
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}catalog.json`)
-      .then((res) => res.json())
-      .then((data) => setCatalog(data))
+    loadCatalogEntries('catalog.json')
+      .then((entries) => setCatalog(entries))
       .catch(() => {
         /* ignore */
       });
@@ -211,56 +218,22 @@ export function AdminPanel({
                   Add from catalog
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type="text"
-                      value={customCode}
-                      onChange={(event) => setCustomCode(event.target.value)}
-                      placeholder="Search catalog or enter code"
-                      className="bat-input h-12 w-full rounded-2xl px-4 text-white outline-none transition"
-                    />
-                    {customCode.trim().length > 0 ? (
-                      <div className="bat-suggestions absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-auto rounded-2xl p-3 text-sm text-slate-200 backdrop-blur">
-                        <div className="mb-2 text-xs uppercase tracking-wide text-slate-400">Suggestions</div>
-                        <ul className="space-y-1">
-                          {catalog
-                            .filter((entry) =>
-                              entry.code.toLowerCase().includes(customCode.toLowerCase()) ||
-                              entry.title.toLowerCase().includes(customCode.toLowerCase()),
-                            )
-                            .slice(0, 10)
-                            .map((entry) => (
-                              <li key={entry.code}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCustomCode(entry.code);
-                                    setSelectedTopicId(entry.code);
-                                    handleAddDefaultByCode(entry.code);
-                                  }}
-                                  className="w-full rounded-lg px-2 py-1 text-left text-xs transition hover:bg-white/10 hover:text-white"
-                                >
-                                  <span className="font-semibold">{entry.code}</span> - {entry.title}
-                                </button>
-                              </li>
-                            ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const code = customCode.trim();
-                      if (!code) return;
+                  <CatalogCodeSearch
+                    customCode={customCode}
+                    onCustomCodeChange={setCustomCode}
+                    suggestions={suggestions}
+                    addButtonClassName="bat-btn rounded-2xl px-3 py-2 text-xs font-medium"
+                    onSuggestionSelect={(code) => {
+                      setCustomCode(code);
+                      setSelectedTopicId(code);
+                      handleAddDefaultByCode(code);
+                    }}
+                    onAddByCode={(code) => {
                       setSelectedTopicId(code);
                       handleAddDefaultByCode(code);
                       setCustomCode('');
                     }}
-                    className="bat-btn rounded-2xl px-3 py-2 text-xs font-medium"
-                  >
-                    Add by code
-                  </button>
+                  />
                 </div>
               </div>
 

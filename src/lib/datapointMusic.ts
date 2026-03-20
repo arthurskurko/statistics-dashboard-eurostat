@@ -1,16 +1,19 @@
 import type { DataSeries } from '../features/dashboard/types';
 
 type PreparedSeries = {
-  points: number[];
+  label: string;
+  points: Array<{ label: string; value: number }>;
   min: number;
   max: number;
   waveform: OscillatorType;
 };
 
 export type MusicScale = 'chromatic' | 'major' | 'minor' | 'pentatonic';
+export type MusicPlaybackMode = 'points' | 'line';
 
 export type MusicSettings = {
   tempoBpm: number;
+  playbackMode: MusicPlaybackMode;
   scale: MusicScale;
   octaveShift: number;
   instrumentOverride: OscillatorType | 'auto';
@@ -23,10 +26,24 @@ export type MusicSettings = {
   reverbWet: number; // 0–1
   reverbDecay: number; // seconds
   volume: number; // 0–1
+  /** Called on each played step. */
+  onStep?: (info: {
+    step: number;
+    points: Array<{ seriesLabel: string; label: string; value: number }>;
+  }) => void;
 };
 
 const INSTRUMENTS: OscillatorType[] = ['sine', 'triangle', 'square', 'sawtooth'];
 const MAX_SIMULTANEOUS_SERIES = 6;
+const SCHEDULER_INTERVAL_MS = 25;
+const SCHEDULER_LOOKAHEAD_SEC = 0.12;
+const WAVEFORM_GAIN_MULTIPLIER: Record<OscillatorType, number> = {
+  sine: 1.0,
+  triangle: 0.9,
+  sawtooth: 0.66,
+  square: 0.58,
+  custom: 0.8,
+};
 
 const BASE_MIDI = 48; // C3
 
@@ -67,15 +84,15 @@ function buildPreparedSeries(series: DataSeries[], settings: MusicSettings): Pre
     .filter((entry) => !entry.label.includes('(forecast)') && entry.points.length > 0)
     .slice(0, MAX_SIMULTANEOUS_SERIES)
     .map((entry) => {
-      const points = entry.points.map((point) => point.value);
-      const min = Math.min(...points);
-      const max = Math.max(...points);
+      const points = entry.points.map((point) => ({ label: point.label, value: point.value }));
+      const min = Math.min(...points.map((p) => p.value));
+      const max = Math.max(...points.map((p) => p.value));
       const instrumentKey = extractInstrumentKey(entry.label);
       const waveform = instrumentOverride
         ? (settings.instrumentOverride as OscillatorType)
         : INSTRUMENTS[hashString(instrumentKey) % INSTRUMENTS.length];
 
-      return { points, min, max, waveform };
+      return { label: entry.label, points, min, max, waveform };
     });
 }
 
@@ -86,6 +103,8 @@ export class DataPointMusicPlayer {
   private static globalRecorder: MediaRecorder | null = null;
   private static globalChunks: BlobPart[] = [];
   private static activeInstanceCount = 0;
+  private static runningPlayers = new Set<DataPointMusicPlayer>();
+  private static sharedSchedulerId: number | null = null;
 
   private audioContext: AudioContext | null = null;
 
@@ -97,7 +116,7 @@ export class DataPointMusicPlayer {
   private convolver: ConvolverNode | null = null;
   private reverbWet: GainNode | null = null;
 
-  private timeoutId: number | null = null;
+  private nextStepTime = 0;
 
   private stepIndex = 0;
   private phaseOffset = 0;
@@ -109,6 +128,7 @@ export class DataPointMusicPlayer {
 
   private settings: MusicSettings = {
     tempoBpm: 120,
+    playbackMode: 'points',
     scale: 'major',
     octaveShift: 0,
     instrumentOverride: 'auto',
@@ -120,7 +140,7 @@ export class DataPointMusicPlayer {
     delayWet: 0.18,
     reverbWet: 0.18,
     reverbDecay: 2.4,
-    volume: 1,
+    volume: 0.8,
   };
 
   constructor(series: DataSeries[], settings?: Partial<MusicSettings>) {
@@ -232,77 +252,111 @@ export class DataPointMusicPlayer {
   }
 
   setTempo(bpm: number): void {
-    this.settings.tempoBpm = Math.max(10, Math.min(240, bpm));
-    if (this.running) {
-      this.restartLoop();
-    }
+    const nextTempo = Math.max(10, Math.min(240, Math.round(bpm)));
+    if (this.settings.tempoBpm === nextTempo) return;
+    this.settings.tempoBpm = nextTempo;
   }
 
   setPhaseOffset(offset: number): void {
-    this.phaseOffset = Math.floor(offset);
+    const nextOffset = Math.floor(offset);
+    if (this.phaseOffset === nextOffset) return;
+    const previousOffset = this.phaseOffset;
+    this.phaseOffset = nextOffset;
+
     if (this.running) {
-      this.restartLoop();
+      const context = this.getAudioContext();
+      const baseSec = 60 / this.settings.tempoBpm;
+      const deltaSec = ((nextOffset - previousOffset) / 16) * baseSec;
+      this.nextStepTime = Math.max(context.currentTime + 0.008, this.nextStepTime + deltaSec);
     }
   }
 
   setSwing(swing: number): void {
-    this.settings.swing = Math.max(0, Math.min(0.5, swing));
-    if (this.running) {
-      this.restartLoop();
-    }
+    const nextSwing = Math.max(0, Math.min(0.5, swing));
+    if (Math.abs(this.settings.swing - nextSwing) < 0.0001) return;
+    this.settings.swing = nextSwing;
   }
 
   setScale(scale: MusicScale): void {
+    if (this.settings.scale === scale) return;
     this.settings.scale = scale;
   }
 
+  setPlaybackMode(mode: MusicPlaybackMode): void {
+    if (this.settings.playbackMode === mode) return;
+    this.settings.playbackMode = mode;
+  }
+
   setOctaveShift(shift: number): void {
-    this.settings.octaveShift = Math.max(-3, Math.min(3, shift));
+    const nextShift = Math.max(-3, Math.min(3, shift));
+    if (this.settings.octaveShift === nextShift) return;
+    this.settings.octaveShift = nextShift;
   }
 
   setInstrumentOverride(instrument: OscillatorType | 'auto'): void {
+    if (this.settings.instrumentOverride === instrument) return;
     this.settings.instrumentOverride = instrument;
     this.preparedSeries = buildPreparedSeries(this.sourceSeries, this.settings);
   }
 
   setSpread(spread: number): void {
-    this.settings.spread = Math.max(0, Math.min(1, spread));
+    const nextSpread = Math.max(0, Math.min(1, spread));
+    if (Math.abs(this.settings.spread - nextSpread) < 0.0001) return;
+    this.settings.spread = nextSpread;
   }
 
   setDelayTime(seconds: number): void {
-    this.settings.delayTime = Math.max(0, Math.min(2, seconds));
+    const nextDelayTime = Math.max(0, Math.min(2, seconds));
+    if (Math.abs(this.settings.delayTime - nextDelayTime) < 0.0001) return;
+    this.settings.delayTime = nextDelayTime;
     this.updateEffectSettings();
   }
 
   setVolume(volume: number): void {
-    this.settings.volume = Math.max(0, Math.min(1, volume));
+    const nextVolume = Math.max(0, Math.min(1, volume));
+    if (Math.abs(this.settings.volume - nextVolume) < 0.0001) return;
+    this.settings.volume = nextVolume;
     if (this.masterGain) {
-      this.masterGain.gain.value = Math.min(2, Math.max(0, this.settings.volume * 1.6));
+      this.smoothAudioParam(this.masterGain.gain, Math.min(1.2, Math.max(0, this.settings.volume)), 0.02);
     }
   }
 
   setDelayFeedback(feedback: number): void {
-    this.settings.delayFeedback = Math.max(0, Math.min(0.95, feedback));
+    const nextFeedback = Math.max(0, Math.min(0.95, feedback));
+    if (Math.abs(this.settings.delayFeedback - nextFeedback) < 0.0001) return;
+    this.settings.delayFeedback = nextFeedback;
     this.updateEffectSettings();
   }
 
   setDelayWet(wet: number): void {
-    this.settings.delayWet = Math.max(0, Math.min(1, wet));
+    const nextWet = Math.max(0, Math.min(1, wet));
+    if (Math.abs(this.settings.delayWet - nextWet) < 0.0001) return;
+    this.settings.delayWet = nextWet;
     this.updateEffectSettings();
   }
 
   setReverbWet(wet: number): void {
-    this.settings.reverbWet = Math.max(0, Math.min(1, wet));
+    const nextReverbWet = Math.max(0, Math.min(1, wet));
+    if (Math.abs(this.settings.reverbWet - nextReverbWet) < 0.0001) return;
+    this.settings.reverbWet = nextReverbWet;
     this.updateEffectSettings();
   }
 
   setReverbDecay(decay: number): void {
-    this.settings.reverbDecay = Math.max(0.1, Math.min(6, decay));
+    const nextReverbDecay = Math.max(0.1, Math.min(6, decay));
+    if (Math.abs(this.settings.reverbDecay - nextReverbDecay) < 0.0001) return;
+    this.settings.reverbDecay = nextReverbDecay;
     this.updateEffectSettings();
   }
 
   setArpeggiate(arpeggiate: boolean): void {
+    if (this.settings.arpeggiate === arpeggiate) return;
     this.settings.arpeggiate = arpeggiate;
+  }
+
+  setStepCallback(callback?: (info: { step: number; points: Array<{ seriesLabel: string; label: string; value: number }> }) => void): void {
+    if (this.settings.onStep === callback) return;
+    this.settings.onStep = callback;
   }
 
   getSettings(): MusicSettings {
@@ -363,44 +417,36 @@ export class DataPointMusicPlayer {
   }
 
   private startLoop(): void {
-    const baseMs = 60000 / this.settings.tempoBpm;
-    const phaseMs = (this.phaseOffset / 16) * baseMs;
+    const context = this.getAudioContext();
+    const phaseBaseSec = 60 / this.settings.tempoBpm;
+    const phaseSec = (this.phaseOffset / 16) * phaseBaseSec;
+    this.nextStepTime = Math.max(this.nextStepTime, context.currentTime + phaseSec);
 
-    const scheduleNextTick = () => {
-      if (!this.running) return;
+    // Prime one scheduling pass immediately to keep perceived start latency low.
+    this.scheduleAhead(context.currentTime);
 
-      const swingFactor = 1 + (this.stepIndex % 2 === 1 ? this.settings.swing : -this.settings.swing);
-      const delayMs = baseMs * swingFactor;
+    DataPointMusicPlayer.runningPlayers.add(this);
+    DataPointMusicPlayer.ensureSharedSchedulerRunning();
+  }
 
-      this.timeoutId = window.setTimeout(() => {
-        if (!this.running) return;
-        this.playStep(this.stepIndex);
-        this.stepIndex += 1;
-        scheduleNextTick();
-      }, delayMs);
-    };
+  private scheduleAhead(currentTime: number): void {
+    if (!this.running) return;
 
-    // Apply initial phase offset as a delay before the first tick.
-    this.timeoutId = window.setTimeout(() => {
-      if (!this.running) return;
-      this.playStep(this.stepIndex);
+    const scheduleUntil = currentTime + SCHEDULER_LOOKAHEAD_SEC;
+    while (this.nextStepTime <= scheduleUntil) {
+      const step = this.stepIndex;
+      this.playStep(step, this.nextStepTime);
+
+      const baseSec = 60 / this.settings.tempoBpm;
+      const swingFactor = 1 + (step % 2 === 1 ? this.settings.swing : -this.settings.swing);
+      this.nextStepTime += baseSec * swingFactor;
       this.stepIndex += 1;
-      scheduleNextTick();
-    }, phaseMs);
+    }
   }
 
   private stopLoop(): void {
-    if (this.timeoutId !== null) {
-      window.clearTimeout(this.timeoutId);
-      this.timeoutId = null;
-    }
-  }
-
-  private restartLoop(): void {
-    this.stopLoop();
-    if (this.running) {
-      this.startLoop();
-    }
+    DataPointMusicPlayer.runningPlayers.delete(this);
+    DataPointMusicPlayer.maybeStopSharedScheduler();
   }
 
   stop(): void {
@@ -413,7 +459,7 @@ export class DataPointMusicPlayer {
     if (this.masterGain) return;
 
     this.masterGain = context.createGain();
-    this.masterGain.gain.value = Math.min(2, Math.max(0, this.settings.volume * 1.6));
+    this.masterGain.gain.value = Math.min(1.2, Math.max(0, this.settings.volume));
     this.masterGain.connect(context.destination);
     DataPointMusicPlayer.activeMasterGains.add(this.masterGain);
     if (DataPointMusicPlayer.sharedRecordingDestination) {
@@ -434,6 +480,8 @@ export class DataPointMusicPlayer {
     // Connect delay and reverb to master
     this.delayWet.connect(this.masterGain);
     this.reverbWet.connect(this.masterGain);
+    this.delayNode.connect(this.delayWet);
+    this.convolver.connect(this.reverbWet);
 
     // Dry signal directly to master
     this.dryGain = context.createGain();
@@ -449,16 +497,16 @@ export class DataPointMusicPlayer {
     if (!this.delayNode || !this.delayFeedback || !this.delayWet || !this.dryGain) return;
 
     // Apply delay settings
-    this.delayNode.delayTime.value = this.settings.delayTime;
-    this.delayFeedback.gain.value = this.settings.delayFeedback;
+    this.smoothAudioParam(this.delayNode.delayTime, this.settings.delayTime, 0.025);
+    this.smoothAudioParam(this.delayFeedback.gain, this.settings.delayFeedback, 0.025);
 
     const wet = this.settings.delayWet;
-    this.delayWet.gain.value = wet;
-    this.dryGain.gain.value = 1 - wet;
+    this.smoothAudioParam(this.delayWet.gain, wet, 0.02);
+    this.smoothAudioParam(this.dryGain.gain, 1 - wet, 0.02);
 
     // Apply reverb wet mix
     if (this.reverbWet) {
-      this.reverbWet.gain.value = this.settings.reverbWet;
+      this.smoothAudioParam(this.reverbWet.gain, this.settings.reverbWet, 0.03);
     }
 
     // Rebuild impulse only when decay changes (expensive)
@@ -469,6 +517,13 @@ export class DataPointMusicPlayer {
       }
       this.convolver.buffer = this.cachedImpulse;
     }
+  }
+
+  private smoothAudioParam(param: AudioParam, value: number, timeConstant = 0.02): void {
+    const context = this.getAudioContext();
+    const now = context.currentTime;
+    param.cancelScheduledValues(now);
+    param.setTargetAtTime(value, now, timeConstant);
   }
 
   private createReverbImpulse(decay: number): AudioBuffer {
@@ -548,6 +603,11 @@ export class DataPointMusicPlayer {
     this.globalChunks = [];
     this.sharedRecordingDestination = null;
     this.activeMasterGains.clear();
+    this.runningPlayers.clear();
+    if (this.sharedSchedulerId !== null) {
+      window.clearInterval(this.sharedSchedulerId);
+      this.sharedSchedulerId = null;
+    }
 
     if (this.sharedAudioContext) {
       this.sharedAudioContext.close().catch(() => {
@@ -559,11 +619,37 @@ export class DataPointMusicPlayer {
     this.emitGlobalRecordingChange();
   }
 
-  private playStep(step: number): void {
+  private static ensureSharedSchedulerRunning(): void {
+    if (this.sharedSchedulerId !== null) return;
+
+    this.sharedSchedulerId = window.setInterval(() => {
+      if (this.runningPlayers.size === 0) {
+        this.maybeStopSharedScheduler();
+        return;
+      }
+
+      const context = this.sharedAudioContext;
+      if (!context) return;
+      const currentTime = context.currentTime;
+      this.runningPlayers.forEach((player) => {
+        player.scheduleAhead(currentTime);
+      });
+    }, SCHEDULER_INTERVAL_MS);
+  }
+
+  private static maybeStopSharedScheduler(): void {
+    if (this.runningPlayers.size > 0) return;
+    if (this.sharedSchedulerId !== null) {
+      window.clearInterval(this.sharedSchedulerId);
+      this.sharedSchedulerId = null;
+    }
+  }
+
+  private playStep(step: number, atTime: number): void {
     if (!this.running || this.preparedSeries.length === 0) return;
 
     const context = this.getAudioContext();
-    const now = context.currentTime;
+    const now = atTime;
     const stepMs = 60000 / this.settings.tempoBpm;
     const duration = Math.max(0.12, stepMs / 1000 - 0.08);
 
@@ -572,11 +658,21 @@ export class DataPointMusicPlayer {
       : this.preparedSeries;
 
     const spreadMultiplier = this.settings.spread;
+    const voiceNormalization = 1 / Math.sqrt(Math.max(1, seriesToPlay.length));
+    const activePlayerCount = Math.max(1, DataPointMusicPlayer.runningPlayers.size || (this.running ? 1 : 0));
+    const globalMixNormalization = 1 / Math.sqrt(activePlayerCount);
+    const modeNormalization = this.settings.playbackMode === 'line' ? 0.92 : 1;
+
+    const playedPoints: Array<{ seriesLabel: string; label: string; value: number }> = [];
 
     seriesToPlay.forEach((entry, index) => {
       if (entry.points.length === 0) return;
 
-      const value = entry.points[step % entry.points.length];
+      const point = entry.points[step % entry.points.length];
+      const value = point.value;
+      const label = point.label;
+      playedPoints.push({ seriesLabel: entry.label, label, value });
+
       const normalized = normalizeValue(value, entry.min, entry.max);
 
       const scale = SCALE_DEGREES[this.settings.scale];
@@ -587,31 +683,39 @@ export class DataPointMusicPlayer {
       const midi = BASE_MIDI + octaveOffset + degree + spreadSemitones;
       const frequency = midiToFrequency(midi);
 
+      const nextPoint = entry.points[(step + 1) % entry.points.length];
+      const nextNormalized = normalizeValue(nextPoint.value, entry.min, entry.max);
+      const nextDegree = scale[Math.floor(nextNormalized * (scale.length - 1))];
+      const nextMidi = BASE_MIDI + octaveOffset + nextDegree + spreadSemitones;
+      const nextFrequency = midiToFrequency(nextMidi);
+
       const oscillator = context.createOscillator();
       const gain = context.createGain();
 
       oscillator.type = entry.waveform;
       oscillator.frequency.setValueAtTime(frequency, now);
+      if (this.settings.playbackMode === 'line') {
+        oscillator.frequency.linearRampToValueAtTime(nextFrequency, now + duration);
+      }
 
-      const baseGain = 0.25 + index * 0.06;
+      const waveformGain = WAVEFORM_GAIN_MULTIPLIER[entry.waveform] ?? 0.8;
+      const seriesGain = 1 / Math.sqrt(index + 1);
+      const baseGain = 0.28 * waveformGain * seriesGain * voiceNormalization * globalMixNormalization * modeNormalization;
       gain.gain.setValueAtTime(0.0001, now);
       gain.gain.exponentialRampToValueAtTime(baseGain, now + 0.012);
+      if (this.settings.playbackMode === 'line') {
+        const sustainUntil = Math.max(now + 0.02, now + duration - 0.03);
+        gain.gain.setValueAtTime(baseGain, sustainUntil);
+      }
       gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
       if (this.dryGain && this.delayNode && this.delayFeedback && this.delayWet && this.convolver && this.reverbWet) {
-        // ensure effect settings updated
-        this.updateEffectSettings();
-
         oscillator.connect(gain);
         gain.connect(this.dryGain);
 
-        // Delay path
+        // Delay and reverb are preconnected once in ensureEffectNodes.
         gain.connect(this.delayNode);
-        this.delayNode.connect(this.delayWet);
-
-        // Reverb path
         gain.connect(this.convolver);
-        this.convolver.connect(this.reverbWet);
       } else {
         oscillator.connect(gain);
         gain.connect(context.destination);
@@ -621,7 +725,10 @@ export class DataPointMusicPlayer {
       oscillator.stop(now + duration + 0.02);
     });
 
-    this.stepIndex += 1;
+    if (this.settings.onStep) {
+      this.settings.onStep({ step, points: playedPoints });
+    }
+
   }
 }
 

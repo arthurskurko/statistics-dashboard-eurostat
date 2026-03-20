@@ -1,0 +1,277 @@
+import type { FractalBranch, Vec2 } from './fractalTypes';
+import type { ModalFractalTree } from './fractalModalSimulation';
+
+const FRACTAL_CENTER: Vec2 = { x: 88, y: 88 };
+
+type ModalBackgroundCache = {
+  width: number;
+  height: number;
+  canvas: HTMLCanvasElement;
+};
+
+let modalBackgroundCache: ModalBackgroundCache | null = null;
+
+function starNoise(x: number, y: number): number {
+  const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+  return n - Math.floor(n);
+}
+
+function getModalBackgroundCanvas(width: number, height: number): HTMLCanvasElement {
+  const cacheWidth = Math.max(1, Math.round(width));
+  const cacheHeight = Math.max(1, Math.round(height));
+
+  if (modalBackgroundCache && modalBackgroundCache.width === cacheWidth && modalBackgroundCache.height === cacheHeight) {
+    return modalBackgroundCache.canvas;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = cacheWidth;
+  canvas.height = cacheHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    modalBackgroundCache = { width: canvas.width, height: canvas.height, canvas };
+    return canvas;
+  }
+
+  const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  skyGradient.addColorStop(0, 'rgba(3, 14, 36, 0.96)');
+  skyGradient.addColorStop(0.72, 'rgba(2, 10, 26, 0.93)');
+  skyGradient.addColorStop(1, 'rgba(2, 10, 26, 0.98)');
+  ctx.fillStyle = skyGradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const fadeBand = 150;
+  const fadeStart = Math.max(0, canvas.height - fadeBand);
+  const step = Math.max(16, Math.round(Math.min(canvas.width, canvas.height) / 24));
+  ctx.fillStyle = 'rgb(215, 232, 255)';
+
+  for (let y = 6; y < canvas.height; y += step) {
+    for (let x = 6; x < canvas.width; x += step) {
+      const gate = starNoise(x * 0.77, y * 0.61);
+      if (gate < 0.84) continue;
+
+      const jitterX = (starNoise(x + 11.3, y + 7.7) - 0.5) * step * 0.65;
+      const jitterY = (starNoise(x + 19.9, y + 3.1) - 0.5) * step * 0.65;
+      const starX = x + jitterX;
+      const starY = y + jitterY;
+      if (starY < 0 || starY > canvas.height) continue;
+
+      const fadeToBottom =
+        starY <= fadeStart ? 1 : Math.max(0, 1 - (starY - fadeStart) / Math.max(1, fadeBand));
+      if (fadeToBottom <= 0) continue;
+
+      const twinkle = 0.35 + starNoise(x + 41.2, y + 53.8) * 0.65;
+      const alpha = (0.18 + twinkle * 0.55) * fadeToBottom;
+      const radius = gate > 0.965 ? 1.25 : gate > 0.925 ? 0.95 : 0.7;
+
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(starX, starY, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // Ensure stars are mostly gone near the lower 150px of the modal.
+  const bottomFade = ctx.createLinearGradient(0, fadeStart, 0, canvas.height);
+  bottomFade.addColorStop(0, 'rgba(2, 10, 26, 0)');
+  bottomFade.addColorStop(1, 'rgba(2, 10, 26, 0.98)');
+  ctx.fillStyle = bottomFade;
+  ctx.fillRect(0, fadeStart, canvas.width, Math.max(1, canvas.height - fadeStart));
+
+  modalBackgroundCache = {
+    width: cacheWidth,
+    height: cacheHeight,
+    canvas,
+  };
+  return canvas;
+}
+
+export type MainBranchDrawOptions = {
+  lightweight?: boolean;
+};
+
+export function computeTempoPulse(timestampMs: number, tempoBpm?: number): number {
+  if (typeof tempoBpm === 'number' && Number.isFinite(tempoBpm)) {
+    const freq = Math.max(30, Math.min(240, tempoBpm)) / 60;
+    return 0.5 + 0.5 * Math.sin((timestampMs / 1000) * Math.PI * 2 * freq);
+  }
+  return 0.5 + 0.5 * Math.sin(timestampMs * 0.01);
+}
+
+export function clearMainCanvas(ctx: CanvasRenderingContext2D, width: number, height: number, dpr: number): void {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+}
+
+export function clearModalCanvas(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  dpr: number,
+): void {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  const background = getModalBackgroundCanvas(width, height);
+  ctx.drawImage(background, 0, 0, width, height);
+}
+
+export function drawMainBranch(
+  ctx: CanvasRenderingContext2D,
+  branch: FractalBranch,
+  options: MainBranchDrawOptions = {},
+): void {
+  if (branch.points.length < 2 || branch.life <= 0) return;
+  const lightweight = options.lightweight === true;
+  ctx.beginPath();
+  ctx.moveTo(branch.points[0].x, branch.points[0].y);
+  for (let i = 1; i < branch.points.length; i += 1) {
+    const p = branch.points[i];
+    ctx.lineTo(p.x, p.y);
+  }
+  const alpha = Math.max(0, Math.min(1, branch.life));
+  const { r, g, b } = branch.colorRgb;
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${lightweight ? 0.12 + alpha * 0.42 : 0.16 + alpha * 0.62})`;
+  ctx.shadowColor = lightweight ? 'rgba(0, 0, 0, 0)' : `rgba(${r}, ${g}, ${b}, ${0.18 + alpha * 0.3})`;
+  ctx.shadowBlur = lightweight ? 0 : 4 + alpha * 5;
+  ctx.lineWidth = lightweight ? Math.max(0.8, branch.width * 0.9) : branch.width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  const tip = branch.points[branch.points.length - 1];
+  if (tip && !lightweight) {
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, branch.tipSize * (0.7 + alpha * 0.65), 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.32 + alpha * 0.6})`;
+    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${0.2 + alpha * 0.34})`;
+    ctx.shadowBlur = 3 + alpha * 4;
+    ctx.fill();
+  }
+}
+
+export function drawModalHorizontalBranch(
+  ctx: CanvasRenderingContext2D,
+  branch: FractalBranch,
+  width: number,
+  height: number,
+  pulse: number,
+): void {
+  if (branch.points.length < 2 || branch.life <= 0) return;
+
+  let pathLength = 0;
+  for (let i = 1; i < branch.points.length; i += 1) {
+    const a = branch.points[i - 1];
+    const b = branch.points[i];
+    pathLength += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  // Keep smaller branches too so trees read as fractals, not only trunk sticks.
+  if (pathLength < 4.2) return;
+
+  const alpha = Math.max(0, Math.min(1, branch.life));
+  const { r, g, b } = branch.colorRgb;
+  const centerX = width * 0.5;
+  const baselineY = height * 0.5;
+  const pulseScale = 0.9 + pulse * 0.14;
+  const seedRoot = branch.seedRoot ?? branch.points[0];
+  const seedAngle = Math.atan2(seedRoot.y - FRACTAL_CENTER.y, seedRoot.x - FRACTAL_CENTER.x);
+  const rootX = centerX + Math.cos(seedAngle) * width * 0.54 + Math.sin(seedAngle) * width * 0.08;
+  const direction = Math.sin(seedAngle) >= 0 ? -1 : 1;
+  const targetAngle = direction < 0 ? -Math.PI / 2 : Math.PI / 2;
+  const rotateBy = targetAngle - seedAngle;
+  const cosR = Math.cos(rotateBy);
+  const sinR = Math.sin(rotateBy);
+  const scaleX = 2.4;
+  const scaleY = 2.75;
+
+  ctx.save();
+  ctx.translate(rootX, baselineY);
+  ctx.scale(scaleX, scaleY);
+  ctx.rotate(rotateBy);
+  ctx.translate(-seedRoot.x, -seedRoot.y);
+
+  ctx.beginPath();
+  ctx.moveTo(branch.points[0].x, branch.points[0].y);
+  for (let i = 1; i < branch.points.length; i += 1) {
+    const p = branch.points[i];
+    ctx.lineTo(p.x, p.y);
+  }
+
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${(0.21 + alpha * 0.56) * pulseScale})`;
+  ctx.shadowColor = 'rgba(0, 0, 0, 0)';
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = Math.max(0.4, (branch.width * 1.24) / Math.max(scaleX, Math.abs(scaleY)));
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  ctx.restore();
+
+  const tip = branch.points[branch.points.length - 1];
+  if (tip && alpha > 0.26 && branch.generation <= 1) {
+    const tx = tip.x - seedRoot.x;
+    const ty = tip.y - seedRoot.y;
+    const rx = tx * cosR - ty * sinR;
+    const ry = tx * sinR + ty * cosR;
+    const tipX = rootX + rx * scaleX;
+    const tipY = baselineY + ry * scaleY;
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, Math.max(0.95, branch.tipSize * 0.68 * pulseScale), 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${(0.2 + alpha * 0.3) * pulseScale})`;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0)';
+    ctx.shadowBlur = 0;
+    ctx.fill();
+  }
+}
+
+export function drawModalRecursiveTree(
+  ctx: CanvasRenderingContext2D,
+  tree: ModalFractalTree,
+  width: number,
+  height: number,
+  pulse: number,
+): void {
+  if (tree.life <= 0 || tree.segments.length === 0) return;
+
+  const alpha = Math.max(0, Math.min(1, tree.life));
+  const growth = Math.max(0, Math.min(1, tree.growth ?? 1));
+  const visibleSegments = Math.max(1, Math.ceil(tree.segments.length * growth));
+  const fadeIn = Math.min(1, growth * 1.35);
+  const pulseScale = 0.92 + pulse * 0.12;
+  const { r, g, b } = tree.colorRgb;
+  const color = `rgb(${r}, ${g}, ${b})`;
+  const densityLevel = visibleSegments > 360 ? 3 : visibleSegments > 260 ? 2 : visibleSegments > 180 ? 1 : 0;
+  const baseAlpha = (0.12 + alpha * 0.64) * fadeIn * pulseScale;
+
+  // Tree geometry is authored in a fixed 176x176 space.
+  const scale = Math.max(0.8, Math.min(width / 176, height / 176) * 0.95);
+  const offsetX = width * 0.5 - 88 * scale;
+  const offsetY = height * 0.98 - 170 * scale;
+
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+  ctx.shadowColor = 'rgba(0, 0, 0, 0)';
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = color;
+
+  for (let index = 0; index < visibleSegments; index += 1) {
+    const segment = tree.segments[index];
+    if (densityLevel >= 1 && segment.generation >= 6 && ((tree.seedId + index * 19) & 3) !== 0) continue;
+    if (densityLevel >= 2 && segment.generation >= 5 && (tree.seedId + index * 13) % 3 !== 0) continue;
+    if (densityLevel >= 3 && segment.generation >= 4 && ((tree.seedId + index * 11) & 1) !== 0) continue;
+
+    const generationFade = Math.max(0.18, 1 - segment.generation * 0.08);
+    ctx.globalAlpha = baseAlpha * generationFade;
+    ctx.beginPath();
+    ctx.moveTo(segment.a.x, segment.a.y);
+    ctx.lineTo(segment.b.x, segment.b.y);
+    ctx.lineWidth = Math.max(0.32, segment.width / Math.max(1, scale * 0.55));
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}

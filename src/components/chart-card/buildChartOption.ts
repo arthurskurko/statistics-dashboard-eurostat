@@ -307,13 +307,14 @@ export function buildChartOption({
             },
             splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } },
           },
-    series: seriesWithAxis.map(({ baseSeries, yAxisIndex, seriesColor, isForecast }) => {
+    series: (seriesWithAxis.map(({ baseSeries, yAxisIndex, seriesColor, isForecast }) => {
       // Convert point lookup from O(n) find-per-label to O(1) map lookup.
       // This significantly reduces render cost when many series are shown.
       const pointValueByLabel = new Map(baseSeries.points.map((point) => [point.label, point.value]));
       const hasSinglePoint = baseSeries.points.length <= 1;
 
       return {
+        id: `series-${baseSeries.label}`,
         name: `${baseSeries.label}${filterSuffix}`,
         type: topic.chartVariant ?? 'line',
         smooth: !useLightweightRendering,
@@ -336,6 +337,6 @@ export function buildChartOption({
         progressive: useLightweightRendering ? 500 : 0,
         progressiveThreshold: useLightweightRendering ? 1000 : undefined,
       };
-    }),
+    }) as NonNullable<EChartsOption['series']>),
   };
 }

@@ -38,10 +38,39 @@ function resolveBuildTarget(config) {
 }
 var buildConfig = readBuildConfig();
 var buildTarget = resolveBuildTarget(buildConfig);
+var assetVersion = Number.isFinite(buildConfig.assetVersion) ? Number(buildConfig.assetVersion) : 0;
 var resolvedBase = normalizeBase((_b = (_a = buildConfig.baseByTarget) === null || _a === void 0 ? void 0 : _a[buildTarget]) !== null && _b !== void 0 ? _b : DEFAULT_BASE_BY_TARGET[buildTarget]);
+function appendVersionQuery(url, version) {
+    if (!url || /^https?:\/\//i.test(url) || url.startsWith('data:')) {
+        return url;
+    }
+    var separator = url.includes('?') ? '&' : '?';
+    return "".concat(url).concat(separator, "v=").concat(version);
+}
+function createCacheBustPlugin(version) {
+    return {
+        name: 'append-asset-version-query',
+        apply: 'build',
+        closeBundle: function () {
+            var builtIndexPath = path.resolve(__dirname, 'dist', 'index.html');
+            if (!fs.existsSync(builtIndexPath)) {
+                return;
+            }
+            var html = fs.readFileSync(builtIndexPath, 'utf8');
+            var withVersionedAssets = html
+                .replace(/src="([^"]+\.js(?:\?[^"]*)?)"/g, function (_, src) {
+                return "src=\"".concat(appendVersionQuery(src, version), "\"");
+            })
+                .replace(/href="([^"]+\.css(?:\?[^"]*)?)"/g, function (_, href) {
+                return "href=\"".concat(appendVersionQuery(href, version), "\"");
+            });
+            fs.writeFileSync(builtIndexPath, withVersionedAssets);
+        },
+    };
+}
 export default defineConfig({
     base: resolvedBase,
-    plugins: [react()],
+    plugins: [react(), createCacheBustPlugin(assetVersion)],
     server: {
         host: '0.0.0.0',
         port: 5173,

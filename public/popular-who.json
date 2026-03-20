@@ -1,10 +1,15 @@
-[
+[ 
   { "code": "WHOSIS_000001", "title": "Life expectancy at birth" },
   { "code": "NCD_BMI_30A", "title": "Obesity prevalence among adults (age-standardized)" },
   { "code": "NCD_DIABETES_PREVALENCE_AGESTD", "title": "Diabetes prevalence (age-standardized)" },
   { "code": "NCD_DIABETES_PREVALENCE_CRUDE", "title": "Diabetes prevalence (crude)" },
   { "code": "Adult_curr_tob_use", "title": "Current tobacco use among adults" },
-  { "code": "EQ_OVERWEIGHTADULT", "title": "Overweight and obesity prevalence" },
-  { "code": "NCD_BMI_PLUS2A", "title": "Child obesity prevalence (age-standardized)" },
-  { "code": "NCD_CCS_DIAB_TARGET", "title": "National diabetes target" }
+  { "code": "NCD_BMI_25A", "title": "Overweight prevalence among adults (age-standardized)" },
+  { "code": "NCD_BMI_PLUS2C", "title": "Child obesity prevalence (crude)" },
+  { "code": "NCD_CCS_DIAB_TARGET", "title": "National diabetes target" },
+  { "code": "WHOSIS_000004", "title": "Adult mortality rate (15-60 years)" },
+  { "code": "MH_12", "title": "Suicide rate (age-standardized)" },
+  { "code": "AIR_90", "title": "Ambient air pollution DALYs (age-standardized)" },
+  { "code": "MDG_0000000003", "title": "Adolescent birth rate" },
+  { "code": "SA_0000001452", "title": "Road traffic death rate (age-standardized)" }
 ]

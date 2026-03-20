@@ -1,5 +1,6 @@
 import { WORLD_BANK_TOPIC_MAP } from '../features/dashboard/worldBankTopicCatalog';
 import type { DataPoint, DataSeries, TopicData, TopicDefinition } from '../features/dashboard/types';
+import { clamp, getNextPeriodCode, inferSortKey, median } from './timeSeries';
 
 type WorldBankCountry = {
   id: string;
@@ -29,71 +30,10 @@ type WorldBankMeta = {
 
 const WORLD_BANK_BASE = 'https://api.worldbank.org/v2';
 const COUNTRIES_STORAGE_KEY = 'worldbank-countries-cache.v1';
-
-function inferSortKey(periodCode: string): number {
-  const annual = /^(\d{4})$/;
-  const monthly = /^(\d{4})M(\d{2})$/;
-  const quarterly = /^(\d{4})Q(\d)$/i;
-
-  if (annual.test(periodCode)) {
-    return Number(periodCode) * 100;
-  }
-
-  const monthlyMatch = periodCode.match(monthly);
-  if (monthlyMatch) {
-    return Number(monthlyMatch[1]) * 100 + Number(monthlyMatch[2]);
-  }
-
-  const quarterlyMatch = periodCode.match(quarterly);
-  if (quarterlyMatch) {
-    return Number(quarterlyMatch[1]) * 100 + Number(quarterlyMatch[2]) * 3;
-  }
-
-  return Number(periodCode.replace(/\D/g, '')) || 0;
-}
-
-function getNextPeriodCode(periodCode: string): string | null {
-  const annual = /^\d{4}$/;
-  const monthly = /^(\d{4})M(\d{2})$/;
-  const quarterly = /^(\d{4})Q(\d)$/i;
-
-  if (annual.test(periodCode)) {
-    return String(Number(periodCode) + 1);
-  }
-
-  const monthlyMatch = periodCode.match(monthly);
-  if (monthlyMatch) {
-    const year = Number(monthlyMatch[1]);
-    const month = Number(monthlyMatch[2]);
-    const nextMonth = month === 12 ? 1 : month + 1;
-    const nextYear = month === 12 ? year + 1 : year;
-    return `${nextYear}M${String(nextMonth).padStart(2, '0')}`;
-  }
-
-  const quarterlyMatch = periodCode.match(quarterly);
-  if (quarterlyMatch) {
-    const year = Number(quarterlyMatch[1]);
-    const quarter = Number(quarterlyMatch[2]);
-    const nextQuarter = quarter === 4 ? 1 : quarter + 1;
-    const nextYear = quarter === 4 ? year + 1 : year;
-    return `${nextYear}Q${nextQuarter}`;
-  }
-
-  return null;
-}
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  if (sorted.length === 0) return 1;
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
+const WORLD_BANK_MAX_GEO_VALUES = 6;
+const WORLD_BANK_MAX_SERIES = 28;
+const WORLD_BANK_MAX_PERIODS = 900;
+const WORLD_BANK_MAX_TOTAL_POINTS = 8000;
 
 function computeForecast(
   points: DataPoint[],
@@ -267,6 +207,21 @@ export async function fetchWorldBankTopicData(
   const geoValues = (options?.geoValues?.length ? options.geoValues : topic.geoValues) ?? ['EST', 'EUU'];
 
   const countries = await fetchWorldBankCountries();
+
+  if (geoValues.length > WORLD_BANK_MAX_GEO_VALUES) {
+    return {
+      title: topic.title,
+      subtitle: topic.description,
+      decimals: topic.decimals ?? 2,
+      unitSuffix: topic.unitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: countries,
+      warning: `Too many geographies selected (${geoValues.length}). Please select up to ${WORLD_BANK_MAX_GEO_VALUES} geographies.`,
+    };
+  }
+
   const countryPath = geoValues.map((geo) => geo.toLowerCase()).join(';');
 
   const url = new URL(`${WORLD_BANK_BASE}/country/${countryPath}/indicator/${indicatorCode}`);
@@ -276,6 +231,7 @@ export async function fetchWorldBankTopicData(
   const rows = await fetchAllPages<WorldBankDataRow>(url);
   const nonNullRows = rows.filter((row) => row.value != null);
   const { series, periods } = mapRowsToSeries(nonNullRows);
+  const totalPointCount = series.reduce((sum, entry) => sum + entry.points.length, 0);
 
   const indicatorTitle = rows[0]?.indicator?.value?.trim() || topic.title;
   const unit = rows.find((row) => row.unit && row.unit.trim())?.unit?.trim();
@@ -294,6 +250,26 @@ export async function fetchWorldBankTopicData(
       availableGeos: countries,
       warning:
         'No observations were returned for this indicator and the selected countries. Try another country or indicator.',
+    };
+  }
+
+  if (
+    series.length > WORLD_BANK_MAX_SERIES ||
+    periods.length > WORLD_BANK_MAX_PERIODS ||
+    totalPointCount > WORLD_BANK_MAX_TOTAL_POINTS
+  ) {
+    return {
+      title: indicatorTitle,
+      subtitle: topic.description,
+      decimals: typeof decimal === 'number' ? decimal : topic.decimals ?? 2,
+      unitSuffix: resolvedUnitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: countries,
+      warning:
+        `Dataset too large to process safely (series: ${series.length}, periods: ${periods.length}, points: ${totalPointCount}). ` +
+        'Reduce geographies or choose a smaller indicator.',
     };
   }
 

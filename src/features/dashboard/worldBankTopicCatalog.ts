@@ -63,6 +63,22 @@ export const WORLD_BANK_TOPICS: TopicDefinition[] = [
     },
   },
   {
+    id: 'wb-labor-force-participation',
+    title: 'Labor force participation rate, total (% of total population ages 15+)',
+    description: 'Labor force participation rate for Estonia compared with the EU aggregate.',
+    datasetCode: 'SL.TLF.CACT.ZS',
+    filters: {},
+    geoValues: ['EST', 'EUU'],
+    decimals: 1,
+    unitSuffix: '%',
+    chartVariant: 'line',
+    sourceUrl: 'https://data.worldbank.org/indicator/SL.TLF.CACT.ZS',
+    pubmed: {
+      availability: 'search-only',
+      searchTerm: 'labor force participation',
+    },
+  },
+  {
     id: 'wb-inflation',
     title: 'Inflation, consumer prices (annual %)',
     description: 'Consumer price inflation for Estonia compared with the EU aggregate.',

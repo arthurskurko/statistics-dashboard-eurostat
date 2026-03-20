@@ -1,5 +1,6 @@
 import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
 import type { DataPoint, DataSeries, TopicData } from '../features/dashboard/types';
+import { clamp, getNextPeriodCode, inferSortKey, median } from './timeSeries';
 
 type JsonStatCategory = {
   index: string[] | Record<string, number>;
@@ -29,6 +30,7 @@ type DimensionInfo = {
 
 const EUROSTAT_BASE =
   'https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data';
+const EUROSTAT_MAX_GEO_VALUES = 6;
 
 // Some Eurostat datasets are enormous unless you narrow them by a common filter.
 // When users request these datasets without additional filtering, apply a sane
@@ -104,34 +106,6 @@ function unravelIndex(flatIndex: number, sizes: number[]): number[] {
   return positions;
 }
 
-function inferSortKey(periodCode: string): number {
-  const annual = /^(\d{4})$/;
-  const monthly = /^(\d{4})M(\d{2})$/;
-  const quarterly = /^(\d{4})-?Q(\d)$/i;
-  const halfYear = /^(\d{4})-?[HS](\d)$/i;
-
-  if (annual.test(periodCode)) {
-    return Number(periodCode) * 100;
-  }
-
-  const monthlyMatch = periodCode.match(monthly);
-  if (monthlyMatch) {
-    return Number(monthlyMatch[1]) * 100 + Number(monthlyMatch[2]);
-  }
-
-  const quarterlyMatch = periodCode.match(quarterly);
-  if (quarterlyMatch) {
-    return Number(quarterlyMatch[1]) * 100 + Number(quarterlyMatch[2]) * 3;
-  }
-
-  const halfYearMatch = periodCode.match(halfYear);
-  if (halfYearMatch) {
-    return Number(halfYearMatch[1]) * 100 + Number(halfYearMatch[2]) * 6;
-  }
-
-  return Number(periodCode.replace(/\D/g, '')) || 0;
-}
-
 function formatPeriodLabel(periodCode: string): string {
   const monthlyMatch = periodCode.match(/^(\d{4})M(\d{2})$/);
   if (monthlyMatch) {
@@ -149,46 +123,6 @@ function formatPeriodLabel(periodCode: string): string {
   }
 
   return periodCode;
-}
-
-function getNextPeriodCode(periodCode: string): string | null {
-  const annual = /^\d{4}$/;
-  const monthly = /^(\d{4})M(\d{2})$/;
-  const quarterly = /^(\d{4})-?Q(\d)$/i;
-  const halfYear = /^(\d{4})S(\d)$/i;
-
-  if (annual.test(periodCode)) {
-    return String(Number(periodCode) + 1);
-  }
-
-  const monthlyMatch = periodCode.match(monthly);
-  if (monthlyMatch) {
-    const year = Number(monthlyMatch[1]);
-    const month = Number(monthlyMatch[2]);
-    const nextMonth = month === 12 ? 1 : month + 1;
-    const nextYear = month === 12 ? year + 1 : year;
-    return `${nextYear}M${String(nextMonth).padStart(2, '0')}`;
-  }
-
-  const quarterlyMatch = periodCode.match(quarterly);
-  if (quarterlyMatch) {
-    const year = Number(quarterlyMatch[1]);
-    const quarter = Number(quarterlyMatch[2]);
-    const nextQuarter = quarter === 4 ? 1 : quarter + 1;
-    const nextYear = quarter === 4 ? year + 1 : year;
-    return `${nextYear}Q${nextQuarter}`;
-  }
-
-  const halfYearMatch = periodCode.match(halfYear);
-  if (halfYearMatch) {
-    const year = Number(halfYearMatch[1]);
-    const half = Number(halfYearMatch[2]);
-    const nextHalf = half === 2 ? 1 : 2;
-    const nextYear = half === 2 ? year + 1 : year;
-    return `${nextYear}S${nextHalf}`;
-  }
-
-  return null;
 }
 
 export type FetchStats = Record<
@@ -381,6 +315,21 @@ export async function fetchTopicData(
   if (geoValues.length === 0) {
     console.warn('fetchTopicData: geoValues empty, defaulting to EE to avoid huge download');
     geoValues = ['EE'];
+  }
+
+  if (geoValues.length > EUROSTAT_MAX_GEO_VALUES) {
+    return {
+      title: topic?.title ?? topicId,
+      subtitle: topic?.description ?? `Eurostat dataset ${topicId}`,
+      unitSuffix: topic?.unitSuffix,
+      decimals: topic?.decimals ?? 0,
+      sourceUrl:
+        topic?.sourceUrl ??
+        `https://ec.europa.eu/eurostat/databrowser/view/${topicId}/default/table?lang=en`,
+      series: [],
+      periods: [],
+      warning: `Too many geographies selected (${geoValues.length}). Please select up to ${EUROSTAT_MAX_GEO_VALUES} geographies.`,
+    };
   }
 
   if (!topic) {
@@ -785,14 +734,6 @@ export async function fetchTopicData(
 
   // Forecast function: estimate future values from recent year-on-year ratios.
   // This avoids huge spikes/drops when the last two points are anomalous.
-  const median = (arr: number[]) => {
-    const sorted = [...arr].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-  };
-
-  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
   const computeForecast = (points: { periodCode: string; value: number }[]) => {
     if (points.length < 2) return Array(forecastHorizon).fill(points[points.length - 1]?.value ?? 0);
 

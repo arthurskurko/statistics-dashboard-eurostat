@@ -1,5 +1,6 @@
 import { OPEN_METEO_TOPIC_MAP } from '../features/dashboard/openMeteoTopicCatalog';
 import type { DataPoint, DataSeries, TopicData, TopicDefinition } from '../features/dashboard/types';
+import { clamp, getNextPeriodCode, inferSortKey, median } from './timeSeries';
 
 type GeoPoint = {
   code: string;
@@ -23,7 +24,11 @@ const OPEN_METEO_MAX_RETRIES = 4;
 const OPEN_METEO_BASE_RETRY_MS = 1000;
 const OPEN_METEO_MAX_CONCURRENT_REQUESTS = 2;
 const OPEN_METEO_HISTORY_DAYS = 4 * 365;
-const OPEN_METEO_MAX_POINTS_PER_SERIES = 1200;
+const OPEN_METEO_MAX_POINTS_PER_SERIES = 600;
+const OPEN_METEO_MAX_GEO_VALUES = 6;
+const OPEN_METEO_MAX_SERIES = 28;
+const OPEN_METEO_MAX_PERIODS = 900;
+const OPEN_METEO_MAX_TOTAL_POINTS = 8000;
 
 const openMeteoResponseCache = new Map<string, { expiresAt: number; payload: OpenMeteoDailyResponse }>();
 const openMeteoInFlight = new Map<string, Promise<OpenMeteoDailyResponse>>();
@@ -190,32 +195,6 @@ async function requestOpenMeteoDaily(url: string): Promise<OpenMeteoDailyRespons
   }
 }
 
-function inferSortKey(periodCode: string): number {
-  const match = periodCode.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return Number(periodCode.replace(/\D/g, '')) || 0;
-  return Number(`${match[1]}${match[2]}${match[3]}`);
-}
-
-function addDays(periodCode: string, days: number): string | null {
-  const date = new Date(`${periodCode}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  if (sorted.length === 0) return 1;
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 function computeForecast(points: DataPoint[], horizon: number): number[] {
   if (points.length < 2) {
     return Array(horizon).fill(points[points.length - 1]?.value ?? 0);
@@ -372,6 +351,20 @@ export async function fetchOpenMeteoTopicData(
     };
   }
 
+  if (selectedGeos.length > OPEN_METEO_MAX_GEO_VALUES) {
+    return {
+      title: topic.title,
+      subtitle: topic.description,
+      decimals: topic.decimals ?? 1,
+      unitSuffix: topic.unitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
+      warning: `Too many geographies selected (${selectedGeos.length}). Please select up to ${OPEN_METEO_MAX_GEO_VALUES} geographies.`,
+    };
+  }
+
   const rows = await Promise.all(selectedGeos.map((geo) => fetchGeoSeries(geo, variableName)));
   const series = rows.map((row) => row.series).filter((entry) => entry.points.length > 0);
 
@@ -382,6 +375,7 @@ export async function fetchOpenMeteoTopicData(
 
   const periods = [...periodSet].sort((a, b) => inferSortKey(a) - inferSortKey(b));
   const unitSuffix = topic.unitSuffix ?? rows.find((row) => row.unitSuffix)?.unitSuffix;
+  const totalPointCount = series.reduce((sum, entry) => sum + entry.points.length, 0);
 
   if (series.length === 0) {
     return {
@@ -394,6 +388,26 @@ export async function fetchOpenMeteoTopicData(
       periods: [],
       availableGeos: OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
       warning: 'No observations were returned for this variable and selected geographies.',
+    };
+  }
+
+  if (
+    series.length > OPEN_METEO_MAX_SERIES ||
+    periods.length > OPEN_METEO_MAX_PERIODS ||
+    totalPointCount > OPEN_METEO_MAX_TOTAL_POINTS
+  ) {
+    return {
+      title: topic.title,
+      subtitle: topic.description,
+      decimals: topic.decimals ?? 1,
+      unitSuffix,
+      sourceUrl: topic.sourceUrl,
+      series: [],
+      periods: [],
+      availableGeos: OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
+      warning:
+        `Dataset too large to process safely (series: ${series.length}, periods: ${periods.length}, points: ${totalPointCount}). ` +
+        'Reduce geographies or choose a smaller variable.',
     };
   }
 
@@ -411,10 +425,11 @@ export async function fetchOpenMeteoTopicData(
     if (!lastPoint) continue;
 
     const futurePeriods: string[] = [];
+    let nextPeriod = getNextPeriodCode(lastPoint.periodCode);
     for (let day = 1; day <= forecastHorizon; day += 1) {
-      const nextPeriod = addDays(lastPoint.periodCode, day);
       if (!nextPeriod) break;
       futurePeriods.push(nextPeriod);
+      nextPeriod = getNextPeriodCode(nextPeriod);
     }
 
     if (futurePeriods.length === 0) continue;
