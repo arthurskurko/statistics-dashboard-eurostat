@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import ReactECharts from 'echarts-for-react';
+import type { EChartsOption } from 'echarts';
 import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
 import type { TopicData, TopicDefinition } from '../features/dashboard/types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -13,7 +14,7 @@ import { ChartCardHeader } from './chart-card/ChartCardHeader';
 import { computeLatestValues, findDimensionValueLabel, type DimensionOption } from './chart-card/helpers';
 import { LatestValuesGrid } from './chart-card/LatestValuesGrid';
 import { MusicSettingsModal } from './chart-card/MusicSettingsModal';
-import { useChartMusic } from './chart-card/useChartMusic';
+import { useChartMusic, type MusicVisualStepInfo } from './chart-card/useChartMusic';
 import { useCompactMobileLayout } from './chart-card/useCompactMobileLayout';
 
 type ChartCardProps = {
@@ -95,7 +96,11 @@ function ChartCardComponent({
   const [dualAxis, setDualAxis] = React.useState(true);
   const [periodStart, setPeriodStart] = React.useState('');
   const [periodEnd, setPeriodEnd] = React.useState('');
+  const [chartInViewport, setChartInViewport] = React.useState(true);
+  const cardRef = React.useRef<HTMLElement | null>(null);
   const chartRef = React.useRef<ReactECharts | null>(null);
+  const previousStepPointBySeriesRef = React.useRef(new Map<string, { label: string; value: number; color: string }>());
+  const latestMusicStepRef = React.useRef<MusicVisualStepInfo | null>(null);
   const compactMobileLayout = useCompactMobileLayout(chartRef);
 
   const resolvedDefaultGeos = useMemo(() => topic.geoValues ?? defaultGeoValues, [defaultGeoValues, topic.geoValues]);
@@ -108,6 +113,24 @@ function ChartCardComponent({
       areStringArraysEqual(current, resolvedDefaultGeos) ? current : resolvedDefaultGeos,
     );
   }, [resolvedDefaultGeos, topicId]);
+
+  React.useEffect(() => {
+    const element = cardRef.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (!first) return;
+        setChartInViewport(first.isIntersecting);
+      },
+      { root: null, rootMargin: '140px 0px', threshold: 0 },
+    );
+
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   React.useEffect(() => {
     if (seriesDimension !== 'unit') return;
@@ -321,9 +344,81 @@ function ChartCardComponent({
       );
   }, [availableDimensions, dimensionFilters, query.data]);
 
+  const applyMusicStepHighlights = React.useCallback((stepInfo: MusicVisualStepInfo | null) => {
+    latestMusicStepRef.current = stepInfo;
+    if (!chartInViewport) return;
+    const chart = chartRef.current?.getEchartsInstance();
+    if (!chart) return;
+
+    const previousHighlights = previousStepPointBySeriesRef.current;
+    const nextHighlights = new Map<string, { label: string; value: number; color: string }>();
+    stepInfo?.points.forEach((point) => {
+      nextHighlights.set(point.seriesLabel, {
+        label: point.label,
+        value: point.value,
+        color: point.color,
+      });
+    });
+
+    const changedSeriesLabels = new Set<string>();
+    previousHighlights.forEach((previousPoint, seriesLabel) => {
+      const nextPoint = nextHighlights.get(seriesLabel);
+      if (!nextPoint) {
+        changedSeriesLabels.add(seriesLabel);
+        return;
+      }
+      if (
+        nextPoint.label !== previousPoint.label
+        || nextPoint.value !== previousPoint.value
+        || nextPoint.color !== previousPoint.color
+      ) {
+        changedSeriesLabels.add(seriesLabel);
+      }
+    });
+    nextHighlights.forEach((_, seriesLabel) => {
+      if (!previousHighlights.has(seriesLabel)) {
+        changedSeriesLabels.add(seriesLabel);
+      }
+    });
+
+    if (changedSeriesLabels.size === 0) {
+      return;
+    }
+
+    const symbolSize = compactMobileLayout ? 10 : 12;
+    const seriesPatch = Array.from(changedSeriesLabels).map((seriesLabel) => {
+      const highlight = nextHighlights.get(seriesLabel);
+      return {
+        id: `series-${seriesLabel}`,
+        markPoint: highlight
+          ? {
+              data: [
+                {
+                  coord: [highlight.label, highlight.value],
+                  symbol: 'circle',
+                  symbolSize,
+                  itemStyle: {
+                    color: '#ffffff',
+                    borderColor: highlight.color,
+                    borderWidth: 2,
+                  },
+                },
+              ],
+            }
+          : { data: [] },
+      };
+    });
+
+    previousStepPointBySeriesRef.current = nextHighlights;
+
+    chart.setOption(
+      { series: seriesPatch } as EChartsOption,
+      { lazyUpdate: true, silent: true },
+    );
+  }, [chartInViewport, compactMobileLayout]);
+
   const {
     musicPlaying,
-    currentMusicStep,
     musicModalOpen,
     setMusicModalOpen,
     musicTempo,
@@ -363,6 +458,8 @@ function ChartCardComponent({
     cardId,
     providerId,
     filteredSeries,
+    visualUpdatesEnabled: chartInViewport,
+    onVisualStep: applyMusicStepHighlights,
   });
 
   const chartBuild = useMemo(() => {
@@ -382,7 +479,6 @@ function ChartCardComponent({
           showDualAxisButton,
           activeFilterLabels,
           compactMobileLayout,
-          currentMusicStep,
         }),
         error: null,
       };
@@ -395,7 +491,6 @@ function ChartCardComponent({
     activeFilterLabels,
     baseSeries,
     compactMobileLayout,
-    currentMusicStep,
     dualAxis,
     filteredSeries,
     filteredTopicData,
@@ -404,6 +499,10 @@ function ChartCardComponent({
     topic,
     renderSafetyWarning,
   ]);
+
+  React.useEffect(() => {
+    applyMusicStepHighlights(latestMusicStepRef.current);
+  }, [applyMusicStepHighlights, chartBuild.option]);
 
   const latestValues = useMemo(
     () => computeLatestValues(filteredSeries, activeFilterLabels),
@@ -416,7 +515,7 @@ function ChartCardComponent({
   const showUnitSelectionHint = seriesDimension === 'unit' && selectedUnits.length === 0;
   const showUnitTooManyHint = unitSelectionTooLarge;
   return (
-    <article className="batcave-panel relative flex min-h-[30rem] min-w-0 flex-col overflow-hidden rounded-3xl p-5 shadow-card backdrop-blur-xl">
+    <article ref={cardRef} className="batcave-panel relative flex min-h-[30rem] min-w-0 flex-col overflow-hidden rounded-3xl p-5 shadow-card backdrop-blur-xl">
       {typeof document !== 'undefined'
         ? createPortal(
             <MusicSettingsModal

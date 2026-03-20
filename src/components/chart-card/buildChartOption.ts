@@ -15,10 +15,6 @@ type BuildChartOptionArgs = {
   showDualAxisButton: boolean;
   activeFilterLabels: string[];
   compactMobileLayout?: boolean;
-  currentMusicStep?: {
-    step: number;
-    points: Array<{ seriesLabel: string; label: string; value: number }>;
-  } | null;
 };
 
 export function buildChartOption({
@@ -31,7 +27,6 @@ export function buildChartOption({
   showDualAxisButton,
   activeFilterLabels,
   compactMobileLayout = false,
-  currentMusicStep,
 }: BuildChartOptionArgs): EChartsOption {
   const xAxis = data.periods;
   const twoSeries = showDualAxisButton;
@@ -132,16 +127,6 @@ export function buildChartOption({
       normalizedLabel,
     };
   });
-
-  const highlightPointBySeries = new Map<string, { label: string; value: number }>();
-  if (currentMusicStep?.points) {
-    currentMusicStep.points.forEach((point) => {
-      highlightPointBySeries.set(point.seriesLabel, {
-        label: point.label,
-        value: point.value,
-      });
-    });
-  }
 
   const seriesByAxis = seriesWithAxis.reduce<Record<number, string[]>>((acc, item) => {
     acc[item.yAxisIndex] = acc[item.yAxisIndex] ?? [];
@@ -329,6 +314,7 @@ export function buildChartOption({
       const hasSinglePoint = baseSeries.points.length <= 1;
 
       return {
+        id: `series-${baseSeries.label}`,
         name: `${baseSeries.label}${filterSuffix}`,
         type: topic.chartVariant ?? 'line',
         smooth: !useLightweightRendering,
@@ -342,24 +328,6 @@ export function buildChartOption({
         itemStyle: {
           color: seriesColor,
         },
-        markPoint: (() => {
-          const highlight = highlightPointBySeries.get(baseSeries.label);
-          if (!highlight) return undefined;
-          return {
-            data: [
-              {
-                coord: [highlight.label, highlight.value],
-                symbol: 'circle',
-                symbolSize: compactMobileLayout ? 10 : 12,
-                itemStyle: {
-                  color: '#ffffff',
-                  borderColor: seriesColor,
-                  borderWidth: 2,
-                },
-              },
-            ],
-          };
-        })(),
         lineStyle: {
           width: useLightweightRendering ? (compactMobileLayout ? 1.5 : 2) : (compactMobileLayout ? 2 : 3),
           type: isForecast ? 'dashed' : 'solid',

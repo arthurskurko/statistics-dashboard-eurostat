@@ -7,39 +7,82 @@ const GLOBAL_TEMPO_SYNC_EVENT = 'datapoint-music-tempo-sync-change';
 const GLOBAL_TEMPO_EVENT = 'datapoint-music-tempo-change';
 const GLOBAL_MUSIC_STATE_EVENT = 'datapoint-music-global-state';
 const GLOBAL_MUSIC_TOGGLE_REQUEST_EVENT = 'datapoint-music-global-toggle-request';
+const STARTUP_INSTRUMENTS: OscillatorType[] = ['sine', 'triangle', 'square', 'sawtooth'];
 
-let globalTempoSyncEnabledState = false;
+function hashSeed(value: string): number {
+  let hash = 2166136261 >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function mulberry32(seed: number) {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let next = Math.imul(t ^ (t >>> 15), 1 | t);
+    next ^= next + Math.imul(next ^ (next >>> 7), 61 | next);
+    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function createStartupAudioDefaults(seedKey: string): {
+  instrument: OscillatorType;
+  octaveShift: number;
+  volume: number;
+  playbackMode: MusicPlaybackMode;
+  delayTime: number;
+} {
+  const random = mulberry32(hashSeed(seedKey));
+  const instrument = STARTUP_INSTRUMENTS[Math.floor(random() * STARTUP_INSTRUMENTS.length)] ?? 'triangle';
+  const playbackMode = random() < 0.9 ? 'points' : 'line';
+  // Weighted toward -1 so defaults are less bright/harsh across many charts.
+  const octaveChoices = [-3, -2, -1, -1, -1, 0, 0, 1, 2, 3];
+  const octaveShift = octaveChoices[Math.floor(random() * octaveChoices.length)] ?? -1;
+  const volume = Math.max(0.4, 0.78 - octaveShift * 0.14);
+  const delayTime = random() < 0.5 ? 0.18 : 0.36;
+  return { instrument, octaveShift, volume, playbackMode, delayTime };
+}
+
+let globalTempoSyncEnabledState = true;
 let globalTempoBpmState = 120;
 
 type UseChartMusicArgs = {
   cardId: string;
   providerId: string;
   filteredSeries: DataSeries[];
+  visualUpdatesEnabled?: boolean;
+  onVisualStep?: (stepInfo: MusicVisualStepInfo | null) => void;
 };
 
-export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMusicArgs) {
+export type MusicVisualStepInfo = {
+  step: number;
+  points: Array<{ seriesLabel: string; label: string; value: number; color: string }>;
+};
+
+export function useChartMusic({ providerId, cardId, filteredSeries, visualUpdatesEnabled = true, onVisualStep }: UseChartMusicArgs) {
+  const startupAudioDefaults = React.useMemo(
+    () => createStartupAudioDefaults(`${providerId}:${cardId}`),
+    [providerId, cardId],
+  );
+
   const [musicPlaying, setMusicPlaying] = React.useState(false);
-  const [currentMusicStep, setCurrentMusicStep] = React.useState<
-    | {
-        step: number;
-        points: Array<{ seriesLabel: string; label: string; value: number; color: string }>;
-      }
-    | null
-  >(null);
   const [musicModalOpen, setMusicModalOpen] = React.useState(false);
   const [musicTempo, setMusicTempoState] = React.useState(globalTempoBpmState);
   const [globalTempoSyncEnabled, setGlobalTempoSyncEnabledState] = React.useState(globalTempoSyncEnabledState);
-  const [musicPlaybackMode, setMusicPlaybackMode] = React.useState<MusicPlaybackMode>('points');
-  const [musicScale, setMusicScale] = React.useState<'major' | 'minor' | 'pentatonic' | 'chromatic'>('major');
-  const [musicOctaveShift, setMusicOctaveShift] = React.useState(0);
-  const [musicInstrument, setMusicInstrument] = React.useState<OscillatorType | 'auto'>('auto');
+  const [musicPlaybackMode, setMusicPlaybackMode] = React.useState<MusicPlaybackMode>(startupAudioDefaults.playbackMode);
+  const [musicScale, setMusicScale] = React.useState<'major' | 'minor' | 'pentatonic' | 'chromatic'>('pentatonic');
+  const [musicOctaveShift, setMusicOctaveShift] = React.useState(startupAudioDefaults.octaveShift);
+  const [musicInstrument, setMusicInstrument] = React.useState<OscillatorType | 'auto'>(startupAudioDefaults.instrument);
   const [musicArpeggiate, setMusicArpeggiate] = React.useState(false);
   const [musicSwing, setMusicSwing] = React.useState(0);
-  const [musicDelayTime, setMusicDelayTime] = React.useState(0.18);
+  const [musicDelayTime, setMusicDelayTime] = React.useState(startupAudioDefaults.delayTime);
   const [musicDelayFeedback, setMusicDelayFeedback] = React.useState(0.35);
   const [musicReverbWet, setMusicReverbWet] = React.useState(0.18);
   const [musicReverbDecay, setMusicReverbDecay] = React.useState(2.4);
-  const [musicVolume, setMusicVolume] = React.useState(0.8);
+  const [musicVolume, setMusicVolume] = React.useState(startupAudioDefaults.volume);
   const [musicPhaseOffset, setMusicPhaseOffset] = React.useState(0);
   const [globalRecording, setGlobalRecording] = React.useState(() => DataPointMusicPlayer.isGlobalRecording());
   const [globalRecordingBusy, setGlobalRecordingBusy] = React.useState(false);
@@ -47,6 +90,10 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
   const musicPlayerRef = React.useRef<DataPointMusicPlayer | null>(null);
   const lastSeriesSignatureRef = React.useRef<string>('');
   const lastVisualStepUpdateMsRef = React.useRef(0);
+  const lastVisualStepInfoRef = React.useRef<MusicVisualStepInfo | null>(null);
+  const musicPlayingRef = React.useRef(false);
+  const musicTempoRef = React.useRef(globalTempoBpmState);
+  const applySettingsRafRef = React.useRef<number | null>(null);
 
   const seriesSignature = React.useMemo(() => {
     let hash = 2166136261 >>> 0;
@@ -127,6 +174,14 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
     return byRawSeriesLabel;
   }, [filteredSeries]);
 
+  React.useEffect(() => {
+    musicPlayingRef.current = musicPlaying;
+  }, [musicPlaying]);
+
+  React.useEffect(() => {
+    musicTempoRef.current = musicTempo;
+  }, [musicTempo]);
+
   const emitGlobalMusicState = React.useCallback(
     (
       playing: boolean,
@@ -142,12 +197,12 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
             providerId,
             playing,
             stepInfo: stepInfo ?? null,
-            tempoBpm: musicTempo,
+            tempoBpm: musicTempoRef.current,
           },
         }),
       );
     },
-    [cardId, musicTempo, providerId],
+    [cardId, providerId],
   );
 
   const setMusicTempo = React.useCallback(
@@ -210,13 +265,21 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
           color: seriesColorByLabel.get(point.seriesLabel) ?? '#f59e0b',
         })),
       };
-      setCurrentMusicStep(stepInfoWithColor);
-      if (musicPlaying) {
+      lastVisualStepInfoRef.current = stepInfoWithColor;
+      if (visualUpdatesEnabled) {
+        onVisualStep?.(stepInfoWithColor);
+      }
+      if (musicPlayingRef.current) {
         emitGlobalMusicState(true, stepInfoWithColor);
       }
     },
-    [emitGlobalMusicState, musicPlaying, seriesColorByLabel],
+    [emitGlobalMusicState, onVisualStep, seriesColorByLabel, visualUpdatesEnabled],
   );
+
+  React.useEffect(() => {
+    if (!visualUpdatesEnabled) return;
+    onVisualStep?.(lastVisualStepInfoRef.current);
+  }, [onVisualStep, visualUpdatesEnabled]);
 
   React.useEffect(() => {
     const syncTempo = (event: Event) => {
@@ -281,22 +344,36 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
   ]);
 
   React.useEffect(() => {
-    const player = musicPlayerRef.current;
-    if (!player) return;
+    if (applySettingsRafRef.current !== null) {
+      window.cancelAnimationFrame(applySettingsRafRef.current);
+    }
 
-    player.setTempo(musicTempo);
-    player.setPlaybackMode(musicPlaybackMode);
-    player.setSwing(musicSwing);
-    player.setScale(musicScale);
-    player.setOctaveShift(musicOctaveShift);
-    player.setInstrumentOverride(musicInstrument);
-    player.setArpeggiate(musicArpeggiate);
-    player.setDelayTime(musicDelayTime);
-    player.setDelayFeedback(musicDelayFeedback);
-    player.setReverbWet(musicReverbWet);
-    player.setReverbDecay(musicReverbDecay);
-    player.setVolume(musicVolume);
-    player.setPhaseOffset(musicPhaseOffset);
+    applySettingsRafRef.current = window.requestAnimationFrame(() => {
+      applySettingsRafRef.current = null;
+      const player = musicPlayerRef.current;
+      if (!player) return;
+
+      player.setTempo(musicTempo);
+      player.setPlaybackMode(musicPlaybackMode);
+      player.setSwing(musicSwing);
+      player.setScale(musicScale);
+      player.setOctaveShift(musicOctaveShift);
+      player.setInstrumentOverride(musicInstrument);
+      player.setArpeggiate(musicArpeggiate);
+      player.setDelayTime(musicDelayTime);
+      player.setDelayFeedback(musicDelayFeedback);
+      player.setReverbWet(musicReverbWet);
+      player.setReverbDecay(musicReverbDecay);
+      player.setVolume(musicVolume);
+      player.setPhaseOffset(musicPhaseOffset);
+    });
+
+    return () => {
+      if (applySettingsRafRef.current !== null) {
+        window.cancelAnimationFrame(applySettingsRafRef.current);
+        applySettingsRafRef.current = null;
+      }
+    };
   }, [
     musicTempo,
     musicPlaybackMode,
@@ -380,19 +457,22 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
       const playing = await player.toggle();
       setMusicPlaying(playing);
       if (playing) {
-        emitGlobalMusicState(true, currentMusicStep);
+        emitGlobalMusicState(true, lastVisualStepInfoRef.current);
       }
       if (!playing) {
         setMusicModalOpen(false);
-        setCurrentMusicStep(null);
+        lastVisualStepInfoRef.current = null;
+        onVisualStep?.(null);
         emitGlobalMusicState(false, null);
       }
     } catch (error) {
       console.error('Could not start data music:', error);
       setMusicPlaying(false);
+      lastVisualStepInfoRef.current = null;
+      onVisualStep?.(null);
       emitGlobalMusicState(false, null);
     }
-  }, [currentMusicStep, emitGlobalMusicState]);
+  }, [emitGlobalMusicState, onVisualStep]);
 
   React.useEffect(() => {
     const onGlobalToggleRequest = (event: Event) => {
@@ -420,7 +500,6 @@ export function useChartMusic({ providerId, cardId, filteredSeries }: UseChartMu
   return {
     musicPlayerRef,
     musicPlaying,
-    currentMusicStep,
     musicModalOpen,
     setMusicModalOpen,
     musicTempo,

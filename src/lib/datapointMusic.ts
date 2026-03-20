@@ -103,6 +103,8 @@ export class DataPointMusicPlayer {
   private static globalRecorder: MediaRecorder | null = null;
   private static globalChunks: BlobPart[] = [];
   private static activeInstanceCount = 0;
+  private static runningPlayers = new Set<DataPointMusicPlayer>();
+  private static sharedSchedulerId: number | null = null;
 
   private audioContext: AudioContext | null = null;
 
@@ -114,7 +116,6 @@ export class DataPointMusicPlayer {
   private convolver: ConvolverNode | null = null;
   private reverbWet: GainNode | null = null;
 
-  private schedulerId: number | null = null;
   private nextStepTime = 0;
 
   private stepIndex = 0;
@@ -277,63 +278,84 @@ export class DataPointMusicPlayer {
   }
 
   setScale(scale: MusicScale): void {
+    if (this.settings.scale === scale) return;
     this.settings.scale = scale;
   }
 
   setPlaybackMode(mode: MusicPlaybackMode): void {
+    if (this.settings.playbackMode === mode) return;
     this.settings.playbackMode = mode;
   }
 
   setOctaveShift(shift: number): void {
-    this.settings.octaveShift = Math.max(-3, Math.min(3, shift));
+    const nextShift = Math.max(-3, Math.min(3, shift));
+    if (this.settings.octaveShift === nextShift) return;
+    this.settings.octaveShift = nextShift;
   }
 
   setInstrumentOverride(instrument: OscillatorType | 'auto'): void {
+    if (this.settings.instrumentOverride === instrument) return;
     this.settings.instrumentOverride = instrument;
     this.preparedSeries = buildPreparedSeries(this.sourceSeries, this.settings);
   }
 
   setSpread(spread: number): void {
-    this.settings.spread = Math.max(0, Math.min(1, spread));
+    const nextSpread = Math.max(0, Math.min(1, spread));
+    if (Math.abs(this.settings.spread - nextSpread) < 0.0001) return;
+    this.settings.spread = nextSpread;
   }
 
   setDelayTime(seconds: number): void {
-    this.settings.delayTime = Math.max(0, Math.min(2, seconds));
+    const nextDelayTime = Math.max(0, Math.min(2, seconds));
+    if (Math.abs(this.settings.delayTime - nextDelayTime) < 0.0001) return;
+    this.settings.delayTime = nextDelayTime;
     this.updateEffectSettings();
   }
 
   setVolume(volume: number): void {
-    this.settings.volume = Math.max(0, Math.min(1, volume));
+    const nextVolume = Math.max(0, Math.min(1, volume));
+    if (Math.abs(this.settings.volume - nextVolume) < 0.0001) return;
+    this.settings.volume = nextVolume;
     if (this.masterGain) {
       this.smoothAudioParam(this.masterGain.gain, Math.min(1.2, Math.max(0, this.settings.volume)), 0.02);
     }
   }
 
   setDelayFeedback(feedback: number): void {
-    this.settings.delayFeedback = Math.max(0, Math.min(0.95, feedback));
+    const nextFeedback = Math.max(0, Math.min(0.95, feedback));
+    if (Math.abs(this.settings.delayFeedback - nextFeedback) < 0.0001) return;
+    this.settings.delayFeedback = nextFeedback;
     this.updateEffectSettings();
   }
 
   setDelayWet(wet: number): void {
-    this.settings.delayWet = Math.max(0, Math.min(1, wet));
+    const nextWet = Math.max(0, Math.min(1, wet));
+    if (Math.abs(this.settings.delayWet - nextWet) < 0.0001) return;
+    this.settings.delayWet = nextWet;
     this.updateEffectSettings();
   }
 
   setReverbWet(wet: number): void {
-    this.settings.reverbWet = Math.max(0, Math.min(1, wet));
+    const nextReverbWet = Math.max(0, Math.min(1, wet));
+    if (Math.abs(this.settings.reverbWet - nextReverbWet) < 0.0001) return;
+    this.settings.reverbWet = nextReverbWet;
     this.updateEffectSettings();
   }
 
   setReverbDecay(decay: number): void {
-    this.settings.reverbDecay = Math.max(0.1, Math.min(6, decay));
+    const nextReverbDecay = Math.max(0.1, Math.min(6, decay));
+    if (Math.abs(this.settings.reverbDecay - nextReverbDecay) < 0.0001) return;
+    this.settings.reverbDecay = nextReverbDecay;
     this.updateEffectSettings();
   }
 
   setArpeggiate(arpeggiate: boolean): void {
+    if (this.settings.arpeggiate === arpeggiate) return;
     this.settings.arpeggiate = arpeggiate;
   }
 
   setStepCallback(callback?: (info: { step: number; points: Array<{ seriesLabel: string; label: string; value: number }> }) => void): void {
+    if (this.settings.onStep === callback) return;
     this.settings.onStep = callback;
   }
 
@@ -400,30 +422,31 @@ export class DataPointMusicPlayer {
     const phaseSec = (this.phaseOffset / 16) * phaseBaseSec;
     this.nextStepTime = Math.max(this.nextStepTime, context.currentTime + phaseSec);
 
-    const scheduleAhead = () => {
-      if (!this.running) return;
+    // Prime one scheduling pass immediately to keep perceived start latency low.
+    this.scheduleAhead(context.currentTime);
 
-      const scheduleUntil = context.currentTime + SCHEDULER_LOOKAHEAD_SEC;
-      while (this.nextStepTime <= scheduleUntil) {
-        const step = this.stepIndex;
-        this.playStep(step, this.nextStepTime);
+    DataPointMusicPlayer.runningPlayers.add(this);
+    DataPointMusicPlayer.ensureSharedSchedulerRunning();
+  }
 
-        const baseSec = 60 / this.settings.tempoBpm;
-        const swingFactor = 1 + (step % 2 === 1 ? this.settings.swing : -this.settings.swing);
-        this.nextStepTime += baseSec * swingFactor;
-        this.stepIndex += 1;
-      }
-    };
+  private scheduleAhead(currentTime: number): void {
+    if (!this.running) return;
 
-    scheduleAhead();
-    this.schedulerId = window.setInterval(scheduleAhead, SCHEDULER_INTERVAL_MS);
+    const scheduleUntil = currentTime + SCHEDULER_LOOKAHEAD_SEC;
+    while (this.nextStepTime <= scheduleUntil) {
+      const step = this.stepIndex;
+      this.playStep(step, this.nextStepTime);
+
+      const baseSec = 60 / this.settings.tempoBpm;
+      const swingFactor = 1 + (step % 2 === 1 ? this.settings.swing : -this.settings.swing);
+      this.nextStepTime += baseSec * swingFactor;
+      this.stepIndex += 1;
+    }
   }
 
   private stopLoop(): void {
-    if (this.schedulerId !== null) {
-      window.clearInterval(this.schedulerId);
-      this.schedulerId = null;
-    }
+    DataPointMusicPlayer.runningPlayers.delete(this);
+    DataPointMusicPlayer.maybeStopSharedScheduler();
   }
 
   stop(): void {
@@ -580,6 +603,11 @@ export class DataPointMusicPlayer {
     this.globalChunks = [];
     this.sharedRecordingDestination = null;
     this.activeMasterGains.clear();
+    this.runningPlayers.clear();
+    if (this.sharedSchedulerId !== null) {
+      window.clearInterval(this.sharedSchedulerId);
+      this.sharedSchedulerId = null;
+    }
 
     if (this.sharedAudioContext) {
       this.sharedAudioContext.close().catch(() => {
@@ -589,6 +617,32 @@ export class DataPointMusicPlayer {
     }
 
     this.emitGlobalRecordingChange();
+  }
+
+  private static ensureSharedSchedulerRunning(): void {
+    if (this.sharedSchedulerId !== null) return;
+
+    this.sharedSchedulerId = window.setInterval(() => {
+      if (this.runningPlayers.size === 0) {
+        this.maybeStopSharedScheduler();
+        return;
+      }
+
+      const context = this.sharedAudioContext;
+      if (!context) return;
+      const currentTime = context.currentTime;
+      this.runningPlayers.forEach((player) => {
+        player.scheduleAhead(currentTime);
+      });
+    }, SCHEDULER_INTERVAL_MS);
+  }
+
+  private static maybeStopSharedScheduler(): void {
+    if (this.runningPlayers.size > 0) return;
+    if (this.sharedSchedulerId !== null) {
+      window.clearInterval(this.sharedSchedulerId);
+      this.sharedSchedulerId = null;
+    }
   }
 
   private playStep(step: number, atTime: number): void {
@@ -604,6 +658,10 @@ export class DataPointMusicPlayer {
       : this.preparedSeries;
 
     const spreadMultiplier = this.settings.spread;
+    const voiceNormalization = 1 / Math.sqrt(Math.max(1, seriesToPlay.length));
+    const activePlayerCount = Math.max(1, DataPointMusicPlayer.runningPlayers.size || (this.running ? 1 : 0));
+    const globalMixNormalization = 1 / Math.sqrt(activePlayerCount);
+    const modeNormalization = this.settings.playbackMode === 'line' ? 0.92 : 1;
 
     const playedPoints: Array<{ seriesLabel: string; label: string; value: number }> = [];
 
@@ -642,7 +700,7 @@ export class DataPointMusicPlayer {
 
       const waveformGain = WAVEFORM_GAIN_MULTIPLIER[entry.waveform] ?? 0.8;
       const seriesGain = 1 / Math.sqrt(index + 1);
-      const baseGain = 0.28 * waveformGain * seriesGain;
+      const baseGain = 0.28 * waveformGain * seriesGain * voiceNormalization * globalMixNormalization * modeNormalization;
       gain.gain.setValueAtTime(0.0001, now);
       gain.gain.exponentialRampToValueAtTime(baseGain, now + 0.012);
       if (this.settings.playbackMode === 'line') {

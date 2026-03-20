@@ -1,4 +1,48 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MusicPlaybackMode } from '../../lib/datapointMusic';
+
+const DRAG_COMMIT_INTERVAL_MS = 80;
+
+function useThrottledCommittedNumber(value: number, commit: (value: number) => void, open: boolean) {
+  const [draft, setDraft] = useState(value);
+  const pendingValueRef = useRef(value);
+  const timeoutIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setDraft(value);
+    pendingValueRef.current = value;
+  }, [value, open]);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutIdRef.current !== null) {
+        window.clearTimeout(timeoutIdRef.current);
+      }
+    };
+  }, []);
+
+  const flush = useCallback(() => {
+    if (timeoutIdRef.current !== null) {
+      window.clearTimeout(timeoutIdRef.current);
+      timeoutIdRef.current = null;
+    }
+    commit(pendingValueRef.current);
+  }, [commit]);
+
+  const setDraftAndCommit = useCallback((nextValue: number) => {
+    setDraft(nextValue);
+    pendingValueRef.current = nextValue;
+    if (timeoutIdRef.current !== null) {
+      return;
+    }
+    timeoutIdRef.current = window.setTimeout(() => {
+      timeoutIdRef.current = null;
+      commit(pendingValueRef.current);
+    }, DRAG_COMMIT_INTERVAL_MS);
+  }, [commit]);
+
+  return { draft, setDraftAndCommit, flush };
+}
 
 type MusicSettingsModalProps = {
   open: boolean;
@@ -73,6 +117,16 @@ export function MusicSettingsModal({
   globalRecording,
   onGlobalRecording,
 }: MusicSettingsModalProps) {
+  const tempo = useThrottledCommittedNumber(musicTempo, setMusicTempo, open);
+  const volume = useThrottledCommittedNumber(musicVolume, setMusicVolume, open);
+  const swing = useThrottledCommittedNumber(musicSwing, setMusicSwing, open);
+  const octaveShift = useThrottledCommittedNumber(musicOctaveShift, setMusicOctaveShift, open);
+  const phaseOffset = useThrottledCommittedNumber(musicPhaseOffset, setMusicPhaseOffset, open);
+  const delayTime = useThrottledCommittedNumber(musicDelayTime, setMusicDelayTime, open);
+  const delayFeedback = useThrottledCommittedNumber(musicDelayFeedback, setMusicDelayFeedback, open);
+  const reverbWet = useThrottledCommittedNumber(musicReverbWet, setMusicReverbWet, open);
+  const reverbDecay = useThrottledCommittedNumber(musicReverbDecay, setMusicReverbDecay, open);
+
   if (!open) return null;
 
   return (
@@ -100,11 +154,13 @@ export function MusicSettingsModal({
                 type="range"
                 min={30}
                 max={240}
-                value={musicTempo}
-                onChange={(event) => setMusicTempo(Number(event.target.value))}
+                value={tempo.draft}
+                onChange={(event) => tempo.setDraftAndCommit(Number(event.target.value))}
+                onMouseUp={tempo.flush}
+                onTouchEnd={tempo.flush}
                 className="h-2 w-full cursor-pointer accent-emerald-400"
               />
-              <span className="w-14 text-right text-xs text-slate-200">{musicTempo} bpm</span>
+              <span className="w-14 text-right text-xs text-slate-200">{tempo.draft} bpm</span>
             </div>
           </label>
 
@@ -136,11 +192,13 @@ export function MusicSettingsModal({
                 min={0}
                 max={1}
                 step={0.01}
-                value={musicVolume}
-                onChange={(event) => setMusicVolume(Number(event.target.value))}
+                value={volume.draft}
+                onChange={(event) => volume.setDraftAndCommit(Number(event.target.value))}
+                onMouseUp={volume.flush}
+                onTouchEnd={volume.flush}
                 className="h-2 w-full cursor-pointer accent-emerald-400"
               />
-              <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicVolume * 100)}%</span>
+              <span className="w-14 text-right text-xs text-slate-200">{Math.round(volume.draft * 100)}%</span>
             </div>
           </label>
 
@@ -152,11 +210,13 @@ export function MusicSettingsModal({
                 min={0}
                 max={0.5}
                 step={0.01}
-                value={musicSwing}
-                onChange={(event) => setMusicSwing(Number(event.target.value))}
+                value={swing.draft}
+                onChange={(event) => swing.setDraftAndCommit(Number(event.target.value))}
+                onMouseUp={swing.flush}
+                onTouchEnd={swing.flush}
                 className="h-2 w-full cursor-pointer accent-emerald-400"
               />
-              <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicSwing * 100)}%</span>
+              <span className="w-14 text-right text-xs text-slate-200">{Math.round(swing.draft * 100)}%</span>
             </div>
           </label>
 
@@ -183,11 +243,13 @@ export function MusicSettingsModal({
                   min={-3}
                   max={3}
                   step={1}
-                  value={musicOctaveShift}
-                  onChange={(event) => setMusicOctaveShift(Number(event.target.value))}
+                  value={octaveShift.draft}
+                  onChange={(event) => octaveShift.setDraftAndCommit(Number(event.target.value))}
+                  onMouseUp={octaveShift.flush}
+                  onTouchEnd={octaveShift.flush}
                   className="h-2 w-full cursor-pointer accent-emerald-400"
                 />
-                <span className="w-10 text-right text-xs text-slate-200">{musicOctaveShift}</span>
+                <span className="w-10 text-right text-xs text-slate-200">{octaveShift.draft}</span>
               </div>
             </label>
 
@@ -199,11 +261,13 @@ export function MusicSettingsModal({
                   min={0}
                   max={16}
                   step={1}
-                  value={musicPhaseOffset}
-                  onChange={(event) => setMusicPhaseOffset(Number(event.target.value))}
+                  value={phaseOffset.draft}
+                  onChange={(event) => phaseOffset.setDraftAndCommit(Number(event.target.value))}
+                  onMouseUp={phaseOffset.flush}
+                  onTouchEnd={phaseOffset.flush}
                   className="h-2 w-full cursor-pointer accent-emerald-400"
                 />
-                <span className="w-10 text-right text-xs text-slate-200">{musicPhaseOffset}</span>
+                <span className="w-10 text-right text-xs text-slate-200">{phaseOffset.draft}</span>
               </div>
               <p className="text-xs text-slate-500">Shift the timing of this chart (16th-note increments) relative to others.</p>
             </label>
@@ -232,11 +296,13 @@ export function MusicSettingsModal({
                 min={0}
                 max={0.6}
                 step={0.02}
-                value={musicDelayTime}
-                onChange={(event) => setMusicDelayTime(Number(event.target.value))}
+                value={delayTime.draft}
+                onChange={(event) => delayTime.setDraftAndCommit(Number(event.target.value))}
+                onMouseUp={delayTime.flush}
+                onTouchEnd={delayTime.flush}
                 className="h-2 w-full cursor-pointer accent-emerald-400"
               />
-              <span className="w-14 text-right text-xs text-slate-200">{musicDelayTime.toFixed(2)}s</span>
+              <span className="w-14 text-right text-xs text-slate-200">{delayTime.draft.toFixed(2)}s</span>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-slate-400">Feedback</span>
@@ -245,11 +311,13 @@ export function MusicSettingsModal({
                 min={0}
                 max={0.95}
                 step={0.01}
-                value={musicDelayFeedback}
-                onChange={(event) => setMusicDelayFeedback(Number(event.target.value))}
+                value={delayFeedback.draft}
+                onChange={(event) => delayFeedback.setDraftAndCommit(Number(event.target.value))}
+                onMouseUp={delayFeedback.flush}
+                onTouchEnd={delayFeedback.flush}
                 className="h-2 w-full cursor-pointer accent-emerald-400"
               />
-              <span className="w-12 text-right text-xs text-slate-200">{Math.round(musicDelayFeedback * 100)}%</span>
+              <span className="w-12 text-right text-xs text-slate-200">{Math.round(delayFeedback.draft * 100)}%</span>
             </div>
           </div>
 
@@ -261,11 +329,13 @@ export function MusicSettingsModal({
                 min={0}
                 max={1}
                 step={0.05}
-                value={musicReverbWet}
-                onChange={(event) => setMusicReverbWet(Number(event.target.value))}
+                value={reverbWet.draft}
+                onChange={(event) => reverbWet.setDraftAndCommit(Number(event.target.value))}
+                onMouseUp={reverbWet.flush}
+                onTouchEnd={reverbWet.flush}
                 className="h-2 w-full cursor-pointer accent-emerald-400"
               />
-              <span className="w-14 text-right text-xs text-slate-200">{Math.round(musicReverbWet * 100)}%</span>
+              <span className="w-14 text-right text-xs text-slate-200">{Math.round(reverbWet.draft * 100)}%</span>
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-slate-400">Decay</span>
@@ -274,11 +344,13 @@ export function MusicSettingsModal({
                 min={0.5}
                 max={6}
                 step={0.1}
-                value={musicReverbDecay}
-                onChange={(event) => setMusicReverbDecay(Number(event.target.value))}
+                value={reverbDecay.draft}
+                onChange={(event) => reverbDecay.setDraftAndCommit(Number(event.target.value))}
+                onMouseUp={reverbDecay.flush}
+                onTouchEnd={reverbDecay.flush}
                 className="h-2 w-full cursor-pointer accent-emerald-400"
               />
-              <span className="w-14 text-right text-xs text-slate-200">{musicReverbDecay.toFixed(1)}s</span>
+              <span className="w-14 text-right text-xs text-slate-200">{reverbDecay.draft.toFixed(1)}s</span>
             </div>
           </div>
 
