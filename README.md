@@ -1,6 +1,6 @@
 # Europe Statistics Dashboard
 
-A Docker-ready React + TypeScript dashboard that lets you choose a Eurostat topic from a dropdown and add it to a chart dashboard.
+A Docker-ready React + TypeScript dashboard that lets you choose topics from multiple public data providers and add them to a chart dashboard.
 
 ## Stack
 
@@ -11,11 +11,14 @@ A Docker-ready React + TypeScript dashboard that lets you choose a Eurostat topi
 - Apache ECharts
 - Docker + Nginx
 
-## Topics included
+## Providers covered
 
-- Population (the card now uses two y‑axes when Estonia is plotted against the EU so the smaller line isn’t squashed)
-- Immigration (total flows into Estonia and EU)
-- Induced abortions (legal terminations, Estonia vs EU)
+- Eurostat: official EU statistics (for example population, inflation, migration)
+- WHO: health indicators and pre-generated snapshots in public/who-snapshots/
+- World Bank: macroeconomic and development indicators via generated provider catalog
+- Open-Meteo: weather and climate time series
+
+The dashboard can mix cards from different providers on the same page.
 
 
 ## Forecasting missing values
@@ -81,7 +84,6 @@ card’s header.
 
 Forecast points are drawn with a **dashed line** and are marked `predicted`
 in the tooltip.
-- GDP per capita
 
 ## Local development
 
