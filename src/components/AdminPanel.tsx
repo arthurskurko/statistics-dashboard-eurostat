@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { TOPIC_MAP, TOPICS } from '../features/dashboard/topicCatalog';
+import type { TopicDefinition } from '../features/dashboard/types';
 import { BackendStatusSummary } from './admin/BackendStatusSummary';
 import { DefaultChartsSection } from './admin/DefaultChartsSection';
 import { FetchStatsSection } from './admin/FetchStatsSection';
@@ -14,12 +14,14 @@ export type AdminPanelProps = {
   backendBaseUrl: string;
   onRefreshBackendStatus: () => void;
   isRefreshingBackendStatus: boolean;
+  topics: TopicDefinition[];
+  topicMap: Record<string, TopicDefinition>;
+  defaultBuiltInTopicIds: string[];
+  catalogPath: string;
   onLoadDefaults: () => void;
   onClearDashboard: () => void;
   onClose: () => void;
 };
-
-const DEFAULT_TOPIC_IDS = ['population', 'unemployment-rate', 'inflation'];
 
 export function AdminPanel({
   defaultTopicIds,
@@ -29,12 +31,16 @@ export function AdminPanel({
   backendBaseUrl,
   onRefreshBackendStatus,
   isRefreshingBackendStatus,
+  topics,
+  topicMap,
+  defaultBuiltInTopicIds,
+  catalogPath,
   onLoadDefaults,
   onClearDashboard,
   onClose,
 }: AdminPanelProps) {
   const [stats, setStats] = useState<FetchStats>(() => readStats());
-  const [selectedTopicId, setSelectedTopicId] = useState(defaultTopicIds[0] ?? TOPICS[0]?.id ?? '');
+  const [selectedTopicId, setSelectedTopicId] = useState(defaultTopicIds[0] ?? topics[0]?.id ?? '');
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [customCode, setCustomCode] = useState('');
   const suggestions = useMemo(
@@ -56,20 +62,20 @@ export function AdminPanel({
   }, []);
 
   useEffect(() => {
-    loadCatalogEntries('catalog.json')
+    loadCatalogEntries(catalogPath)
       .then((entries) => setCatalog(entries))
       .catch(() => {
         /* ignore */
       });
-  }, []);
+  }, [catalogPath]);
 
   useEffect(() => {
-    if (selectedTopicId && TOPIC_MAP[selectedTopicId]) {
+    if (selectedTopicId && topicMap[selectedTopicId]) {
       return;
     }
 
-    setSelectedTopicId(defaultTopicIds[0] ?? TOPICS[0]?.id ?? '');
-  }, [defaultTopicIds, selectedTopicId]);
+    setSelectedTopicId(defaultTopicIds[0] ?? topics[0]?.id ?? '');
+  }, [defaultTopicIds, selectedTopicId, topicMap, topics]);
 
   const handleAddDefault = () => {
     if (!selectedTopicId) return;
@@ -86,7 +92,7 @@ export function AdminPanel({
   };
 
   const handleResetDefaults = () => {
-    setDefaultTopicIds(DEFAULT_TOPIC_IDS);
+    setDefaultTopicIds(defaultBuiltInTopicIds);
   };
 
   return (
@@ -131,6 +137,8 @@ export function AdminPanel({
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <DefaultChartsSection
               defaultTopicIds={defaultTopicIds}
+              topics={topics}
+              topicMap={topicMap}
               selectedTopicId={selectedTopicId}
               onSelectedTopicIdChange={setSelectedTopicId}
               customCode={customCode}
@@ -143,7 +151,7 @@ export function AdminPanel({
               onLoadDefaults={onLoadDefaults}
             />
 
-            <FetchStatsSection stats={stats} onRefresh={() => setStats(readStats())} />
+            <FetchStatsSection stats={stats} topics={topics} onRefresh={() => setStats(readStats())} />
           </div>
         </section>
       </div>

@@ -1,10 +1,11 @@
 import { CatalogCodeSearch } from '../CatalogCodeSearch';
-import { TOPIC_MAP, TOPICS } from '../../features/dashboard/topicCatalog';
 import type { TopicDefinition } from '../../features/dashboard/types';
 import type { CatalogEntry } from '../../lib/catalog';
 
 type DefaultChartsSectionProps = {
   defaultTopicIds: string[];
+  topics: TopicDefinition[];
+  topicMap: Record<string, TopicDefinition>;
   selectedTopicId: string;
   onSelectedTopicIdChange: (topicId: string) => void;
   customCode: string;
@@ -17,10 +18,13 @@ type DefaultChartsSectionProps = {
   onLoadDefaults: () => void;
 };
 
-function mapDefaultTopics(defaultTopicIds: string[]): TopicDefinition[] {
+function mapDefaultTopics(
+  defaultTopicIds: string[],
+  topicMap: Record<string, TopicDefinition>,
+): TopicDefinition[] {
   return defaultTopicIds
     .map((id) =>
-      TOPIC_MAP[id] ?? {
+      topicMap[id] ?? {
         id,
         title: id,
         description: id,
@@ -38,6 +42,8 @@ function mapDefaultTopics(defaultTopicIds: string[]): TopicDefinition[] {
 
 export function DefaultChartsSection({
   defaultTopicIds,
+  topics,
+  topicMap,
   selectedTopicId,
   onSelectedTopicIdChange,
   customCode,
@@ -49,7 +55,7 @@ export function DefaultChartsSection({
   onResetDefaults,
   onLoadDefaults,
 }: DefaultChartsSectionProps) {
-  const defaultTopics = mapDefaultTopics(defaultTopicIds);
+  const defaultTopics = mapDefaultTopics(defaultTopicIds, topicMap);
 
   return (
     <div className="rounded-2xl bg-white/5 p-4">
@@ -79,7 +85,7 @@ export function DefaultChartsSection({
           onChange={(event) => onSelectedTopicIdChange(event.target.value)}
           className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
         >
-          {TOPICS.map((topic) => (
+          {topics.map((topic) => (
             <option key={topic.id} value={topic.id}>
               {topic.title}
             </option>

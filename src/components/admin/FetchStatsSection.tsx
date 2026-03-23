@@ -1,13 +1,14 @@
-import { TOPICS } from '../../features/dashboard/topicCatalog';
+import type { TopicDefinition } from '../../features/dashboard/types';
 import { formatRelative, type FetchStats } from './adminStats';
 
 type FetchStatsSectionProps = {
   stats: FetchStats;
+  topics: TopicDefinition[];
   onRefresh: () => void;
 };
 
-export function FetchStatsSection({ stats, onRefresh }: FetchStatsSectionProps) {
-  const topicRows = TOPICS.map((topic) => {
+export function FetchStatsSection({ stats, topics, onRefresh }: FetchStatsSectionProps) {
+  const topicRows = topics.map((topic) => {
     const stat = stats[topic.id];
     return (
       <tr key={topic.id} className="border-b border-white/10">

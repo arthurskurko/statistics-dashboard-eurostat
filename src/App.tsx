@@ -4,7 +4,7 @@ import { ChartCard } from './components/ChartCard';
 import { ProviderDashboardLayout } from './components/ProviderDashboardLayout';
 import { TopicPicker } from './components/TopicPicker';
 import type { ThemeId } from './features/dashboard/themes';
-import { TOPICS } from './features/dashboard/topicCatalog';
+import { TOPIC_MAP, TOPICS } from './features/dashboard/topicCatalog';
 import type { DashboardCard } from './features/dashboard/types';
 import { useDefaultChartStorage } from './hooks/useDefaultChartStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
@@ -98,6 +98,10 @@ export default function App() {
         backendBaseUrl={backendBaseUrl}
         onRefreshBackendStatus={refreshBackendStatus}
         isRefreshingBackendStatus={isCheckingBackend}
+        topics={TOPICS}
+        topicMap={TOPIC_MAP}
+        defaultBuiltInTopicIds={DEFAULT_CHART_TOPIC_IDS}
+        catalogPath="catalog.json"
         onLoadDefaults={addDefaultCards}
         onClearDashboard={clearCards}
         onClose={() => setIsAdminOpen(false)}

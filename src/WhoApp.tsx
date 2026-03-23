@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AdminPanel } from './components/AdminPanel';
 import { ChartCard } from './components/ChartCard';
 import { ProviderDashboardLayout } from './components/ProviderDashboardLayout';
 import { TopicPicker } from './components/TopicPicker';
 import type { ThemeId } from './features/dashboard/themes';
 import { WHO_TOPICS, WHO_TOPIC_MAP } from './features/dashboard/whoTopicCatalog';
 import type { DashboardCard } from './features/dashboard/types';
+import { useDefaultChartStorage } from './hooks/useDefaultChartStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { fetchWhoTopicData } from './lib/who';
 
@@ -30,10 +32,27 @@ function createCard(topicId: string): DashboardCard {
 
 export default function WhoApp() {
   const basePath = import.meta.env.BASE_URL;
+  const backendBaseUrl =
+    (import.meta.env.VITE_BACKEND_URL as string | undefined)?.replace(/\/$/, '') ||
+    'http://localhost:8090';
   const [selectedTopicId, setSelectedTopicId] = useState<string>(WHO_TOPICS[0].id);
   const [cards, setCards] = useLocalStorage<DashboardCard[]>(STORAGE_KEY, []);
-  const [defaultTopicIds] = useLocalStorage<string[]>(DEFAULT_CHARTS_KEY, DEFAULT_CHART_TOPIC_IDS);
+  const {
+    defaultTopicIds,
+    setDefaultTopicIds,
+    backendMode,
+    backendStatusMessage,
+    isCheckingBackend,
+    refreshBackendStatus,
+  } = useDefaultChartStorage({
+    storageKey: DEFAULT_CHARTS_KEY,
+    initialTopicIds: DEFAULT_CHART_TOPIC_IDS,
+    backendBaseUrl,
+    userId: 'anonymous',
+    dashboard: 'who',
+  });
   const [themeId, setThemeId] = useLocalStorage<ThemeId>(THEME_STORAGE_KEY, 'aurora-core');
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   const activeTopics = useMemo(() => new Set(cards.map((card) => card.topicId)), [cards]);
 
@@ -59,9 +78,37 @@ export default function WhoApp() {
     setCards([]);
   }
 
+  function addDefaultCards() {
+    setCards((currentCards) => {
+      if (currentCards.length > 0) return currentCards;
+      return [...defaultTopicIds.map((topicId) => createCard(topicId))];
+    });
+  }
+
   const removeCard = useCallback((cardId: string) => {
     setCards((currentCards) => currentCards.filter((entry) => entry.id !== cardId));
   }, [setCards]);
+
+  if (isAdminOpen) {
+    return (
+      <AdminPanel
+        defaultTopicIds={defaultTopicIds}
+        setDefaultTopicIds={setDefaultTopicIds}
+        backendMode={backendMode}
+        backendStatusMessage={backendStatusMessage}
+        backendBaseUrl={backendBaseUrl}
+        onRefreshBackendStatus={refreshBackendStatus}
+        isRefreshingBackendStatus={isCheckingBackend}
+        topics={WHO_TOPICS}
+        topicMap={WHO_TOPIC_MAP}
+        defaultBuiltInTopicIds={DEFAULT_CHART_TOPIC_IDS}
+        catalogPath="who-catalog.json"
+        onLoadDefaults={addDefaultCards}
+        onClearDashboard={clearCards}
+        onClose={() => setIsAdminOpen(false)}
+      />
+    );
+  }
 
   return (
     <ProviderDashboardLayout
@@ -69,6 +116,15 @@ export default function WhoApp() {
       currentProvider="who"
       themeId={themeId}
       onThemeChange={setThemeId}
+      headerExtra={
+        <button
+          type="button"
+          onClick={() => setIsAdminOpen(true)}
+          className="bat-btn rounded-2xl px-3 py-1 text-xs font-medium"
+        >
+          Admin
+        </button>
+      }
       picker={
         <TopicPicker
           selectedTopicId={selectedTopicId}
