@@ -101,6 +101,7 @@ function ChartCardComponent({
   const chartRef = React.useRef<ReactECharts | null>(null);
   const previousStepPointBySeriesRef = React.useRef(new Map<string, { label: string; value: number; color: string }>());
   const latestMusicStepRef = React.useRef<MusicVisualStepInfo | null>(null);
+  const previousLatestObservedPeriodRef = React.useRef('');
   const compactMobileLayout = useCompactMobileLayout(chartRef);
 
   const resolvedDefaultGeos = useMemo(() => topic.geoValues ?? defaultGeoValues, [defaultGeoValues, topic.geoValues]);
@@ -219,6 +220,33 @@ function ChartCardComponent({
   const rangeStartIndex = Math.max(0, Math.min(periodStartIndex, periodEndIndex));
   const rangeEndIndex = Math.max(periodStartIndex, periodEndIndex);
   const latestObservedPeriod = selectablePeriods.at(-1) ?? '';
+
+  React.useEffect(() => {
+    const previousLatest = previousLatestObservedPeriodRef.current;
+
+    if (!supportsForecast) {
+      previousLatestObservedPeriodRef.current = latestObservedPeriod;
+      return;
+    }
+
+    if (!latestObservedPeriod) {
+      previousLatestObservedPeriodRef.current = '';
+      return;
+    }
+
+    // Preserve user intent when they keep "end" at the latest observed period.
+    // If latest shifts due geo/filter changes, move end with it so forecast remains visible.
+    setPeriodEnd((current) => {
+      if (!current) return latestObservedPeriod;
+      if (previousLatest && current === previousLatest && latestObservedPeriod !== previousLatest) {
+        return latestObservedPeriod;
+      }
+      return current;
+    });
+
+    previousLatestObservedPeriodRef.current = latestObservedPeriod;
+  }, [latestObservedPeriod, supportsForecast]);
+
   const includeForecastTail = supportsForecast && periodEnd === latestObservedPeriod;
 
   const filteredPeriods = useMemo(() => {
