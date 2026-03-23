@@ -6,6 +6,7 @@
   "scripts": {
     "prebuild": "node scripts/bump_build_version.cjs",
     "dev": "vite",
+    "backend:dev": "cd backend && go run ./cmd/server",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "generate-forecasts": "python scripts/generate_forecasts.py",

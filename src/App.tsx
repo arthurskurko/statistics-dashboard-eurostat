@@ -6,6 +6,7 @@ import { TopicPicker } from './components/TopicPicker';
 import type { ThemeId } from './features/dashboard/themes';
 import { TOPICS } from './features/dashboard/topicCatalog';
 import type { DashboardCard } from './features/dashboard/types';
+import { useDefaultChartStorage } from './hooks/useDefaultChartStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
 const STORAGE_KEY = 'estonia-statistics-dashboard.cards';
@@ -29,12 +30,25 @@ function createCard(topicId: string): DashboardCard {
 
 export default function App() {
   const basePath = import.meta.env.BASE_URL;
+  const backendBaseUrl =
+    (import.meta.env.VITE_BACKEND_URL as string | undefined)?.replace(/\/$/, '') ||
+    'http://localhost:8090';
   const [selectedTopicId, setSelectedTopicId] = useState<string>(TOPICS[0].id);
   const [cards, setCards] = useLocalStorage<DashboardCard[]>(STORAGE_KEY, []);
-  const [defaultTopicIds, setDefaultTopicIds] = useLocalStorage<string[]>(
-    DEFAULT_CHARTS_KEY,
-    DEFAULT_CHART_TOPIC_IDS,
-  );
+  const {
+    defaultTopicIds,
+    setDefaultTopicIds,
+    backendMode,
+    backendStatusMessage,
+    isCheckingBackend,
+    refreshBackendStatus,
+  } = useDefaultChartStorage({
+    storageKey: DEFAULT_CHARTS_KEY,
+    initialTopicIds: DEFAULT_CHART_TOPIC_IDS,
+    backendBaseUrl,
+    userId: 'anonymous',
+    dashboard: 'eurostat',
+  });
   const [themeId, setThemeId] = useLocalStorage<ThemeId>(THEME_STORAGE_KEY, 'ember-noir');
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
@@ -79,6 +93,11 @@ export default function App() {
       <AdminPanel
         defaultTopicIds={defaultTopicIds}
         setDefaultTopicIds={setDefaultTopicIds}
+        backendMode={backendMode}
+        backendStatusMessage={backendStatusMessage}
+        backendBaseUrl={backendBaseUrl}
+        onRefreshBackendStatus={refreshBackendStatus}
+        isRefreshingBackendStatus={isCheckingBackend}
         onLoadDefaults={addDefaultCards}
         onClearDashboard={clearCards}
         onClose={() => setIsAdminOpen(false)}
