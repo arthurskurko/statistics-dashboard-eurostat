@@ -1,9 +1,11 @@
 import { CatalogCodeSearch } from '../CatalogCodeSearch';
+import TopicGeoInput from './TopicGeoInput';
 import type { TopicDefinition } from '../../features/dashboard/types';
 import type { CatalogEntry } from '../../lib/catalog';
 
 type DefaultChartsSectionProps = {
   defaultTopicIds: string[];
+  defaultChartGeoValuesByTopicId: Record<string, string[]>;
   topics: TopicDefinition[];
   topicMap: Record<string, TopicDefinition>;
   selectedTopicId: string;
@@ -14,6 +16,7 @@ type DefaultChartsSectionProps = {
   onAddDefault: () => void;
   onAddDefaultByCode: (code: string) => void;
   onRemoveDefault: (topicId: string) => void;
+  onGeoValuesTextChange: (topicId: string, text: string) => void;
   onResetDefaults: () => void;
   onLoadDefaults: () => void;
 };
@@ -22,7 +25,8 @@ function mapDefaultTopics(
   defaultTopicIds: string[],
   topicMap: Record<string, TopicDefinition>,
 ): TopicDefinition[] {
-  return defaultTopicIds
+  const uniqueTopicIds = Array.from(new Set(defaultTopicIds));
+  return uniqueTopicIds
     .map((id) =>
       topicMap[id] ?? {
         id,
@@ -42,6 +46,7 @@ function mapDefaultTopics(
 
 export function DefaultChartsSection({
   defaultTopicIds,
+  defaultChartGeoValuesByTopicId,
   topics,
   topicMap,
   selectedTopicId,
@@ -52,10 +57,13 @@ export function DefaultChartsSection({
   onAddDefault,
   onAddDefaultByCode,
   onRemoveDefault,
+  onGeoValuesTextChange,
   onResetDefaults,
   onLoadDefaults,
 }: DefaultChartsSectionProps) {
   const defaultTopics = mapDefaultTopics(defaultTopicIds, topicMap);
+
+  
 
   return (
     <div className="rounded-2xl bg-white/5 p-4">
@@ -65,15 +73,26 @@ export function DefaultChartsSection({
       ) : (
         <ul className="mt-2 space-y-2">
           {defaultTopics.map((topic) => (
-            <li key={topic.id} className="flex items-center justify-between gap-2 rounded-xl bg-white/5 px-3 py-2">
-              <span className="text-xs text-slate-200">{topic.title}</span>
-              <button
-                type="button"
-                onClick={() => onRemoveDefault(topic.id)}
-                className="text-xs text-rose-200 hover:text-rose-100"
-              >
-                Remove
-              </button>
+            <li key={topic.id} className="rounded-xl bg-white/5 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-200">{topic.title}</span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveDefault(topic.id)}
+                  className="text-xs text-rose-200 hover:text-rose-100"
+                >
+                  Remove
+                </button>
+              </div>
+                <div className="mt-2">
+                  <span className="text-[11px] uppercase tracking-wide text-slate-400">Default geos</span>
+                  <TopicGeoInput
+                    topic={topic}
+                    topicMap={topicMap}
+                    value={defaultChartGeoValuesByTopicId[topic.id] ?? []}
+                    onChange={(values) => onGeoValuesTextChange(topic.id, values.join(', '))}
+                  />
+                </div>
             </li>
           ))}
         </ul>

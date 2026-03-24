@@ -18,11 +18,24 @@ type UseDefaultChartStorageOptions = {
 type UseDefaultChartStorageResult = {
   defaultTopicIds: string[];
   setDefaultTopicIds: Dispatch<SetStateAction<string[]>>;
+  defaultChartGeoValuesByTopicId: Record<string, string[]>;
+  setDefaultChartGeoValuesByTopicId: Dispatch<SetStateAction<Record<string, string[]>>>;
   backendMode: BackendMode;
   backendStatusMessage: string;
   isCheckingBackend: boolean;
   refreshBackendStatus: () => Promise<void>;
 };
+
+function normalizeTopicIds(topicIds: string[]): string[] {
+  return Array.from(
+    new Set(
+      topicIds
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
+    ),
+  );
+}
 
 export function useDefaultChartStorage({
   storageKey,
@@ -32,6 +45,10 @@ export function useDefaultChartStorage({
   dashboard,
 }: UseDefaultChartStorageOptions): UseDefaultChartStorageResult {
   const [defaultTopicIds, setDefaultTopicIds] = useLocalStorage<string[]>(storageKey, initialTopicIds);
+  const [defaultChartGeoValuesByTopicId, setDefaultChartGeoValuesByTopicId] = useLocalStorage<Record<string, string[]>>(
+    `${storageKey}.templateGeoByTopicId`,
+    {},
+  );
   const [backendMode, setBackendMode] = useState<BackendMode>('checking');
   const [backendStatusMessage, setBackendStatusMessage] = useState('Checking Go backend...');
   const [isCheckingBackend, setIsCheckingBackend] = useState(false);
@@ -64,7 +81,7 @@ export function useDefaultChartStorage({
 
       // Backend is authoritative when reachable, including an intentionally empty list.
       skipNextBackendSaveRef.current = true;
-      setDefaultTopicIds(Array.from(new Set(remoteTopicIds)));
+      setDefaultTopicIds(normalizeTopicIds(remoteTopicIds));
     } catch (error) {
       setBackendMode('local');
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -96,6 +113,16 @@ export function useDefaultChartStorage({
   );
 
   useEffect(() => {
+    setDefaultTopicIds((current) => {
+      const normalized = normalizeTopicIds(current);
+      if (normalized.length === current.length && normalized.every((value, index) => value === current[index])) {
+        return current;
+      }
+      return normalized;
+    });
+  }, [setDefaultTopicIds]);
+
+  useEffect(() => {
     void refreshBackendStatus();
   }, [refreshBackendStatus]);
 
@@ -119,6 +146,8 @@ export function useDefaultChartStorage({
   return {
     defaultTopicIds,
     setDefaultTopicIds,
+    defaultChartGeoValuesByTopicId,
+    setDefaultChartGeoValuesByTopicId,
     backendMode,
     backendStatusMessage,
     isCheckingBackend,

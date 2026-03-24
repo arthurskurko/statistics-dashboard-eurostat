@@ -9,6 +9,8 @@ import { loadCatalogEntries, type CatalogEntry } from '../lib/catalog';
 export type AdminPanelProps = {
   defaultTopicIds: string[];
   setDefaultTopicIds: React.Dispatch<React.SetStateAction<string[]>>;
+  defaultChartGeoValuesByTopicId: Record<string, string[]>;
+  setDefaultChartGeoValuesByTopicId: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
   backendMode: 'checking' | 'go' | 'local';
   backendStatusMessage: string;
   backendBaseUrl: string;
@@ -26,6 +28,8 @@ export type AdminPanelProps = {
 export function AdminPanel({
   defaultTopicIds,
   setDefaultTopicIds,
+  defaultChartGeoValuesByTopicId,
+  setDefaultChartGeoValuesByTopicId,
   backendMode,
   backendStatusMessage,
   backendBaseUrl,
@@ -89,10 +93,38 @@ export function AdminPanel({
 
   const handleRemoveDefault = (topicId: string) => {
     setDefaultTopicIds((existing) => existing.filter((id) => id !== topicId));
+    setDefaultChartGeoValuesByTopicId((existing) => {
+      if (!(topicId in existing)) return existing;
+      const next = { ...existing };
+      delete next[topicId];
+      return next;
+    });
   };
 
   const handleResetDefaults = () => {
     setDefaultTopicIds(defaultBuiltInTopicIds);
+    setDefaultChartGeoValuesByTopicId({});
+  };
+
+  const handleGeoValuesTextChange = (topicId: string, text: string) => {
+    const geoValues = text
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index)
+      .slice(0, 12);
+
+    setDefaultChartGeoValuesByTopicId((existing) => {
+      if (geoValues.length === 0) {
+        if (!(topicId in existing)) return existing;
+        const next = { ...existing };
+        delete next[topicId];
+        return next;
+      }
+      return {
+        ...existing,
+        [topicId]: geoValues,
+      };
+    });
   };
 
   return (
@@ -137,6 +169,7 @@ export function AdminPanel({
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <DefaultChartsSection
               defaultTopicIds={defaultTopicIds}
+              defaultChartGeoValuesByTopicId={defaultChartGeoValuesByTopicId}
               topics={topics}
               topicMap={topicMap}
               selectedTopicId={selectedTopicId}
@@ -147,6 +180,7 @@ export function AdminPanel({
               onAddDefault={handleAddDefault}
               onAddDefaultByCode={handleAddDefaultByCode}
               onRemoveDefault={handleRemoveDefault}
+              onGeoValuesTextChange={handleGeoValuesTextChange}
               onResetDefaults={handleResetDefaults}
               onLoadDefaults={onLoadDefaults}
             />

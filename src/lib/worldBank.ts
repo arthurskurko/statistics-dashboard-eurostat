@@ -101,7 +101,7 @@ async function fetchAllPages<T>(url: URL): Promise<T[]> {
   return allRows;
 }
 
-async function fetchWorldBankCountries(): Promise<Array<{ code: string; label: string }>> {
+export async function fetchWorldBankCountries(): Promise<Array<{ code: string; label: string }>> {
   try {
     const cached = window.localStorage.getItem(COUNTRIES_STORAGE_KEY);
     if (cached) {

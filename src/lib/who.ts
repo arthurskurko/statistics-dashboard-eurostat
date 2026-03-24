@@ -320,7 +320,7 @@ async function fetchWhoAllPages<T>(url: URL): Promise<T[]> {
   throw lastError ?? new Error('WHO request failed for all configured proxy roots.');
 }
 
-async function fetchWhoCountries(): Promise<Array<{ code: string; label: string }>> {
+export async function fetchWhoCountries(): Promise<Array<{ code: string; label: string }>> {
   try {
     const cached = window.localStorage.getItem(WHO_COUNTRIES_STORAGE_KEY);
     if (cached) {

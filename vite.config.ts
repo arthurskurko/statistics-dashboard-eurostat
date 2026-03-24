@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react-swc';
 import fs from 'fs';
 import path from 'path';
 
-type BuildTarget = 'local' | 'test' | 'prod';
+type BuildTarget = 'local' | 'test' | 'stage' | 'prod';
 
 type BuildConfig = {
   target?: BuildTarget;
@@ -14,6 +14,7 @@ type BuildConfig = {
 const DEFAULT_BASE_BY_TARGET: Record<BuildTarget, string> = {
   local: '/',
   test: '/statistics-test/',
+  stage: '/statistics-stage/',
   prod: '/statistics-full/',
 };
 
@@ -37,11 +38,16 @@ function readBuildConfig(): BuildConfig {
 
 function resolveBuildTarget(config: BuildConfig): BuildTarget {
   const fromEnv = process.env.APP_TARGET as BuildTarget | undefined;
-  if (fromEnv === 'local' || fromEnv === 'test' || fromEnv === 'prod') {
+  if (fromEnv === 'local' || fromEnv === 'test' || fromEnv === 'stage' || fromEnv === 'prod') {
     return fromEnv;
   }
 
-  if (config.target === 'local' || config.target === 'test' || config.target === 'prod') {
+  if (
+    config.target === 'local' ||
+    config.target === 'test' ||
+    config.target === 'stage' ||
+    config.target === 'prod'
+  ) {
     return config.target;
   }
 

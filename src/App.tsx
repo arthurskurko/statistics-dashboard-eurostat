@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
 import { ChartCard } from './components/ChartCard';
 import { ProviderDashboardLayout } from './components/ProviderDashboardLayout';
@@ -35,9 +35,14 @@ export default function App() {
     'http://localhost:8090';
   const [selectedTopicId, setSelectedTopicId] = useState<string>(TOPICS[0].id);
   const [cards, setCards] = useLocalStorage<DashboardCard[]>(STORAGE_KEY, []);
+  const shouldSeedDefaultsRef = useRef(
+    typeof window !== 'undefined' ? window.localStorage.getItem(STORAGE_KEY) === null : false,
+  );
   const {
     defaultTopicIds,
     setDefaultTopicIds,
+    defaultChartGeoValuesByTopicId,
+    setDefaultChartGeoValuesByTopicId,
     backendMode,
     backendStatusMessage,
     isCheckingBackend,
@@ -59,9 +64,10 @@ export default function App() {
   }, [themeId]);
 
   useEffect(() => {
-    // If the dashboard is empty, automatically load the user's default charts.
-    if (cards.length === 0 && defaultTopicIds.length > 0) {
-      setCards(defaultTopicIds.map((topicId) => createCard(topicId)));
+    // Seed defaults only for fresh browser caches without existing dashboard state.
+    if (shouldSeedDefaultsRef.current && cards.length === 0 && defaultTopicIds.length > 0) {
+      setCards(defaultTopicIds.map((topicId: string) => createCard(topicId)));
+      shouldSeedDefaultsRef.current = false;
     }
   }, [cards.length, defaultTopicIds, setCards]);
 
@@ -76,7 +82,7 @@ export default function App() {
   function addDefaultCards() {
     setCards((currentCards) => {
       if (currentCards.length > 0) return currentCards;
-      return [...defaultTopicIds.map((topicId) => createCard(topicId))];
+      return [...defaultTopicIds.map((topicId: string) => createCard(topicId))];
     });
   }
 
@@ -93,6 +99,8 @@ export default function App() {
       <AdminPanel
         defaultTopicIds={defaultTopicIds}
         setDefaultTopicIds={setDefaultTopicIds}
+        defaultChartGeoValuesByTopicId={defaultChartGeoValuesByTopicId}
+        setDefaultChartGeoValuesByTopicId={setDefaultChartGeoValuesByTopicId}
         backendMode={backendMode}
         backendStatusMessage={backendStatusMessage}
         backendBaseUrl={backendBaseUrl}
@@ -143,9 +151,7 @@ export default function App() {
         { label: 'Data source', value: 'Eurostat' },
       ]}
       cards={cards}
-      renderCard={(card) => (
-        <ChartCard key={card.id} cardId={card.id} topicId={card.topicId} onRemove={removeCard} />
-      )}
+      renderCard={(card) => <ChartCard key={card.id} cardId={card.id} topicId={card.topicId} onRemove={removeCard} />}
     />
   );
 }

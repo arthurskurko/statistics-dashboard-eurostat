@@ -31,6 +31,7 @@ export type DashboardCard = {
   id: string;
   topicId: string;
   createdAt: number;
+  defaultGeoValues?: string[];
 };
 
 export type DataPoint = {

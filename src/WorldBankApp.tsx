@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
 import { ChartCard } from './components/ChartCard';
 import { ProviderDashboardLayout } from './components/ProviderDashboardLayout';
@@ -43,9 +43,14 @@ export default function WorldBankApp() {
     'http://localhost:8090';
   const [selectedTopicId, setSelectedTopicId] = useState<string>(WORLD_BANK_TOPICS[0].id);
   const [cards, setCards] = useLocalStorage<DashboardCard[]>(STORAGE_KEY, []);
+  const shouldSeedDefaultsRef = useRef(
+    typeof window !== 'undefined' ? window.localStorage.getItem(STORAGE_KEY) === null : false,
+  );
   const {
     defaultTopicIds,
     setDefaultTopicIds,
+    defaultChartGeoValuesByTopicId,
+    setDefaultChartGeoValuesByTopicId,
     backendMode,
     backendStatusMessage,
     isCheckingBackend,
@@ -67,8 +72,9 @@ export default function WorldBankApp() {
   }, [themeId]);
 
   useEffect(() => {
-    if (cards.length === 0 && defaultTopicIds.length > 0) {
+    if (shouldSeedDefaultsRef.current && cards.length === 0 && defaultTopicIds.length > 0) {
       setCards(defaultTopicIds.map((topicId) => createCard(topicId)));
+      shouldSeedDefaultsRef.current = false;
     }
   }, [cards.length, defaultTopicIds, setCards]);
 
@@ -100,6 +106,8 @@ export default function WorldBankApp() {
       <AdminPanel
         defaultTopicIds={defaultTopicIds}
         setDefaultTopicIds={setDefaultTopicIds}
+        defaultChartGeoValuesByTopicId={defaultChartGeoValuesByTopicId}
+        setDefaultChartGeoValuesByTopicId={setDefaultChartGeoValuesByTopicId}
         backendMode={backendMode}
         backendStatusMessage={backendStatusMessage}
         backendBaseUrl={backendBaseUrl}

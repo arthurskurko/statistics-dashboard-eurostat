@@ -35,7 +35,7 @@ const openMeteoInFlight = new Map<string, Promise<OpenMeteoDailyResponse>>();
 let openMeteoActiveRequests = 0;
 const openMeteoQueue: Array<() => void> = [];
 
-const OPEN_METEO_GEOS: GeoPoint[] = [
+export const OPEN_METEO_GEOS: GeoPoint[] = [
   { code: 'TLL', label: 'Tallinn', latitude: 59.437, longitude: 24.7536, aliases: ['ESTONIA', 'EE', 'EST'] },
   { code: 'HEL', label: 'Helsinki', latitude: 60.1699, longitude: 24.9384, aliases: ['FINLAND', 'FI', 'FIN'] },
   { code: 'RIX', label: 'Riga', latitude: 56.9496, longitude: 24.1052, aliases: ['LATVIA', 'LV', 'LVA'] },
