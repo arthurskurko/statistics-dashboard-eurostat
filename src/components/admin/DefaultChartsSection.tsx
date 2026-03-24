@@ -12,6 +12,7 @@ type DefaultChartsSectionProps = {
   onSelectedTopicIdChange: (topicId: string) => void;
   customCode: string;
   onCustomCodeChange: (code: string) => void;
+  catalog: CatalogEntry[];
   suggestions: CatalogEntry[];
   onAddDefault: () => void;
   onAddDefaultByCode: (code: string) => void;
@@ -26,11 +27,32 @@ type DefaultChartsSectionProps = {
 function mapDefaultTopics(
   defaultTopicIds: string[],
   topicMap: Record<string, TopicDefinition>,
+  catalog: CatalogEntry[],
 ): TopicDefinition[] {
   const uniqueTopicIds = Array.from(new Set(defaultTopicIds));
+
   return uniqueTopicIds
-    .map((id) =>
-      topicMap[id] ?? {
+    .map((id) => {
+      const existing = topicMap[id];
+      if (existing) return existing;
+
+      const catalogEntry = catalog.find((entry) => entry.code === id);
+      if (catalogEntry) {
+        return {
+          id,
+          title: catalogEntry.title,
+          description: catalogEntry.title,
+          datasetCode: id,
+          filters: {},
+          sourceUrl: '',
+          pubmed: {
+            availability: 'unchecked',
+            searchTerm: catalogEntry.title,
+          },
+        };
+      }
+
+      return {
         id,
         title: id,
         description: id,
@@ -41,9 +63,11 @@ function mapDefaultTopics(
           availability: 'unchecked',
           searchTerm: id,
         },
-      },
-    )
-    .filter(Boolean) as TopicDefinition[];
+      };
+    })
+    .filter((topic, index, arr) => 
+      arr.findIndex((t) => t.datasetCode === topic.datasetCode) === index,
+    ) as TopicDefinition[];
 }
 
 export function DefaultChartsSection({
@@ -51,6 +75,7 @@ export function DefaultChartsSection({
   defaultChartGeoValuesByTopicId,
   topics,
   topicMap,
+  catalog,
   selectedTopicId,
   onSelectedTopicIdChange,
   customCode,
@@ -65,7 +90,7 @@ export function DefaultChartsSection({
   onExportDefaults,
   onImportDefaults,
 }: DefaultChartsSectionProps) {
-  const defaultTopics = mapDefaultTopics(defaultTopicIds, topicMap);
+  const defaultTopics = mapDefaultTopics(defaultTopicIds, topicMap, catalog);
 
   
 

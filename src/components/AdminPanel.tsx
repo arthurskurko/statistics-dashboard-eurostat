@@ -47,17 +47,33 @@ export function AdminPanel({
   const [selectedTopicId, setSelectedTopicId] = useState(defaultTopicIds[0] ?? topics[0]?.id ?? '');
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [customCode, setCustomCode] = useState('');
-  const suggestions = useMemo(
-    () =>
-      catalog
-        .filter((entry) => {
-          const search = customCode.trim().toLowerCase();
-          if (!search) return false;
-          return entry.code.toLowerCase().includes(search) || entry.title.toLowerCase().includes(search);
-        })
-        .slice(0, 10),
-    [catalog, customCode],
-  );
+
+  const enrichedTopicMap = useMemo(() => {
+    const result: Record<string, TopicDefinition> = { ...topicMap };
+    for (const topic of Object.values(topicMap)) {
+      if (topic.datasetCode && !(topic.datasetCode in result)) {
+        result[topic.datasetCode] = topic;
+      }
+    }
+    return result;
+  }, [topicMap]);
+
+  const suggestions = useMemo(() => {
+    const search = customCode.trim().toLowerCase();
+    if (!search) return [];
+
+    const seen = new Set<string>();
+    return catalog
+      .filter((entry) =>
+        entry.code.toLowerCase().includes(search) || entry.title.toLowerCase().includes(search),
+      )
+      .filter((entry) => {
+        if (seen.has(entry.code)) return false;
+        seen.add(entry.code);
+        return true;
+      })
+      .slice(0, 10);
+  }, [catalog, customCode]);
 
   useEffect(() => {
     const listener = () => setStats(readStats());
@@ -232,7 +248,8 @@ export function AdminPanel({
               defaultTopicIds={defaultTopicIds}
               defaultChartGeoValuesByTopicId={defaultChartGeoValuesByTopicId}
               topics={topics}
-              topicMap={topicMap}
+              topicMap={enrichedTopicMap}
+              catalog={catalog}
               selectedTopicId={selectedTopicId}
               onSelectedTopicIdChange={setSelectedTopicId}
               customCode={customCode}
