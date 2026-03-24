@@ -19,6 +19,8 @@ type DefaultChartsSectionProps = {
   onGeoValuesTextChange: (topicId: string, text: string) => void;
   onResetDefaults: () => void;
   onLoadDefaults: () => void;
+  onExportDefaults?: () => void;
+  onImportDefaults?: (file: File | null) => void;
 };
 
 function mapDefaultTopics(
@@ -60,6 +62,8 @@ export function DefaultChartsSection({
   onGeoValuesTextChange,
   onResetDefaults,
   onLoadDefaults,
+  onExportDefaults,
+  onImportDefaults,
 }: DefaultChartsSectionProps) {
   const defaultTopics = mapDefaultTopics(defaultTopicIds, topicMap);
 
@@ -156,6 +160,22 @@ export function DefaultChartsSection({
         >
           Load defaults now
         </button>
+        <button
+          type="button"
+          onClick={() => onExportDefaults && onExportDefaults()}
+          className="bat-btn rounded-2xl px-3 py-2 text-xs font-medium"
+        >
+          Export defaults
+        </button>
+        <label className="bat-btn rounded-2xl px-3 py-2 text-xs font-medium cursor-pointer">
+          Import defaults
+          <input
+            type="file"
+            accept="application/json"
+            onChange={(e) => onImportDefaults && onImportDefaults(e.target.files ? e.target.files[0] : null)}
+            style={{ display: 'none' }}
+          />
+        </label>
       </div>
     </div>
   );

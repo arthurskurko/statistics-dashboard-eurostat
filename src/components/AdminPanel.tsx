@@ -106,6 +106,67 @@ export function AdminPanel({
     setDefaultChartGeoValuesByTopicId({});
   };
 
+  const handleExportDefaults = async () => {
+    try {
+      const userId = 'anonymous';
+      const dashboard = 'eurostat';
+      if (backendMode === 'go') {
+        const res = await fetch(`${backendBaseUrl}/api/default-charts/export`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, dashboard }),
+        });
+        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+        const result = await res.json();
+        alert(`Exported defaults to ${result.path || 'server export location'}`);
+        return;
+      }
+
+      // fallback: export from local state
+      const payload = {
+        userId: 'anonymous',
+        dashboard: 'eurostat',
+        topicIds: defaultTopicIds,
+        chartDefaultsByTopicId: defaultChartGeoValuesByTopicId,
+        updatedAt: new Date().toISOString(),
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `eurostat-anonymous-default-charts.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+      alert('Failed to export defaults');
+    }
+  };
+
+  const handleImportDefaults = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result ?? '');
+        const parsed = JSON.parse(text) as any;
+        if (!Array.isArray(parsed.topicIds)) throw new Error('Invalid file: missing topicIds array');
+        const chartDefaults = typeof parsed.chartDefaultsByTopicId === 'object' && parsed.chartDefaultsByTopicId ? parsed.chartDefaultsByTopicId : {};
+        setDefaultTopicIds(parsed.topicIds);
+        setDefaultChartGeoValuesByTopicId(chartDefaults);
+        alert('Imported defaults into local storage');
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+        alert('Failed to import defaults: invalid file');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleGeoValuesTextChange = (topicId: string, text: string) => {
     const geoValues = text
       .split(',')
@@ -183,6 +244,8 @@ export function AdminPanel({
               onGeoValuesTextChange={handleGeoValuesTextChange}
               onResetDefaults={handleResetDefaults}
               onLoadDefaults={onLoadDefaults}
+              onExportDefaults={handleExportDefaults}
+              onImportDefaults={handleImportDefaults}
             />
 
             <FetchStatsSection stats={stats} topics={topics} onRefresh={() => setStats(readStats())} />

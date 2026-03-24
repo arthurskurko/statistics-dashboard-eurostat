@@ -5,6 +5,7 @@ export type BackendMode = 'checking' | 'go' | 'local';
 
 type BackendDefaultChartResponse = {
   topicIds?: string[];
+  chartDefaultsByTopicId?: Record<string, { geoValues?: string[] }>;
 };
 
 type UseDefaultChartStorageOptions = {
@@ -82,6 +83,17 @@ export function useDefaultChartStorage({
       // Backend is authoritative when reachable, including an intentionally empty list.
       skipNextBackendSaveRef.current = true;
       setDefaultTopicIds(normalizeTopicIds(remoteTopicIds));
+
+      // If backend returned chart defaults, apply them to local storage as authoritative.
+      if (payload.chartDefaultsByTopicId && typeof payload.chartDefaultsByTopicId === 'object') {
+        const mapped: Record<string, string[]> = {};
+        for (const [topicId, tpl] of Object.entries(payload.chartDefaultsByTopicId)) {
+          if (tpl && Array.isArray(tpl.geoValues) && tpl.geoValues.length > 0) {
+            mapped[topicId] = tpl.geoValues.filter((v): v is string => typeof v === 'string');
+          }
+        }
+        setDefaultChartGeoValuesByTopicId(() => mapped);
+      }
     } catch (error) {
       setBackendMode('local');
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -92,7 +104,13 @@ export function useDefaultChartStorage({
   }, [backendBaseUrl, dashboard, setDefaultTopicIds, userId]);
 
   const saveDefaultsToBackend = useCallback(
-    async (topicIds: string[]) => {
+    async (topicIds: string[], chartDefaultsByTopicId: Record<string, string[]>) => {
+      // Build backend-compatible template shape: { topicId: { geoValues: [...] } }
+      const templatePayload: Record<string, { geoValues: string[] }> = {};
+      for (const [topicId, geoList] of Object.entries(chartDefaultsByTopicId || {})) {
+        templatePayload[topicId] = { geoValues: Array.isArray(geoList) ? geoList : [] };
+      }
+
       const response = await fetch(`${backendBaseUrl}/api/default-charts`, {
         method: 'PUT',
         headers: {
@@ -102,6 +120,7 @@ export function useDefaultChartStorage({
           userId,
           dashboard,
           topicIds,
+          chartDefaultsByTopicId: templatePayload,
         }),
       });
 
@@ -126,6 +145,7 @@ export function useDefaultChartStorage({
     void refreshBackendStatus();
   }, [refreshBackendStatus]);
 
+  // Save topic IDs and chart default geo values to backend when either changes.
   useEffect(() => {
     if (backendMode !== 'go') {
       return;
@@ -136,12 +156,12 @@ export function useDefaultChartStorage({
       return;
     }
 
-    void saveDefaultsToBackend(defaultTopicIds).catch((error: unknown) => {
+    void saveDefaultsToBackend(defaultTopicIds, defaultChartGeoValuesByTopicId).catch((error: unknown) => {
       setBackendMode('local');
       const message = error instanceof Error ? error.message : 'Unknown error';
       setBackendStatusMessage(`Fell back to browser local storage (save failed: ${message})`);
     });
-  }, [backendMode, defaultTopicIds, saveDefaultsToBackend]);
+  }, [backendMode, defaultTopicIds, defaultChartGeoValuesByTopicId, saveDefaultsToBackend]);
 
   return {
     defaultTopicIds,

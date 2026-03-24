@@ -60,7 +60,7 @@ function ChartCardComponent({
   providerName = 'Eurostat',
   topicMap = TOPIC_MAP,
   fetchTopicDataFn = fetchTopicData,
-  defaultGeoValues = DEFAULT_EUROSTAT_GEOS,
+  defaultGeoValues,
   fallbackDescriptionPrefix = 'Eurostat dataset',
   sourceUrlBuilder = DEFAULT_EUROSTAT_SOURCE_URL_BUILDER,
   sourceLinkLabel = 'Eurostat dataset',
@@ -92,7 +92,8 @@ function ChartCardComponent({
   const [dimensionFilters, setDimensionFilters] = React.useState<Record<string, string | string[]>>({});
   const [availableDimensions, setAvailableDimensions] = React.useState<DimensionOption[]>([]);
   const [seriesDimension, setSeriesDimension] = React.useState('');
-  const [geoValues, setGeoValues] = React.useState<string[]>(topic.geoValues ?? defaultGeoValues);
+  const initialGeoValues = topic.geoValues ?? defaultGeoValues ?? DEFAULT_EUROSTAT_GEOS;
+  const [geoValues, setGeoValues] = React.useState<string[]>(initialGeoValues);
   const [dualAxis, setDualAxis] = React.useState(true);
   const [periodStart, setPeriodStart] = React.useState('');
   const [periodEnd, setPeriodEnd] = React.useState('');
@@ -104,7 +105,11 @@ function ChartCardComponent({
   const previousLatestObservedPeriodRef = React.useRef('');
   const compactMobileLayout = useCompactMobileLayout(chartRef);
 
-  const resolvedDefaultGeos = useMemo(() => topic.geoValues ?? defaultGeoValues, [defaultGeoValues, topic.geoValues]);
+  const resolvedDefaultGeos = useMemo(() => {
+    if (Array.isArray(defaultGeoValues) && defaultGeoValues.length > 0) return defaultGeoValues;
+    if (Array.isArray(topic.geoValues) && topic.geoValues.length > 0) return topic.geoValues;
+    return DEFAULT_EUROSTAT_GEOS;
+  }, [defaultGeoValues, topic.geoValues]);
 
   React.useEffect(() => {
     setDimensionFilters({});

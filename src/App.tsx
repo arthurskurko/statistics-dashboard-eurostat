@@ -15,7 +15,7 @@ const THEME_STORAGE_KEY = 'estonia-statistics-dashboard.theme';
 
 const DEFAULT_CHART_TOPIC_IDS = ['population', 'unemployment-rate', 'inflation'];
 
-function createCard(topicId: string): DashboardCard {
+function createCard(topicId: string, defaultGeoValues?: string[]): DashboardCard {
   const id =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
@@ -24,6 +24,7 @@ function createCard(topicId: string): DashboardCard {
   return {
     id,
     topicId,
+    defaultGeoValues,
     createdAt: Date.now(),
   };
 }
@@ -66,24 +67,76 @@ export default function App() {
   useEffect(() => {
     // Seed defaults only for fresh browser caches without existing dashboard state.
     if (shouldSeedDefaultsRef.current && cards.length === 0 && defaultTopicIds.length > 0) {
-      setCards(defaultTopicIds.map((topicId: string) => createCard(topicId)));
+      setCards(defaultTopicIds.map((topicId: string) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId])));
       shouldSeedDefaultsRef.current = false;
     }
   }, [cards.length, defaultTopicIds, setCards]);
 
   function addCard() {
-    setCards((currentCards) => [createCard(selectedTopicId), ...currentCards]);
+    setCards((currentCards) => [createCard(selectedTopicId, defaultChartGeoValuesByTopicId[selectedTopicId]), ...currentCards]);
   }
 
   function addCardForTopicId(topicId: string) {
-    setCards((currentCards) => [createCard(topicId), ...currentCards]);
+    setCards((currentCards) => [createCard(topicId, defaultChartGeoValuesByTopicId[topicId]), ...currentCards]);
   }
 
   function addDefaultCards() {
     setCards((currentCards) => {
       if (currentCards.length > 0) return currentCards;
-      return [...defaultTopicIds.map((topicId: string) => createCard(topicId))];
+      return [...defaultTopicIds.map((topicId: string) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId]))];
     });
+  }
+
+  async function loadDefaultsFromFileAndAddCards() {
+    // Attempt to load a public JSON file exported by the local Go tool.
+    const dashboard = 'eurostat';
+    const userId = 'anonymous';
+    const candidates = [
+      // Prefer files placed into the built `dist/default-charts/` folder
+      `${basePath}dist/default-charts/${dashboard}-${userId}-default-charts.json`,
+      `${basePath}dist/default-charts/eurostat-anonymous-default-charts.json`,
+      `${basePath}dist/default-charts/default-charts.json`,
+      // Fallback to public root candidates
+      `${basePath}${dashboard}-${userId}-default-charts.json`,
+      `${basePath}eurostat-anonymous-default-charts.json`,
+      `${basePath}default-charts.json`,
+    ];
+
+    try {
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, { cache: 'no-cache' });
+          if (!res.ok) continue;
+          const parsed = await res.json();
+          if (parsed && Array.isArray(parsed.topicIds) && parsed.topicIds.length > 0) {
+            // apply chart defaults by topic id if present (map backend shape to frontend shape)
+            const mapped: Record<string, string[]> = {};
+            if (parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object') {
+              for (const [topicId, tpl] of Object.entries(parsed.chartDefaultsByTopicId)) {
+                const geo = (tpl as any)?.geoValues;
+                if (Array.isArray(geo) && geo.length > 0) {
+                  mapped[topicId] = geo.filter((v: unknown): v is string => typeof v === 'string');
+                }
+              }
+              setDefaultChartGeoValuesByTopicId(mapped);
+            }
+
+            setCards((currentCards) => {
+              if (currentCards.length > 0) return currentCards;
+              return [...parsed.topicIds.map((topicId: string) => createCard(topicId, mapped[topicId]))];
+            });
+            return;
+          }
+        } catch (e) {
+          // ignore and try next candidate
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Fallback to built-in defaults
+    addDefaultCards();
   }
 
   const removeCard = useCallback((cardId: string) => {
@@ -110,7 +163,7 @@ export default function App() {
         topicMap={TOPIC_MAP}
         defaultBuiltInTopicIds={DEFAULT_CHART_TOPIC_IDS}
         catalogPath="catalog.json"
-        onLoadDefaults={addDefaultCards}
+        onLoadDefaults={loadDefaultsFromFileAndAddCards}
         onClearDashboard={clearCards}
         onClose={() => setIsAdminOpen(false)}
       />
@@ -151,7 +204,15 @@ export default function App() {
         { label: 'Data source', value: 'Eurostat' },
       ]}
       cards={cards}
-      renderCard={(card) => <ChartCard key={card.id} cardId={card.id} topicId={card.topicId} onRemove={removeCard} />}
+      renderCard={(card) => (
+        <ChartCard
+          key={card.id}
+          cardId={card.id}
+          topicId={card.topicId}
+          onRemove={removeCard}
+          defaultGeoValues={card.defaultGeoValues}
+        />
+      )}
     />
   );
 }

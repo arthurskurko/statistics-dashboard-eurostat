@@ -91,6 +91,42 @@ export default function WhoApp() {
     });
   }
 
+  async function loadDefaultsFromFileAndAddCards() {
+    const dashboard = 'who';
+    const userId = 'anonymous';
+    const candidates = [
+      `${basePath}${dashboard}-${userId}-default-charts.json`,
+      `${basePath}${dashboard}-${userId}-default-charts.json`,
+      `${basePath}default-charts.json`,
+    ];
+
+    try {
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, { cache: 'no-cache' });
+          if (!res.ok) continue;
+          const parsed = await res.json();
+          if (parsed && Array.isArray(parsed.topicIds) && parsed.topicIds.length > 0) {
+            if (parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object') {
+              setDefaultChartGeoValuesByTopicId(parsed.chartDefaultsByTopicId as Record<string, string[]>);
+            }
+            setCards((currentCards) => {
+              if (currentCards.length > 0) return currentCards;
+              return [...parsed.topicIds.map((topicId: string) => createCard(topicId))];
+            });
+            return;
+          }
+        } catch (e) {
+          // ignore and try next
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    addDefaultCards();
+  }
+
   const removeCard = useCallback((cardId: string) => {
     setCards((currentCards) => currentCards.filter((entry) => entry.id !== cardId));
   }, [setCards]);
@@ -111,7 +147,7 @@ export default function WhoApp() {
         topicMap={WHO_TOPIC_MAP}
         defaultBuiltInTopicIds={DEFAULT_CHART_TOPIC_IDS}
         catalogPath="who-catalog.json"
-        onLoadDefaults={addDefaultCards}
+        onLoadDefaults={loadDefaultsFromFileAndAddCards}
         onClearDashboard={clearCards}
         onClose={() => setIsAdminOpen(false)}
       />

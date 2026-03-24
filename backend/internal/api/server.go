@@ -3,9 +3,13 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +33,7 @@ func NewServer(defaults *store.DefaultChartStore, forecastJobs *jobs.Manager, al
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/default-charts", s.handleDefaultCharts)
+	mux.HandleFunc("/api/default-charts/export", s.handleDefaultChartsExport)
 	mux.HandleFunc("/api/forecasts/run", s.handleForecastRun)
 	mux.HandleFunc("/api/forecasts/jobs/", s.handleForecastJobByID)
 
@@ -96,6 +101,78 @@ func (s *Server) handleDefaultCharts(w http.ResponseWriter, r *http.Request) {
 	default:
 		methodNotAllowed(w)
 	}
+}
+
+func (s *Server) handleDefaultChartsExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+
+	// Allow exporting only from localhost to avoid remote writes.
+	// Check the remote IP of the request and require loopback.
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "export allowed from localhost only"})
+		return
+	}
+
+	var req struct {
+		UserID    string `json:"userId"`
+		Dashboard string `json:"dashboard"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+
+	userID := strings.TrimSpace(req.UserID)
+	if userID == "" {
+		userID = "anonymous"
+	}
+	dashboard := strings.TrimSpace(req.Dashboard)
+	if dashboard == "" {
+		dashboard = "eurostat"
+	}
+
+	set, err := s.defaults.Get(r.Context(), userID, dashboard)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Determine export directory (configurable via EXPORT_DIR env var)
+	exportDir := os.Getenv("EXPORT_DIR")
+	if exportDir == "" {
+		exportDir = filepath.Join("..", "public", "default-charts")
+	}
+
+	if err := os.MkdirAll(exportDir, 0o755); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to create export dir: %v", err)})
+		return
+	}
+
+	filename := fmt.Sprintf("%s-%s-default-charts.json", dashboard, userID)
+	filename = strings.ReplaceAll(filename, string(filepath.Separator), "-")
+	outPath := filepath.Join(exportDir, filename)
+
+	payload, err := json.MarshalIndent(set, "", "  ")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := os.WriteFile(outPath, payload, 0o644); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to write file: %v", err)})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"path": outPath})
 }
 
 func (s *Server) handleForecastRun(w http.ResponseWriter, r *http.Request) {
