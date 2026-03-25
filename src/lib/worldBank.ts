@@ -134,13 +134,38 @@ export async function fetchWorldBankCountries(): Promise<Array<{ code: string; l
 }
 
 export async function fetchAvailableGeosForTopic(
-  _topicId: string,
+  topicId: string,
   _filters: Record<string, string | string[]> = {},
 ): Promise<Array<{ code: string; label: string }>> {
-  // World Bank indicators are regional/country-specific. The best available
-  // geo list is the full country catalog. Further filtering by data availability
-  // would require fetching indicator data for all countries, which may be expensive.
-  return fetchWorldBankCountries();
+  // Try to return only geos that actually contain data for this indicator.
+  const topic = WORLD_BANK_TOPIC_MAP[topicId] ?? toTopicDefinitionFromCode(topicId);
+  const indicatorCode = topic.datasetCode;
+  const availableGeoCodes = new Set<string>();
+
+  try {
+    const url = new URL(`${WORLD_BANK_BASE}/country/all/indicator/${indicatorCode}`);
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('per_page', '20000');
+
+    const rows = await fetchAllPages<WorldBankDataRow>(url);
+    rows.forEach((row) => {
+      if (row.value == null || Number.isNaN(Number(row.value))) return;
+      const code = (row.countryiso3code ?? row.country?.id ?? '').toUpperCase();
+      if (code) availableGeoCodes.add(code);
+    });
+  } catch {
+    // ignore and fallback to full catalog
+  }
+
+  const countries = await fetchWorldBankCountries();
+  if (availableGeoCodes.size > 0) {
+    const filtered = countries.filter((geo) => availableGeoCodes.has(geo.code));
+    if (filtered.length > 0) {
+      return filtered;
+    }
+  }
+
+  return countries;
 }
 
 function toTopicDefinitionFromCode(indicatorCode: string): TopicDefinition {
