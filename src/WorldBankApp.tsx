@@ -9,7 +9,7 @@ import type { DashboardCard } from './features/dashboard/types';
 import { useDefaultChartStorage } from './hooks/useDefaultChartStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { createDefaultChartsCandidateUrls, loadDefaultChartsFromCandidates } from './lib/defaultCharts';
-import { fetchWorldBankTopicData } from './lib/worldBank';
+import { fetchWorldBankTopicData, fetchAvailableGeosForTopic as fetchWorldBankAvailableGeosForTopic } from './lib/worldBank';
 
 const STORAGE_KEY = 'worldbank-statistics-dashboard.cards';
 const DEFAULT_CHARTS_KEY = 'worldbank-statistics-dashboard.defaultCharts';
@@ -193,6 +193,7 @@ export default function WorldBankApp() {
           providerName="World Bank"
           topicMap={WORLD_BANK_TOPIC_MAP}
           fetchTopicDataFn={fetchWorldBankTopicData}
+          fetchAvailableGeosFn={fetchWorldBankAvailableGeosForTopic}
           defaultGeoValues={WORLD_BANK_DEFAULT_GEOS}
           fallbackDescriptionPrefix="World Bank indicator"
           sourceUrlBuilder={WORLD_BANK_SOURCE_URL_BUILDER}

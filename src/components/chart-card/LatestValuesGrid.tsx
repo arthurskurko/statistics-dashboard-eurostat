@@ -1,7 +1,7 @@
 import { formatValue } from './helpers';
 
 type LatestValuesGridProps = {
-  latestValues: Array<{ label: string; point: { value: number; label: string } }>;
+  latestValues: Array<{ id: string; label: string; point: { value: number; label: string } }>;
   decimals: number;
   unitSuffix?: string;
 };
@@ -13,8 +13,8 @@ export function LatestValuesGrid({ latestValues, decimals, unitSuffix }: LatestV
 
   return (
     <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {latestValues.map(({ label, point }) => (
-        <div key={label} className="rounded-2xl border border-border bg-white/5 px-4 py-3">
+      {latestValues.map(({ id, label, point }) => (
+        <div key={id} className="rounded-2xl border border-border bg-white/5 px-4 py-3">
           <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Latest - {label}</div>
           <div className="mt-2 text-xl font-semibold text-white">
             {formatValue(point.value, decimals, unitSuffix)}

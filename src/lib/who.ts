@@ -85,6 +85,13 @@ function normalizeSnapshotCountries(input: unknown): Array<{ code: string; label
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+export async function fetchAvailableGeosForTopic(
+  _topicId: string,
+  _filters: Record<string, string | string[]> = {},
+): Promise<Array<{ code: string; label: string }>> {
+  return fetchWhoCountries();
+}
+
 async function fetchWhoSnapshotIndex(): Promise<WhoSnapshotIndex | null> {
   if (whoSnapshotIndexPromise) return whoSnapshotIndexPromise;
 

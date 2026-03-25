@@ -22,6 +22,10 @@ type ChartCardHeaderProps = {
   isSeriesTruncated: boolean;
   maxSeriesToRender: number;
   geoSuggestions?: Array<{ code: string; label: string }>;
+  availableGeos?: Array<{ code: string; label: string }>;
+  availableGeoCandidates: Array<{ code: string; label: string }>;
+  isLoadingAvailableGeos: boolean;
+  onFetchAvailableGeos: () => void;
 };
 
 export function ChartCardHeader({
@@ -44,6 +48,10 @@ export function ChartCardHeader({
   isSeriesTruncated,
   maxSeriesToRender,
   geoSuggestions,
+  availableGeos,
+  availableGeoCandidates,
+  isLoadingAvailableGeos,
+  onFetchAvailableGeos,
 }: ChartCardHeaderProps) {
   const [geoInput, setGeoInput] = React.useState('');
   const hasDimensionFilters = Object.values(dimensionFilters).some((value) => Boolean(value));
@@ -70,6 +78,8 @@ export function ChartCardHeader({
 
     return [...merged.values()];
   }, [geoSuggestions]);
+
+  const validGeoCount = availableGeos?.length ?? 0;
 
   const geoInputUpper = geoInput.trim().toUpperCase();
   const filteredGeoSuggestions = React.useMemo(
@@ -146,6 +156,11 @@ export function ChartCardHeader({
           {missingGeos
             .map((code) => geoCatalog.find((geo) => geo.code === code)?.label ?? code)
             .join(', ')}
+          <div className="mt-2 text-sm text-slate-300">
+            No data is available for these geo selections, so the current chart may be empty.
+            Press the button below (<strong>Fetch available geos</strong>) to update to valid geos for the selected indicator.
+            {validGeoCount > 0 ? ` ${validGeoCount} valid geo(s) are available.` : ''}
+          </div>
         </div>
       ) : null}
 
@@ -213,6 +228,29 @@ export function ChartCardHeader({
           </div>
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+        <button
+          type="button"
+          onClick={onFetchAvailableGeos}
+          disabled={isLoadingAvailableGeos}
+          className="bat-btn rounded-2xl px-3 py-1 text-xs font-medium"
+        >
+          {isLoadingAvailableGeos ? 'Fetching available geos...' : 'Fetch available geos'}
+        </button>
+        {availableGeoCandidates.length > 0 ? (
+          <span>
+            Found {availableGeoCandidates.length} available geos.
+          </span>
+        ) : null}
+      </div>
+
+      {availableGeoCandidates.length > 0 ? (
+        <div className="bg-white/5 rounded-xl border border-white/10 p-2 text-xs text-slate-200">
+          <strong>Available geos:</strong>{' '}
+          {availableGeoCandidates.map((geo) => geo.code).join(', ')}
+        </div>
+      ) : null}
 
       {seriesDimension || hasDimensionFilters ? (
         <p className="text-sm text-slate-400">

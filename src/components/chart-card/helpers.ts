@@ -96,7 +96,7 @@ export function formatValue(value: number, decimals: number, unitSuffix?: string
 export function computeLatestValues(
   series: DataSeries[],
   activeFilterLabels: string[],
-): Array<{ label: string; point: DataSeries['points'][number] }> {
+): Array<{ id: string; label: string; point: DataSeries['points'][number] }> {
   const filterSuffix = activeFilterLabels.length > 0 ? ` (${activeFilterLabels.join(', ')})` : '';
 
   return series
@@ -104,11 +104,12 @@ export function computeLatestValues(
     .map((entry) => {
       const nonForecastPoints = entry.points.filter((point) => !point.predicted);
       return {
+        id: entry.id,
         label: `${entry.label}${filterSuffix}`,
         point: nonForecastPoints.at(-1) ?? entry.points.at(-1),
       };
     })
     .filter(
-      (entry): entry is { label: string; point: DataSeries['points'][number] } => Boolean(entry.point),
+      (entry): entry is { id: string; label: string; point: DataSeries['points'][number] } => Boolean(entry.point),
     );
 }

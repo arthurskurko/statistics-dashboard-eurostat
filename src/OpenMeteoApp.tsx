@@ -9,7 +9,7 @@ import type { DashboardCard } from './features/dashboard/types';
 import { useDefaultChartStorage } from './hooks/useDefaultChartStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { createDefaultChartsCandidateUrls, loadDefaultChartsFromCandidates } from './lib/defaultCharts';
-import { fetchOpenMeteoTopicData } from './lib/openMeteo';
+import { fetchOpenMeteoTopicData, fetchAvailableGeosForTopic as fetchOpenMeteoAvailableGeosForTopic } from './lib/openMeteo';
 
 const STORAGE_KEY = 'openmeteo-statistics-dashboard.cards';
 const DEFAULT_CHARTS_KEY = 'openmeteo-statistics-dashboard.defaultCharts';
@@ -187,6 +187,7 @@ export default function OpenMeteoApp() {
           providerName="Open-Meteo"
           topicMap={OPEN_METEO_TOPIC_MAP}
           fetchTopicDataFn={fetchOpenMeteoTopicData}
+          fetchAvailableGeosFn={fetchOpenMeteoAvailableGeosForTopic}
           defaultGeoValues={OPEN_METEO_DEFAULT_GEOS}
           fallbackDescriptionPrefix="Open-Meteo variable"
           sourceUrlBuilder={OPEN_METEO_SOURCE_URL_BUILDER}

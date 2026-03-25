@@ -72,6 +72,13 @@ export const OPEN_METEO_GEOS: GeoPoint[] = [
   { code: 'CANB', label: 'Canberra', latitude: -35.2809, longitude: 149.13, aliases: ['AUSTRALIA', 'AU', 'AUS'] },
 ];
 
+export async function fetchAvailableGeosForTopic(
+  _topicId: string,
+  _filters: Record<string, string | string[]> = {},
+): Promise<Array<{ code: string; label: string }>> {
+  return OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label }));
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

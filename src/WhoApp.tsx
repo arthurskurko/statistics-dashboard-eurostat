@@ -9,7 +9,7 @@ import type { DashboardCard } from './features/dashboard/types';
 import { useDefaultChartStorage } from './hooks/useDefaultChartStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { createDefaultChartsCandidateUrls, loadDefaultChartsFromCandidates } from './lib/defaultCharts';
-import { fetchWhoTopicData } from './lib/who';
+import { fetchWhoTopicData, fetchAvailableGeosForTopic as fetchWhoAvailableGeosForTopic } from './lib/who';
 
 const STORAGE_KEY = 'who-statistics-dashboard.cards';
 const DEFAULT_CHARTS_KEY = 'who-statistics-dashboard.defaultCharts';
@@ -187,6 +187,7 @@ export default function WhoApp() {
           providerName="WHO"
           topicMap={WHO_TOPIC_MAP}
           fetchTopicDataFn={fetchWhoTopicData}
+          fetchAvailableGeosFn={fetchWhoAvailableGeosForTopic}
           defaultGeoValues={WHO_DEFAULT_GEOS}
           fallbackDescriptionPrefix="WHO indicator"
           sourceUrlBuilder={WHO_SOURCE_URL_BUILDER}

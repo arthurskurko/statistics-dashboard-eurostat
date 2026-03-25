@@ -133,6 +133,16 @@ export async function fetchWorldBankCountries(): Promise<Array<{ code: string; l
   return countries;
 }
 
+export async function fetchAvailableGeosForTopic(
+  _topicId: string,
+  _filters: Record<string, string | string[]> = {},
+): Promise<Array<{ code: string; label: string }>> {
+  // World Bank indicators are regional/country-specific. The best available
+  // geo list is the full country catalog. Further filtering by data availability
+  // would require fetching indicator data for all countries, which may be expensive.
+  return fetchWorldBankCountries();
+}
+
 function toTopicDefinitionFromCode(indicatorCode: string): TopicDefinition {
   return {
     id: indicatorCode,

@@ -6,7 +6,7 @@ import type { EChartsOption } from 'echarts';
 import { TOPIC_MAP } from '../features/dashboard/topicCatalog';
 import type { TopicData, TopicDefinition } from '../features/dashboard/types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { fetchTopicData } from '../lib/eurostat';
+import { fetchTopicData as fetchEurostatTopicData, fetchAvailableGeosForTopic as fetchEurostatAvailableGeosForTopic } from '../lib/eurostat';
 import { getRenderSafetyLimits } from '../lib/renderSafety';
 import { buildChartOption } from './chart-card/buildChartOption';
 import { ChartCardToolbar } from './chart-card/ChartCardToolbar';
@@ -33,6 +33,10 @@ type ChartCardProps = {
       geoValues?: string[];
     },
   ) => Promise<TopicData>;
+  fetchAvailableGeosFn?: (
+    topicId: string,
+    filters?: Record<string, string | string[]>,
+  ) => Promise<Array<{ code: string; label: string }>>;
   defaultGeoValues?: string[];
   fallbackDescriptionPrefix?: string;
   sourceUrlBuilder?: (datasetCode: string) => string;
@@ -59,7 +63,8 @@ function ChartCardComponent({
   providerId = 'eurostat',
   providerName = 'Eurostat',
   topicMap = TOPIC_MAP,
-  fetchTopicDataFn = fetchTopicData,
+  fetchTopicDataFn = fetchEurostatTopicData,
+  fetchAvailableGeosFn = fetchEurostatAvailableGeosForTopic,
   defaultGeoValues,
   fallbackDescriptionPrefix = 'Eurostat dataset',
   sourceUrlBuilder = DEFAULT_EUROSTAT_SOURCE_URL_BUILDER,
@@ -98,6 +103,9 @@ function ChartCardComponent({
   const [periodStart, setPeriodStart] = React.useState('');
   const [periodEnd, setPeriodEnd] = React.useState('');
   const [chartInViewport, setChartInViewport] = React.useState(true);
+
+  const [availableGeoCandidates, setAvailableGeoCandidates] = React.useState<Array<{ code: string; label: string }>>([]);
+  const [isLoadingAvailableGeos, setIsLoadingAvailableGeos] = React.useState(false);
   const cardRef = React.useRef<HTMLElement | null>(null);
   const chartRef = React.useRef<ReactECharts | null>(null);
   const previousStepPointBySeriesRef = React.useRef(new Map<string, { label: string; value: number; color: string }>());
@@ -364,6 +372,27 @@ function ChartCardComponent({
     return geoValues.filter((geo) => !responseGeoCodes.has(geo));
   }, [geoValues, query.data]);
 
+  const fetchAndApplyAvailableGeos = React.useCallback(async () => {
+    setIsLoadingAvailableGeos(true);
+    try {
+      const activeFilters = Object.fromEntries(
+        Object.entries(dimensionFilters).filter(([key, value]) => {
+          if (seriesDimension === 'unit' && key === 'unit') {
+            return Array.isArray(value) ? value.length > 0 : Boolean(value);
+          }
+          return key !== seriesDimension;
+        }),
+      );
+
+      const geos = await fetchAvailableGeosFn(topicId, activeFilters);
+      setAvailableGeoCandidates(geos);
+    } catch (error) {
+      console.warn('Error fetching available geos:', error);
+    } finally {
+      setIsLoadingAvailableGeos(false);
+    }
+  }, [topicId, dimensionFilters, seriesDimension]);
+
   const activeFilterLabels = useMemo(() => {
     if (!query.data) return [];
     return Object.entries(dimensionFilters)
@@ -622,6 +651,10 @@ function ChartCardComponent({
         isSeriesTruncated={(query.data?.series?.length ?? 0) > MAX_SERIES_TO_RENDER}
         maxSeriesToRender={MAX_SERIES_TO_RENDER}
         geoSuggestions={query.data?.availableGeos}
+        availableGeos={query.data?.availableGeos}
+        availableGeoCandidates={availableGeoCandidates}
+        isLoadingAvailableGeos={isLoadingAvailableGeos}
+        onFetchAvailableGeos={fetchAndApplyAvailableGeos}
       />
 
       {query.isLoading ? (

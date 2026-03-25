@@ -136,6 +136,9 @@ export function buildChartOption({
     return acc;
   }, {});
 
+  // Ensure each ECharts series has a unique `id`, even when series labels can collide.
+  const seriesIdCounts = new Map<string, number>();
+
   const axisName = (axisIndex: number, label: string) => {
     const colors = seriesByAxis[axisIndex] ?? [];
     if (colors.length === 0) return label;
@@ -328,8 +331,13 @@ export function buildChartOption({
       );
       const hasIsolatedObservedPoints = isolatedObservedIndexSet.size > 0;
 
+      const baseSeriesId = `series-${baseSeries.id ?? baseSeries.label}`;
+      const existingCount = seriesIdCounts.get(baseSeriesId) ?? 0;
+      seriesIdCounts.set(baseSeriesId, existingCount + 1);
+      const uniqueSeriesId = existingCount === 0 ? baseSeriesId : `${baseSeriesId}-${existingCount}`;
+
       return {
-        id: `series-${baseSeries.label}`,
+        id: uniqueSeriesId,
         name: `${baseSeries.label}${filterSuffix}`,
         type: topic.chartVariant ?? 'line',
         smooth: !useLightweightRendering,

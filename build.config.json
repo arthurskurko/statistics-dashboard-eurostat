@@ -1,6 +1,6 @@
 {
   "target": "local",
-  "assetVersion": 150,
+  "assetVersion": 163,
   "baseByTarget": {
     "local": "/",
     "test": "/statistics/",
