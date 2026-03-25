@@ -4,6 +4,7 @@ import { KNOWN_GEOS } from '../chart-card/helpers';
 type Geo = { code: string; label: string };
 
 type GeoTagInputProps = {
+  providerId?: 'eurostat' | 'worldbank' | 'who' | 'openmeteo';
   values: string[];
   onChange: (values: string[]) => void;
   suggestions?: Geo[];
@@ -11,15 +12,21 @@ type GeoTagInputProps = {
   singleSelect?: boolean;
 };
 
-export default function GeoTagInput({ values, onChange, suggestions, placeholder, singleSelect }: GeoTagInputProps) {
+export default function GeoTagInput({ providerId, values, onChange, suggestions, placeholder, singleSelect }: GeoTagInputProps) {
   const [input, setInput] = React.useState('');
 
   const catalog = React.useMemo(() => {
     const merged = new Map<string, Geo>();
-    for (const geo of suggestions ?? []) merged.set(geo.code, geo);
-    for (const geo of KNOWN_GEOS) if (!merged.has(geo.code)) merged.set(geo.code, geo);
+
+    const fallback = providerId === 'eurostat' ? KNOWN_GEOS : [];
+
+    for (const geo of suggestions ?? fallback) merged.set(geo.code, geo);
+    if (providerId === 'eurostat') {
+      for (const geo of KNOWN_GEOS) if (!merged.has(geo.code)) merged.set(geo.code, geo);
+    }
+
     return [...merged.values()];
-  }, [suggestions]);
+  }, [providerId, suggestions]);
 
   const inputUpper = input.trim().toUpperCase();
   const filtered = React.useMemo(() => {
@@ -38,10 +45,12 @@ export default function GeoTagInput({ values, onChange, suggestions, placeholder
     setInput('');
   }
 
+  const safeValues = Array.isArray(values) ? values : [];
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        {values.map((v) => (
+        {safeValues.map((v) => (
           <span key={v} className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-xs">
             {v}
             <button

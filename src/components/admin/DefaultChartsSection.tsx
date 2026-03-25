@@ -8,6 +8,7 @@ type DefaultChartsSectionProps = {
   defaultChartGeoValuesByTopicId: Record<string, string[]>;
   topics: TopicDefinition[];
   topicMap: Record<string, TopicDefinition>;
+  providerId: 'eurostat' | 'worldbank' | 'who' | 'openmeteo';
   selectedTopicId: string;
   onSelectedTopicIdChange: (topicId: string) => void;
   customCode: string;
@@ -76,6 +77,7 @@ export function DefaultChartsSection({
   topics,
   topicMap,
   catalog,
+  providerId,
   selectedTopicId,
   onSelectedTopicIdChange,
   customCode,
@@ -116,9 +118,10 @@ export function DefaultChartsSection({
                 <div className="mt-2">
                   <span className="text-[11px] uppercase tracking-wide text-slate-400">Default geos</span>
                   <TopicGeoInput
+                    providerId={providerId}
                     topic={topic}
                     topicMap={topicMap}
-                    value={defaultChartGeoValuesByTopicId[topic.id] ?? []}
+                    value={Array.isArray(defaultChartGeoValuesByTopicId[topic.id]) ? defaultChartGeoValuesByTopicId[topic.id] : []}
                     onChange={(values) => onGeoValuesTextChange(topic.id, values.join(', '))}
                   />
                 </div>

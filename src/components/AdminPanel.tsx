@@ -20,6 +20,8 @@ export type AdminPanelProps = {
   topicMap: Record<string, TopicDefinition>;
   defaultBuiltInTopicIds: string[];
   catalogPath: string;
+  dashboard: string;
+  providerId: 'eurostat' | 'worldbank' | 'who' | 'openmeteo';
   onLoadDefaults: () => void;
   onClearDashboard: () => void;
   onClose: () => void;
@@ -39,6 +41,8 @@ export function AdminPanel({
   topicMap,
   defaultBuiltInTopicIds,
   catalogPath,
+  dashboard: dashboardProp,
+  providerId,
   onLoadDefaults,
   onClearDashboard,
   onClose,
@@ -125,7 +129,7 @@ export function AdminPanel({
   const handleExportDefaults = async () => {
     try {
       const userId = 'anonymous';
-      const dashboard = 'eurostat';
+      const dashboard = dashboardProp;
       if (backendMode === 'go') {
         const res = await fetch(`${backendBaseUrl}/api/default-charts/export`, {
           method: 'POST',
@@ -141,7 +145,7 @@ export function AdminPanel({
       // fallback: export from local state
       const payload = {
         userId: 'anonymous',
-        dashboard: 'eurostat',
+        dashboard: dashboardProp,
         topicIds: defaultTopicIds,
         chartDefaultsByTopicId: defaultChartGeoValuesByTopicId,
         updatedAt: new Date().toISOString(),
@@ -150,7 +154,7 @@ export function AdminPanel({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `eurostat-anonymous-default-charts.json`;
+      a.download = `${dashboardProp}-anonymous-default-charts.json`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -170,7 +174,15 @@ export function AdminPanel({
         const text = String(reader.result ?? '');
         const parsed = JSON.parse(text) as any;
         if (!Array.isArray(parsed.topicIds)) throw new Error('Invalid file: missing topicIds array');
-        const chartDefaults = typeof parsed.chartDefaultsByTopicId === 'object' && parsed.chartDefaultsByTopicId ? parsed.chartDefaultsByTopicId : {};
+      const chartDefaultsRaw = typeof parsed.chartDefaultsByTopicId === 'object' && parsed.chartDefaultsByTopicId ? parsed.chartDefaultsByTopicId : {};
+      const chartDefaults: Record<string, string[]> = {};
+      for (const [topicId, value] of Object.entries(chartDefaultsRaw)) {
+        if (Array.isArray(value)) {
+          chartDefaults[topicId] = value.filter((item): item is string => typeof item === 'string');
+        } else if (value && typeof value === 'object' && Array.isArray((value as any).geoValues)) {
+          chartDefaults[topicId] = (value as any).geoValues.filter((item: unknown): item is string => typeof item === 'string');
+        }
+      }
         setDefaultTopicIds(parsed.topicIds);
         setDefaultChartGeoValuesByTopicId(chartDefaults);
         alert('Imported defaults into local storage');
@@ -250,6 +262,7 @@ export function AdminPanel({
               topics={topics}
               topicMap={enrichedTopicMap}
               catalog={catalog}
+              providerId={providerId}
               selectedTopicId={selectedTopicId}
               onSelectedTopicIdChange={setSelectedTopicId}
               customCode={customCode}

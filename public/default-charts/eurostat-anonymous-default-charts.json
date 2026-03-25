@@ -6,7 +6,8 @@
     "unemployment-rate",
     "inflation",
     "immigration",
-    "tgs00045"
+    "tgs00045",
+    "sdg_16_70"
   ],
   "chartDefaultsByTopicId": {
     "population": {
@@ -18,6 +19,13 @@
         "ES"
       ]
     },
+    "sdg_16_70": {
+      "geoValues": [
+        "EE",
+        "LV",
+        "FR"
+      ]
+    },
     "unemployment-rate": {
       "geoValues": [
         "DK",
@@ -26,5 +34,5 @@
       ]
     }
   },
-  "updatedAt": "2026-03-24T12:23:23Z"
+  "updatedAt": "2026-03-24T23:14:30Z"
 }

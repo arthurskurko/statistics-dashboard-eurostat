@@ -150,6 +150,10 @@ func (s *Server) handleDefaultChartsExport(w http.ResponseWriter, r *http.Reques
 	exportDir := os.Getenv("EXPORT_DIR")
 	if exportDir == "" {
 		exportDir = filepath.Join("..", "public", "default-charts")
+		if _, err := os.Stat(exportDir); err != nil {
+			// Fallback to dist path in built mode in case public path is unavailable.
+			exportDir = filepath.Join("..", "dist", "default-charts")
+		}
 	}
 
 	if err := os.MkdirAll(exportDir, 0o755); err != nil {

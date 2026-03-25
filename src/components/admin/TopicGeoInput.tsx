@@ -9,13 +9,35 @@ import { fetchWorldBankCountries, fetchWorldBankTopicData } from '../../lib/worl
 import type { TopicDefinition } from '../../features/dashboard/types';
 
 type Props = {
+  providerId: 'eurostat' | 'worldbank' | 'who' | 'openmeteo';
   topic: TopicDefinition;
   value: string[];
   onChange: (values: string[]) => void;
   topicMap: Record<string, TopicDefinition>;
 };
 
-export default function TopicGeoInput({ topic, value, onChange, topicMap }: Props) {
+function mergeGeoSuggestions(
+  base: Array<{ code: string; label: string }> | undefined,
+  additional: string[] | undefined,
+): Array<{ code: string; label: string }> {
+  const merged = new Map<string, { code: string; label: string }>();
+
+  for (const geo of base ?? []) {
+    merged.set(geo.code, geo);
+  }
+
+  for (const code of additional ?? []) {
+    const normalized = code.trim().toUpperCase();
+    if (!normalized) continue;
+    if (!merged.has(normalized)) {
+      merged.set(normalized, { code: normalized, label: normalized });
+    }
+  }
+
+  return [...merged.values()];
+}
+
+export default function TopicGeoInput({ providerId, topic, value, onChange, topicMap }: Props) {
   const [suggestions, setSuggestions] = React.useState<Array<{ code: string; label: string }> | undefined>(undefined);
   const [suggestionSource, setSuggestionSource] = React.useState<string | undefined>(undefined);
 
@@ -29,23 +51,41 @@ export default function TopicGeoInput({ topic, value, onChange, topicMap }: Prop
         // ignore
       }
 
-      const isOpenMeteo = Boolean(OPEN_METEO_TOPIC_MAP[topic.id]) ||
-        Object.values(OPEN_METEO_TOPIC_MAP).some((t) => t.datasetCode === (topic as any).datasetCode) ||
-        topicMap === OPEN_METEO_TOPIC_MAP;
+      let effectiveProvider: 'eurostat' | 'worldbank' | 'who' | 'openmeteo' = 'eurostat';
 
-      if (isOpenMeteo) {
+      if (providerId) {
+        effectiveProvider = providerId;
+      } else if (
+        Boolean(OPEN_METEO_TOPIC_MAP[topic.id]) ||
+        Object.values(OPEN_METEO_TOPIC_MAP).some((t) => t.datasetCode === (topic as any).datasetCode) ||
+        topicMap === OPEN_METEO_TOPIC_MAP
+      ) {
+        effectiveProvider = 'openmeteo';
+      } else if (
+        Boolean(WHO_TOPIC_MAP[topic.id]) ||
+        Object.values(WHO_TOPIC_MAP).some((t) => t.datasetCode === (topic as any).datasetCode) ||
+        topicMap === WHO_TOPIC_MAP
+      ) {
+        effectiveProvider = 'who';
+      } else if (
+        Boolean(WORLD_BANK_TOPIC_MAP[topic.id]) ||
+        Object.values(WORLD_BANK_TOPIC_MAP).some((t) => t.datasetCode === (topic as any).datasetCode) ||
+        topicMap === WORLD_BANK_TOPIC_MAP
+      ) {
+        effectiveProvider = 'worldbank';
+      } else {
+        effectiveProvider = 'eurostat';
+      }
+
+      if (effectiveProvider === 'openmeteo') {
         // eslint-disable-next-line no-console
         console.log('Admin.TopicGeoInput detected OpenMeteo for', topic.id);
         setSuggestionSource('openmeteo');
-        setSuggestions(OPEN_METEO_GEOS.map((g: any) => ({ code: g.code, label: g.label })));
+        setSuggestions(mergeGeoSuggestions(OPEN_METEO_GEOS.map((g: any) => ({ code: g.code, label: g.label })), [...(topic.geoValues ?? []), ...value]));
         return;
       }
 
-      const isWho = Boolean(WHO_TOPIC_MAP[topic.id]) ||
-        Object.values(WHO_TOPIC_MAP).some((t) => t.datasetCode === (topic as any).datasetCode) ||
-        topicMap === WHO_TOPIC_MAP;
-
-      if (isWho) {
+      if (effectiveProvider === 'who') {
         try {
           // eslint-disable-next-line no-console
           console.log('Admin.TopicGeoInput detected WHO for', topic.id);
@@ -53,13 +93,13 @@ export default function TopicGeoInput({ topic, value, onChange, topicMap }: Prop
           const topicData = await fetchWhoTopicData(topic.id as string).catch(() => null);
           if (!mounted) return;
           if (topicData?.availableGeos && topicData.availableGeos.length > 0) {
-            setSuggestions(topicData.availableGeos);
+            setSuggestions(mergeGeoSuggestions(topicData.availableGeos, [...(topic.geoValues ?? []), ...value]));
             return;
           }
 
           const countries = await fetchWhoCountries();
           if (!mounted) return;
-          setSuggestions(countries);
+          setSuggestions(mergeGeoSuggestions(countries, [...(topic.geoValues ?? []), ...value]));
           return;
         } catch (err) {
           // eslint-disable-next-line no-console
@@ -67,11 +107,7 @@ export default function TopicGeoInput({ topic, value, onChange, topicMap }: Prop
         }
       }
 
-      const isWorldBank = Boolean(WORLD_BANK_TOPIC_MAP[topic.id]) ||
-        Object.values(WORLD_BANK_TOPIC_MAP).some((t) => t.datasetCode === (topic as any).datasetCode) ||
-        topicMap === WORLD_BANK_TOPIC_MAP;
-
-      if (isWorldBank) {
+      if (effectiveProvider === 'worldbank') {
         try {
           // eslint-disable-next-line no-console
           console.log('Admin.TopicGeoInput detected WorldBank for', topic.id);
@@ -79,13 +115,13 @@ export default function TopicGeoInput({ topic, value, onChange, topicMap }: Prop
           const topicData = await fetchWorldBankTopicData(topic.id as string).catch(() => null);
           if (!mounted) return;
           if (topicData?.availableGeos && topicData.availableGeos.length > 0) {
-            setSuggestions(topicData.availableGeos);
+            setSuggestions(mergeGeoSuggestions(topicData.availableGeos, [...(topic.geoValues ?? []), ...value]));
             return;
           }
 
           const countries = await fetchWorldBankCountries();
           if (!mounted) return;
-          setSuggestions(countries);
+          setSuggestions(mergeGeoSuggestions(countries, [...(topic.geoValues ?? []), ...value]));
           return;
         } catch (err) {
           // eslint-disable-next-line no-console
@@ -101,11 +137,12 @@ export default function TopicGeoInput({ topic, value, onChange, topicMap }: Prop
     return () => {
       mounted = false;
     };
-  }, [topic.id, topic.datasetCode, topicMap]);
+  }, [providerId, topic.id, topic.datasetCode, topicMap]);
 
   return (
     <>
       <GeoTagInput
+        providerId={providerId}
         values={value}
         onChange={onChange}
         suggestions={suggestions}

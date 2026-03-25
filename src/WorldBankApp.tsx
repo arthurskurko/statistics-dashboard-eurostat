@@ -8,6 +8,7 @@ import { WORLD_BANK_TOPICS, WORLD_BANK_TOPIC_MAP } from './features/dashboard/wo
 import type { DashboardCard } from './features/dashboard/types';
 import { useDefaultChartStorage } from './hooks/useDefaultChartStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
+import { createDefaultChartsCandidateUrls, loadDefaultChartsFromCandidates } from './lib/defaultCharts';
 import { fetchWorldBankTopicData } from './lib/worldBank';
 
 const STORAGE_KEY = 'worldbank-statistics-dashboard.cards';
@@ -100,34 +101,15 @@ export default function WorldBankApp() {
   async function loadDefaultsFromFileAndAddCards() {
     const dashboard = 'worldbank';
     const userId = 'anonymous';
-    const candidates = [
-      `${basePath}${dashboard}-${userId}-default-charts.json`,
-      `${basePath}${dashboard}-${userId}-default-charts.json`,
-      `${basePath}default-charts.json`,
-    ];
+    const candidates = createDefaultChartsCandidateUrls(basePath, dashboard, userId);
 
-    try {
-      for (const url of candidates) {
-        try {
-          const res = await fetch(url, { cache: 'no-cache' });
-          if (!res.ok) continue;
-          const parsed = await res.json();
-          if (parsed && Array.isArray(parsed.topicIds) && parsed.topicIds.length > 0) {
-            if (parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object') {
-              setDefaultChartGeoValuesByTopicId(parsed.chartDefaultsByTopicId as Record<string, string[]>);
-            }
-            setCards((currentCards) => {
-              if (currentCards.length > 0) return currentCards;
-              return [...parsed.topicIds.map((topicId: string) => createCard(topicId))];
-            });
-            return;
-          }
-        } catch (e) {
-          // ignore and try next
-        }
+    const parsed = await loadDefaultChartsFromCandidates(candidates, dashboard);
+    if (parsed) {
+      if (parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object') {
+        setDefaultChartGeoValuesByTopicId(parsed.chartDefaultsByTopicId as Record<string, string[]>);
       }
-    } catch (e) {
-      // ignore
+      setCards(parsed.topicIds.map((topicId: string) => createCard(topicId)));
+      return;
     }
 
     addDefaultCards();
@@ -153,6 +135,8 @@ export default function WorldBankApp() {
         topicMap={WORLD_BANK_TOPIC_MAP}
         defaultBuiltInTopicIds={DEFAULT_CHART_TOPIC_IDS}
         catalogPath="worldbank-catalog.json"
+        dashboard="worldbank"
+        providerId="worldbank"
         onLoadDefaults={loadDefaultsFromFileAndAddCards}
         onClearDashboard={clearCards}
         onClose={() => setIsAdminOpen(false)}

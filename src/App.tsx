@@ -8,6 +8,7 @@ import { TOPIC_MAP, TOPICS } from './features/dashboard/topicCatalog';
 import type { DashboardCard } from './features/dashboard/types';
 import { useDefaultChartStorage } from './hooks/useDefaultChartStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
+import { createDefaultChartsCandidateUrls, loadDefaultChartsFromCandidates } from './lib/defaultCharts';
 
 const STORAGE_KEY = 'estonia-statistics-dashboard.cards';
 const DEFAULT_CHARTS_KEY = 'estonia-statistics-dashboard.defaultCharts';
@@ -88,54 +89,27 @@ export default function App() {
   }
 
   async function loadDefaultsFromFileAndAddCards() {
-    // Attempt to load a public JSON file exported by the local Go tool.
     const dashboard = 'eurostat';
     const userId = 'anonymous';
-    const candidates = [
-      // Prefer files placed into the built `dist/default-charts/` folder
-      `${basePath}dist/default-charts/${dashboard}-${userId}-default-charts.json`,
-      `${basePath}dist/default-charts/eurostat-anonymous-default-charts.json`,
-      `${basePath}dist/default-charts/default-charts.json`,
-      // Fallback to public root candidates
-      `${basePath}${dashboard}-${userId}-default-charts.json`,
-      `${basePath}eurostat-anonymous-default-charts.json`,
-      `${basePath}default-charts.json`,
-    ];
+    const candidates = createDefaultChartsCandidateUrls(basePath, dashboard, userId);
 
-    try {
-      for (const url of candidates) {
-        try {
-          const res = await fetch(url, { cache: 'no-cache' });
-          if (!res.ok) continue;
-          const parsed = await res.json();
-          if (parsed && Array.isArray(parsed.topicIds) && parsed.topicIds.length > 0) {
-            // apply chart defaults by topic id if present (map backend shape to frontend shape)
-            const mapped: Record<string, string[]> = {};
-            if (parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object') {
-              for (const [topicId, tpl] of Object.entries(parsed.chartDefaultsByTopicId)) {
-                const geo = (tpl as any)?.geoValues;
-                if (Array.isArray(geo) && geo.length > 0) {
-                  mapped[topicId] = geo.filter((v: unknown): v is string => typeof v === 'string');
-                }
-              }
-              setDefaultChartGeoValuesByTopicId(mapped);
-            }
-
-            setCards((currentCards) => {
-              if (currentCards.length > 0) return currentCards;
-              return [...parsed.topicIds.map((topicId: string) => createCard(topicId, mapped[topicId]))];
-            });
-            return;
+    const parsed = await loadDefaultChartsFromCandidates(candidates, dashboard);
+    if (parsed) {
+      const mapped: Record<string, string[]> = {};
+      if (parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object') {
+        for (const [topicId, tpl] of Object.entries(parsed.chartDefaultsByTopicId)) {
+          const geo = (tpl as any)?.geoValues;
+          if (Array.isArray(geo) && geo.length > 0) {
+            mapped[topicId] = geo.filter((v: unknown): v is string => typeof v === 'string');
           }
-        } catch (e) {
-          // ignore and try next candidate
         }
+        setDefaultChartGeoValuesByTopicId(mapped);
       }
-    } catch (e) {
-      // ignore
+
+      setCards(parsed.topicIds.map((topicId: string) => createCard(topicId, mapped[topicId])));
+      return;
     }
 
-    // Fallback to built-in defaults
     addDefaultCards();
   }
 
@@ -163,6 +137,8 @@ export default function App() {
         topicMap={TOPIC_MAP}
         defaultBuiltInTopicIds={DEFAULT_CHART_TOPIC_IDS}
         catalogPath="catalog.json"
+        dashboard="eurostat"
+        providerId="eurostat"
         onLoadDefaults={loadDefaultsFromFileAndAddCards}
         onClearDashboard={clearCards}
         onClose={() => setIsAdminOpen(false)}
