@@ -283,6 +283,16 @@ function ChartCardComponent({
     [effectiveSeries, filteredPeriodSet],
   );
 
+  const seriesIdByLabel = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const series of filteredSeries) {
+      if (!map.has(series.label)) {
+        map.set(series.label, series.id || series.label);
+      }
+    }
+    return map;
+  }, [filteredSeries]);
+
   const filteredTopicData = useMemo(
     () =>
       query.data
@@ -450,8 +460,10 @@ function ChartCardComponent({
     const symbolSize = compactMobileLayout ? 10 : 12;
     const seriesPatch = Array.from(changedSeriesLabels).map((seriesLabel) => {
       const highlight = nextHighlights.get(seriesLabel);
+      const seriesId = seriesIdByLabel.get(seriesLabel);
+      const echartsSeriesId = seriesId ? `series-${seriesId}` : `series-${seriesLabel}`;
       return {
-        id: `series-${seriesLabel}`,
+        id: echartsSeriesId,
         markPoint: highlight
           ? {
               data: [
