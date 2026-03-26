@@ -6,6 +6,7 @@ import path from 'path';
 var DEFAULT_BASE_BY_TARGET = {
     local: '/',
     test: '/statistics-test/',
+    stage: '/statistics-stage/',
     prod: '/statistics-full/',
 };
 function normalizeBase(value) {
@@ -28,10 +29,13 @@ function readBuildConfig() {
 }
 function resolveBuildTarget(config) {
     var fromEnv = process.env.APP_TARGET;
-    if (fromEnv === 'local' || fromEnv === 'test' || fromEnv === 'prod') {
+    if (fromEnv === 'local' || fromEnv === 'test' || fromEnv === 'stage' || fromEnv === 'prod') {
         return fromEnv;
     }
-    if (config.target === 'local' || config.target === 'test' || config.target === 'prod') {
+    if (config.target === 'local' ||
+        config.target === 'test' ||
+        config.target === 'stage' ||
+        config.target === 'prod') {
         return config.target;
     }
     return 'prod';
@@ -79,7 +83,8 @@ export default defineConfig({
                 target: 'https://ghoapi.azureedge.net',
                 changeOrigin: true,
                 secure: true,
-                rewrite: function (path) { return path.replace(/^\/api\/who/, ''); },
+                // keep /api prefix for WHO endpoint; client uses /api/who/.. and we translate to /api/..
+                rewrite: function (path) { return path.replace(/^\/api\/who/, '/api'); },
             },
         },
     },

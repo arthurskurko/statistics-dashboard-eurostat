@@ -11,10 +11,10 @@ import { OPEN_METEO_TOPICS, OPEN_METEO_TOPIC_MAP } from './features/dashboard/op
 import { WHO_TOPICS, WHO_TOPIC_MAP } from './features/dashboard/whoTopicCatalog';
 import { WORLD_BANK_TOPICS, WORLD_BANK_TOPIC_MAP } from './features/dashboard/worldBankTopicCatalog';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import { fetchTopicData } from './lib/eurostat';
-import { fetchOpenMeteoTopicData } from './lib/openMeteo';
-import { fetchWhoTopicData } from './lib/who';
-import { fetchWorldBankTopicData } from './lib/worldBank';
+import { fetchTopicData, fetchAvailableGeosForTopic as fetchEurostatAvailableGeosForTopic } from './lib/eurostat';
+import { fetchOpenMeteoTopicData, fetchAvailableGeosForTopic as fetchOpenMeteoAvailableGeosForTopic } from './lib/openMeteo';
+import { fetchWhoTopicData, fetchAvailableGeosForTopic as fetchWhoAvailableGeosForTopic } from './lib/who';
+import { fetchWorldBankTopicData, fetchAvailableGeosForTopic as fetchWorldBankAvailableGeosForTopic } from './lib/worldBank';
 
 type ProviderId = 'eurostat' | 'worldbank' | 'who' | 'openmeteo';
 
@@ -50,6 +50,10 @@ type ProviderConfig = {
       geoValues?: string[];
     },
   ) => ReturnType<typeof fetchTopicData>;
+  fetchAvailableGeosFn: (
+    topicId: string,
+    filters?: Record<string, string | string[]>,
+  ) => Promise<Array<{ code: string; label: string }>>;
   forecastOptions?: number[];
   forecastUnitLabel?: string;
 };
@@ -77,6 +81,7 @@ const PROVIDERS: ProviderConfig[] = [
     sourceUrlBuilder: (datasetCode: string) =>
       `https://ec.europa.eu/eurostat/databrowser/view/${datasetCode}/default/table?lang=en`,
     fetchTopicDataFn: fetchTopicData,
+    fetchAvailableGeosFn: fetchEurostatAvailableGeosForTopic,
   },
   {
     id: 'worldbank',
@@ -96,6 +101,7 @@ const PROVIDERS: ProviderConfig[] = [
     defaultGeoValues: ['EST', 'EUU'],
     sourceUrlBuilder: (datasetCode: string) => `https://data.worldbank.org/indicator/${datasetCode}`,
     fetchTopicDataFn: fetchWorldBankTopicData,
+    fetchAvailableGeosFn: fetchWorldBankAvailableGeosForTopic,
   },
   {
     id: 'who',
@@ -115,6 +121,7 @@ const PROVIDERS: ProviderConfig[] = [
     defaultGeoValues: ['EST', 'EUR'],
     sourceUrlBuilder: (datasetCode: string) => `https://ghoapi.azureedge.net/api/${datasetCode}`,
     fetchTopicDataFn: fetchWhoTopicData,
+    fetchAvailableGeosFn: fetchWhoAvailableGeosForTopic,
   },
   {
     id: 'openmeteo',
@@ -133,6 +140,7 @@ const PROVIDERS: ProviderConfig[] = [
     defaultGeoValues: ['TLL', 'HEL'],
     sourceUrlBuilder: () => 'https://open-meteo.com/en/docs',
     fetchTopicDataFn: fetchOpenMeteoTopicData,
+    fetchAvailableGeosFn: fetchOpenMeteoAvailableGeosForTopic,
     forecastOptions: [7, 14, 20, 30, 60, 90, 120, 180],
     forecastUnitLabel: 'd',
   },
@@ -310,6 +318,7 @@ export default function UnifiedDashboardApp() {
                     providerName={provider.label}
                     topicMap={provider.topicMap}
                     fetchTopicDataFn={provider.fetchTopicDataFn}
+                    fetchAvailableGeosFn={provider.fetchAvailableGeosFn}
                     defaultGeoValues={provider.defaultGeoValues}
                     fallbackDescriptionPrefix={provider.fallbackDescriptionPrefix}
                     sourceUrlBuilder={provider.sourceUrlBuilder}

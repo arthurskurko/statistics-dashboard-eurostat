@@ -1,0 +1,40 @@
+{
+  "userId": "anonymous",
+  "dashboard": "openmeteo",
+  "topicIds": [
+    "meteo-temp-mean",
+    "meteo-temp-max",
+    "meteo-precip-sum",
+    "daily.snowfall_sum"
+  ],
+  "chartDefaultsByTopicId": {
+    "daily.snowfall_sum": {
+      "geoValues": [
+        "TLL",
+        "STO",
+        "VNO"
+      ]
+    },
+    "meteo-precip-sum": {
+      "geoValues": [
+        "TLL",
+        "CPH",
+        "VNO"
+      ]
+    },
+    "meteo-temp-max": {
+      "geoValues": [
+        "TLL",
+        "OSL"
+      ]
+    },
+    "meteo-temp-mean": {
+      "geoValues": [
+        "HEL",
+        "BCH",
+        "STO"
+      ]
+    }
+  },
+  "updatedAt": "2026-03-26T12:30:24Z"
+}

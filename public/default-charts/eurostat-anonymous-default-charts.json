@@ -1,0 +1,67 @@
+{
+  "userId": "anonymous",
+  "dashboard": "eurostat",
+  "topicIds": [
+    "population",
+    "unemployment-rate",
+    "inflation",
+    "immigration",
+    "sdg_16_70",
+    "induced-abortions",
+    "ei_isset_q"
+  ],
+  "chartDefaultsByTopicId": {
+    "ei_isset_q": {
+      "geoValues": [
+        "EE",
+        "FI"
+      ]
+    },
+    "immigration": {
+      "geoValues": [
+        "EE",
+        "DE"
+      ]
+    },
+    "induced-abortions": {
+      "geoValues": [
+        "EE",
+        "EU27_2020",
+        "GE",
+        "LV"
+      ]
+    },
+    "inflation": {
+      "geoValues": [
+        "EE",
+        "LV",
+        "HU",
+        "PL",
+        "FR"
+      ]
+    },
+    "population": {
+      "geoValues": [
+        "EE",
+        "FI",
+        "UK",
+        "ES"
+      ]
+    },
+    "sdg_16_70": {
+      "geoValues": [
+        "EE",
+        "LV",
+        "FR"
+      ]
+    },
+    "unemployment-rate": {
+      "geoValues": [
+        "DK",
+        "DE",
+        "FR"
+      ]
+    }
+  },
+  "updatedAt": "2026-03-26T11:20:27Z"
+}

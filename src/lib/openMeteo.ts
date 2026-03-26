@@ -35,7 +35,7 @@ const openMeteoInFlight = new Map<string, Promise<OpenMeteoDailyResponse>>();
 let openMeteoActiveRequests = 0;
 const openMeteoQueue: Array<() => void> = [];
 
-const OPEN_METEO_GEOS: GeoPoint[] = [
+export const OPEN_METEO_GEOS: GeoPoint[] = [
   { code: 'TLL', label: 'Tallinn', latitude: 59.437, longitude: 24.7536, aliases: ['ESTONIA', 'EE', 'EST'] },
   { code: 'HEL', label: 'Helsinki', latitude: 60.1699, longitude: 24.9384, aliases: ['FINLAND', 'FI', 'FIN'] },
   { code: 'RIX', label: 'Riga', latitude: 56.9496, longitude: 24.1052, aliases: ['LATVIA', 'LV', 'LVA'] },
@@ -72,18 +72,40 @@ const OPEN_METEO_GEOS: GeoPoint[] = [
   { code: 'CANB', label: 'Canberra', latitude: -35.2809, longitude: 149.13, aliases: ['AUSTRALIA', 'AU', 'AUS'] },
 ];
 
+export async function fetchAvailableGeosForTopic(
+  topicId: string,
+  _filters: Record<string, string | string[]> = {},
+): Promise<Array<{ code: string; label: string }>> {
+  const topic = OPEN_METEO_TOPIC_MAP[topicId] ?? toTopicDefinitionFromCode(topicId);
+  const datasetCode = topic.datasetCode;
+  const variableName = datasetCode.startsWith('daily.') ? datasetCode.slice('daily.'.length) : datasetCode;
+
+  const candidates: Array<{ code: string; label: string }> = [];
+
+  for (const geo of OPEN_METEO_GEOS) {
+    try {
+      const data = await fetchGeoSeries(geo, variableName, 60);
+      if (data.series.points.length > 0) {
+        candidates.push({ code: geo.code, label: geo.label });
+      }
+    } catch {
+      // ignore unsupported geo/variable combos and continue
+    }
+  }
+
+  if (candidates.length > 0) {
+    return candidates;
+  }
+
+  return OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label }));
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function formatDateUtc(date: Date): string {
   return date.toISOString().slice(0, 10);
-}
-
-function getDefaultStartDate(endDate: Date): string {
-  const start = new Date(endDate);
-  start.setUTCDate(start.getUTCDate() - OPEN_METEO_HISTORY_DAYS);
-  return formatDateUtc(start);
 }
 
 function decimatePoints(points: DataPoint[], maxPoints: number): DataPoint[] {
@@ -274,10 +296,13 @@ function lookupGeo(code: string): GeoPoint | undefined {
 async function fetchGeoSeries(
   geo: GeoPoint,
   variableName: string,
+  historyDays = OPEN_METEO_HISTORY_DAYS,
 ): Promise<{ series: DataSeries; periods: string[]; unitSuffix?: string }> {
   const endDate = new Date();
   const endDateCode = formatDateUtc(endDate);
-  const startDateCode = getDefaultStartDate(endDate);
+  const startDate = new Date(endDate);
+  startDate.setUTCDate(startDate.getUTCDate() - historyDays);
+  const startDateCode = formatDateUtc(startDate);
 
   const url = new URL(OPEN_METEO_ARCHIVE);
   url.searchParams.set('latitude', String(geo.latitude));
@@ -367,6 +392,7 @@ export async function fetchOpenMeteoTopicData(
 
   const rows = await Promise.all(selectedGeos.map((geo) => fetchGeoSeries(geo, variableName)));
   const series = rows.map((row) => row.series).filter((entry) => entry.points.length > 0);
+  const availableGeosFromSeries = series.map((entry) => ({ code: entry.id, label: entry.label }));
 
   const periodSet = new Set<string>();
   for (const row of rows) {
@@ -404,7 +430,9 @@ export async function fetchOpenMeteoTopicData(
       sourceUrl: topic.sourceUrl,
       series: [],
       periods: [],
-      availableGeos: OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
+      availableGeos: availableGeosFromSeries.length > 0
+        ? availableGeosFromSeries
+        : OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
       warning:
         `Dataset too large to process safely (series: ${series.length}, periods: ${periods.length}, points: ${totalPointCount}). ` +
         'Reduce geographies or choose a smaller variable.',
@@ -473,7 +501,9 @@ export async function fetchOpenMeteoTopicData(
     sourceUrl: topic.sourceUrl,
     series: [...series, ...forecastSeries],
     periods,
-    availableGeos: OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
+    availableGeos: availableGeosFromSeries.length > 0
+      ? availableGeosFromSeries
+      : OPEN_METEO_GEOS.map((geo) => ({ code: geo.code, label: geo.label })),
     forecastDisabledReason,
   };
 }

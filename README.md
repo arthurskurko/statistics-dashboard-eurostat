@@ -131,6 +131,62 @@ docker compose up --build
 
 Then open `http://localhost:8080`.
 
+## Optional simple Go backend (defaults + forecast jobs)
+
+The app can run with a small Go backend for two admin-related features:
+
+- store default chart IDs in SQLite
+- trigger forecast generation jobs using `scripts/generate_forecasts.py`
+
+This backend is optional. Provider data fetching (Eurostat/WHO/World Bank/Open-Meteo)
+can stay in the frontend for now.
+
+### Start backend locally (no Docker)
+
+From repo root:
+
+```bash
+npm run backend:dev
+```
+
+Or directly:
+
+```bash
+cd backend
+go run ./cmd/server
+```
+
+Default backend URL: `http://localhost:8090`
+
+### Backend environment variables
+
+- `BACKEND_PORT` (default `8090`)
+- `ALLOWED_ORIGIN` (default `*`)
+- `DB_PATH` (default `data/dashboard.db`)
+- `PROJECT_ROOT` (default `..` from `backend/`)
+- `PYTHON_CMD` (default `python`)
+
+### API endpoints
+
+- `GET /api/health`
+- `GET /api/default-charts?userId=<id>&dashboard=<name>`
+- `PUT /api/default-charts`
+	- JSON body: `{ "userId": "...", "dashboard": "eurostat", "topicIds": ["population", "inflation"] }`
+- `POST /api/forecasts/run`
+	- JSON body: `{ "datasetCodes": ["DEMO_FABORTORD", "prc_hicp_manr"] }`
+	- omit `datasetCodes` to run script defaults
+- `GET /api/forecasts/jobs/<jobId>`
+
+### Notes
+
+- Install Python requirements once if forecast generation is used:
+
+```bash
+pip install -r scripts/requirements.txt
+```
+
+- SQLite runs as a local file; no separate DB server is required.
+
 ## Notes
 
 - The app fetches live data from Eurostat's public API.

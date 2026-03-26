@@ -1,0 +1,30 @@
+{
+  "userId": "anonymous",
+  "dashboard": "who",
+  "topicIds": [
+    "who-life-expectancy",
+    "NCD_DIABETES_TREATMENT_CRUDE",
+    "SDGTOBACCO"
+  ],
+  "chartDefaultsByTopicId": {
+    "NCD_DIABETES_TREATMENT_CRUDE": {
+      "geoValues": [
+        "CYP",
+        "BRN"
+      ]
+    },
+    "SDGTOBACCO": {
+      "geoValues": [
+        "EST",
+        "BGR"
+      ]
+    },
+    "who-life-expectancy": {
+      "geoValues": [
+        "FIN",
+        "DNK"
+      ]
+    }
+  },
+  "updatedAt": "2026-03-26T11:43:54Z"
+}

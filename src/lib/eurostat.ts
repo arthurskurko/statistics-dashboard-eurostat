@@ -71,6 +71,97 @@ function buildUrlForTopic(topic: { datasetCode: string; filters: Record<string, 
   return url.toString();
 }
 
+export async function fetchAvailableGeosForTopic(
+  topicId: string,
+  effectiveFilters: Record<string, string | string[]> = {},
+): Promise<Array<{ code: string; label: string }>> {
+  let topic = TOPIC_MAP[topicId];
+
+  if (!topic) {
+    let catalogTitle: string | undefined;
+    let catalogDescription: string | undefined;
+
+    try {
+      const catalogResp = await fetch(`${import.meta.env.BASE_URL}catalog.json`);
+      if (catalogResp.ok) {
+        const catalog = (await catalogResp.json()) as Array<{ code: string; title?: string; description?: string }>;
+        const match = catalog.find((entry) => entry.code?.toLowerCase() === topicId.toLowerCase());
+        catalogTitle = match?.title?.trim();
+        catalogDescription = match?.description?.trim();
+      }
+    } catch {
+      // ignore failures; fall back to dataset id
+    }
+
+    topic = {
+      id: topicId,
+      title: catalogTitle ?? topicId,
+      description: catalogDescription ?? `Eurostat dataset ${topicId}`,
+      datasetCode: topicId,
+      filters: {},
+      geoValues: ['EE'],
+      decimals: 0,
+      sourceUrl: `https://ec.europa.eu/eurostat/databrowser/view/${topicId}/default/table?lang=en`,
+      pubmed: {
+        availability: 'unchecked',
+        searchTerm: catalogTitle,
+        note: 'Added from dataset code. Curate PubMed mapping if this topic is kept.',
+      },
+    };
+  }
+
+  const url = buildUrlForTopic({
+    ...topic,
+    extraFilters: effectiveFilters,
+    geoValues: [],
+  });
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch geos for topic ${topicId}: ${response.statusText}`);
+  }
+
+  const dataset = (await response.json()) as JsonStatDataset;
+  const geoDim = dataset.dimension?.geo;
+  if (!geoDim?.category?.index) {
+    return [];
+  }
+
+  const index = geoDim.category.index;
+  const labels = geoDim.category.label ?? {};
+
+  const codes = Array.isArray(index)
+    ? index
+    : Object.entries(index)
+        .sort((a, b) => (a[1] as number) - (b[1] as number))
+        .map(([code]) => code);
+
+  // Determine which geo codes actually contain data points (not null/NaN).
+  const geoCodeWithData = new Set<string>();
+  const rows = Array.isArray(dataset.value)
+    ? dataset.value.map((value, index) => [index, value] as const)
+    : Object.entries(dataset.value).map(([index, value]) => [Number(index), value] as const);
+
+  const dimensions = getDimensionInfo(dataset);
+  const geoIndex = dimensions.findIndex((dim) => dim.id.toLowerCase() === 'geo');
+  if (geoIndex >= 0 && dataset.size && dataset.size.length > geoIndex) {
+    for (const [flatIndex, rawValue] of rows) {
+      if (rawValue === null || rawValue === undefined || Number.isNaN(Number(rawValue))) {
+        continue;
+      }
+      const positions = unravelIndex(flatIndex, dataset.size);
+      const geoCode = codes[positions[geoIndex]];
+      if (geoCode) {
+        geoCodeWithData.add(geoCode);
+      }
+    }
+  }
+
+  const codesToReturn = geoCodeWithData.size > 0 ? codes.filter((code) => geoCodeWithData.has(code)) : codes;
+
+  return codesToReturn.map((code) => ({ code, label: labels[code] ?? code }));
+}
+
 function getDimensionInfo(dataset: JsonStatDataset): DimensionInfo[] {
   return dataset.id.map((dimensionId) => {
     const category = dataset.dimension[dimensionId]?.category;

@@ -34,6 +34,9 @@ export type ModalFractalTree = {
 const RETIRING_DECAY_MULTIPLIER = 4.2;
 const HARD_TREE_SAFETY_CAP = 40;
 
+// Faster decay multiplier for modal fractal trees
+const MODAL_FADE_MULTIPLIER = 2.7;
+
 const MODAL_TREE_CENTER_X = 88;
 const MODAL_TREE_BASELINE_Y = 180;
 
@@ -140,7 +143,7 @@ function createModalFractalTree(seedPoint: ModalSeedPoint, index: number, total:
   return {
     segments,
     life: 1,
-    decay: 0.0018 + random() * 0.0022,
+    decay: (0.0018 + random() * 0.0022) * MODAL_FADE_MULTIPLIER,
     growth: 0,
     growthRate: 0.06 + random() * 0.05,
     retiring: false,
@@ -220,7 +223,7 @@ export class FractalModalSimulation {
   }
 
   ageAndCompact(fadeFactor: number, minLife = 0.008): void {
-    const smoothedFadeFactor = Math.max(0.65, Math.min(1.25, fadeFactor));
+    const smoothedFadeFactor = Math.max(0.85, Math.min(1.8, fadeFactor * 1.2));
     let writeIndex = 0;
     for (let readIndex = 0; readIndex < this.trees.length; readIndex += 1) {
       const tree = this.trees[readIndex];

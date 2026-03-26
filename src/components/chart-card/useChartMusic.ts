@@ -41,7 +41,35 @@ function createStartupAudioDefaults(seedKey: string): {
   // Weighted toward -1 so defaults are less bright/harsh across many charts.
   const octaveChoices = [-3, -2, -1, -1, -1, 0, 0, 1, 2, 3];
   const octaveShift = octaveChoices[Math.floor(random() * octaveChoices.length)] ?? -1;
-  const volume = Math.max(0.4, 0.78 - octaveShift * 0.14);
+  const isBrightInstrument = instrument === 'square' || instrument === 'sawtooth';
+
+  // Keep startup volume musically sensible and bounded (0..1) for all instruments.
+  // Bright waveforms need a stricter octave curve to avoid harsh starts.
+  const brightVolumeByOctave: Record<number, number> = {
+    [-3]: 0.68,
+    [-2]: 0.64,
+    [-1]: 0.60,
+    [0]: 0.56,
+    [1]: 0.48,
+    [2]: 0.40,
+    [3]: 0.32,
+  };
+
+  const neutralVolumeByOctave: Record<number, number> = {
+    [-3]: 0.92,
+    [-2]: 0.86,
+    [-1]: 0.80,
+    [0]: 0.74,
+    [1]: 0.66,
+    [2]: 0.58,
+    [3]: 0.50,
+  };
+
+  const rawVolume = isBrightInstrument
+    ? (brightVolumeByOctave[octaveShift] ?? 0.56)
+    : (neutralVolumeByOctave[octaveShift] ?? 0.74);
+
+  const volume = Math.max(0, Math.min(1, rawVolume));
   const delayTime = random() < 0.5 ? 0.18 : 0.36;
   return { instrument, octaveShift, volume, playbackMode, delayTime };
 }

@@ -101,7 +101,7 @@ async function fetchAllPages<T>(url: URL): Promise<T[]> {
   return allRows;
 }
 
-async function fetchWorldBankCountries(): Promise<Array<{ code: string; label: string }>> {
+export async function fetchWorldBankCountries(): Promise<Array<{ code: string; label: string }>> {
   try {
     const cached = window.localStorage.getItem(COUNTRIES_STORAGE_KEY);
     if (cached) {
@@ -128,6 +128,41 @@ async function fetchWorldBankCountries(): Promise<Array<{ code: string; label: s
     window.localStorage.setItem(COUNTRIES_STORAGE_KEY, JSON.stringify(countries));
   } catch {
     // ignore storage failures
+  }
+
+  return countries;
+}
+
+export async function fetchAvailableGeosForTopic(
+  topicId: string,
+  _filters: Record<string, string | string[]> = {},
+): Promise<Array<{ code: string; label: string }>> {
+  // Try to return only geos that actually contain data for this indicator.
+  const topic = WORLD_BANK_TOPIC_MAP[topicId] ?? toTopicDefinitionFromCode(topicId);
+  const indicatorCode = topic.datasetCode;
+  const availableGeoCodes = new Set<string>();
+
+  try {
+    const url = new URL(`${WORLD_BANK_BASE}/country/all/indicator/${indicatorCode}`);
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('per_page', '20000');
+
+    const rows = await fetchAllPages<WorldBankDataRow>(url);
+    rows.forEach((row) => {
+      if (row.value == null || Number.isNaN(Number(row.value))) return;
+      const code = (row.countryiso3code ?? row.country?.id ?? '').toUpperCase();
+      if (code) availableGeoCodes.add(code);
+    });
+  } catch {
+    // ignore and fallback to full catalog
+  }
+
+  const countries = await fetchWorldBankCountries();
+  if (availableGeoCodes.size > 0) {
+    const filtered = countries.filter((geo) => availableGeoCodes.has(geo.code));
+    if (filtered.length > 0) {
+      return filtered;
+    }
   }
 
   return countries;

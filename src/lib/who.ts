@@ -85,6 +85,70 @@ function normalizeSnapshotCountries(input: unknown): Array<{ code: string; label
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+export async function fetchAvailableGeosForTopic(
+  topicId: string,
+  effectiveFilters: Record<string, string | string[]> = {},
+): Promise<Array<{ code: string; label: string }>> {
+  const topic = WHO_TOPIC_MAP[topicId] ?? toTopicDefinitionFromCode(topicId);
+  const indicatorCode = topic.datasetCode;
+  const countries = await fetchWhoCountries();
+
+  if (!indicatorCode) {
+    return countries;
+  }
+
+  const filterClauses: string[] = ['NumericValue ne null'];
+  for (const [key, value] of Object.entries(effectiveFilters)) {
+    if (value == null) continue;
+
+    const formatValue = (item: string | number) => {
+      const s = String(item).replace(/'/g, "''").trim();
+      return `'${s}'`;
+    };
+
+    if (Array.isArray(value)) {
+      const values = value.map((v) => formatValue(v));
+      if (values.length > 0) {
+        filterClauses.push(`(${values.map((v) => `${key} eq ${v}`).join(' or ')})`);
+      }
+    } else {
+      filterClauses.push(`${key} eq ${formatValue(value)}`);
+    }
+  }
+
+  const url = createWhoUrl(`${WHO_REMOTE_BASE}/${indicatorCode}`);
+  url.searchParams.set('$format', 'json');
+  url.searchParams.set('$top', '1000');
+  if (filterClauses.length > 0) {
+    url.searchParams.set('$filter', filterClauses.join(' and '));
+  }
+
+  try {
+    const rows = await fetchWhoAllPages<WhoDataRow>(url);
+    const availableGeoCodes = new Set<string>();
+
+    for (const row of rows) {
+      const geo = (row.SpatialDim ?? '').toUpperCase().trim();
+      if (geo) availableGeoCodes.add(geo);
+    }
+
+    const filtered = countries.filter((geo) => availableGeoCodes.has(geo.code.toUpperCase()));
+    if (filtered.length > 0) {
+      return filtered;
+    }
+
+    // If no rows have data for any country, return empty instead of entire roster.
+    if (rows.length === 0) {
+      return [];
+    }
+  } catch {
+    // In case of non-network failure, fall back to full country list to keep UI responsive.
+    return countries;
+  }
+
+  return [];
+}
+
 async function fetchWhoSnapshotIndex(): Promise<WhoSnapshotIndex | null> {
   if (whoSnapshotIndexPromise) return whoSnapshotIndexPromise;
 
@@ -173,11 +237,13 @@ function createWhoUrl(path: string): URL {
 
 function toProxiedWhoUrl(url: string, proxyRoot: string): string {
   if (url.startsWith(WHO_REMOTE_BASE)) {
-    return `${proxyRoot}/api${url.slice(WHO_REMOTE_BASE.length)}`;
+    // For WHO proxy root `/api/who`, this yields `/api/who/WHOSIS_...` (without double `/api`).
+    return `${proxyRoot}${url.slice(WHO_REMOTE_BASE.length)}`;
   }
 
   if (url.startsWith('/api/')) {
-    return `${proxyRoot}${url}`;
+    // Allow generic API path rewrite via proxy root.
+    return `${proxyRoot}${url.slice('/api'.length)}`;
   }
 
   return url;
@@ -320,7 +386,7 @@ async function fetchWhoAllPages<T>(url: URL): Promise<T[]> {
   throw lastError ?? new Error('WHO request failed for all configured proxy roots.');
 }
 
-async function fetchWhoCountries(): Promise<Array<{ code: string; label: string }>> {
+export async function fetchWhoCountries(): Promise<Array<{ code: string; label: string }>> {
   try {
     const cached = window.localStorage.getItem(WHO_COUNTRIES_STORAGE_KEY);
     if (cached) {
@@ -676,6 +742,9 @@ export async function fetchWhoTopicData(
 
   const indicatorName = indicatorNameFromSnapshot ?? (await fetchIndicatorName(indicatorCode)) ?? topic.title;
 
+  const availableGeosFromSeries = series.map((entry) => ({ code: entry.id, label: entry.label }));
+  const availableGeos = availableGeosFromSeries.length > 0 ? availableGeosFromSeries : [];
+
   if (series.length === 0) {
     return {
       title: indicatorName,
@@ -685,7 +754,7 @@ export async function fetchWhoTopicData(
       sourceUrl: topic.sourceUrl,
       series: [],
       periods: [],
-      availableGeos: countries,
+      availableGeos,
       warning:
         'No WHO observations were returned for this indicator and selected geographies. Try another geography or indicator code.',
     };
@@ -705,7 +774,7 @@ export async function fetchWhoTopicData(
       sourceUrl: topic.sourceUrl,
       series: [],
       periods: [],
-      availableGeos: countries,
+      availableGeos,
       warning:
         `Dataset too large to process safely (series: ${series.length}, periods: ${periods.length}, points: ${totalPointCount}). ` +
         'Narrow geographies or choose a smaller indicator.',
@@ -774,7 +843,7 @@ export async function fetchWhoTopicData(
     sourceUrl: topic.sourceUrl,
     series: [...series, ...forecastSeries],
     periods,
-    availableGeos: countries,
+    availableGeos,
     forecastDisabledReason,
     warning: warningNote,
   };

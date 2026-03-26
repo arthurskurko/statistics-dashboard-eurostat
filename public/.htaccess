@@ -1,0 +1,15 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /statistics/
+
+  # WHO proxy first
+  RewriteRule ^api/who(/.*)?$ /statistics/api/who/index.php [L,QSA]
+
+  # Serve existing files directly
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+
+  # Redirect everything else to index.html
+  RewriteRule . /statistics/index.html [L]
+</IfModule>

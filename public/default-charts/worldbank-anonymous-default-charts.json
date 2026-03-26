@@ -1,0 +1,37 @@
+{
+  "userId": "anonymous",
+  "dashboard": "worldbank",
+  "topicIds": [
+    "EG.ELC.NUCL.ZS",
+    "EG.ELC.HYRO.ZS",
+    "SG.VAW.BURN.ZS",
+    "wb-unemployment"
+  ],
+  "chartDefaultsByTopicId": {
+    "EG.ELC.HYRO.ZS": {
+      "geoValues": [
+        "DNK",
+        "EE"
+      ]
+    },
+    "EG.ELC.NUCL.ZS": {
+      "geoValues": [
+        "DEU",
+        "IRN"
+      ]
+    },
+    "SG.VAW.BURN.ZS": {
+      "geoValues": [
+        "GHA",
+        "JOR"
+      ]
+    },
+    "wb-unemployment": {
+      "geoValues": [
+        "EST",
+        "PSE"
+      ]
+    }
+  },
+  "updatedAt": "2026-03-26T12:33:12Z"
+}

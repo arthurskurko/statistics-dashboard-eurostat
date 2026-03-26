@@ -136,6 +136,9 @@ export function buildChartOption({
     return acc;
   }, {});
 
+  // Ensure each ECharts series has a unique `id`, even when series labels can collide.
+  const seriesIdCounts = new Map<string, number>();
+
   const axisName = (axisIndex: number, label: string) => {
     const colors = seriesByAxis[axisIndex] ?? [];
     if (colors.length === 0) return label;
@@ -311,20 +314,48 @@ export function buildChartOption({
       // Convert point lookup from O(n) find-per-label to O(1) map lookup.
       // This significantly reduces render cost when many series are shown.
       const pointValueByLabel = new Map(baseSeries.points.map((point) => [point.label, point.value]));
+      const dataValues = xAxis.map((label) => pointValueByLabel.get(label) ?? null);
       const hasSinglePoint = baseSeries.points.length <= 1;
+      const nonNullIndices = xAxis
+        .map((label, index) => (pointValueByLabel.has(label) ? index : -1))
+        .filter((index) => index >= 0);
+      const isSparseObservedSeries =
+        nonNullIndices.length > 0 && nonNullIndices.length <= Math.max(6, Math.floor(xAxis.length * 0.35));
+      const shouldShowSymbols = hasSinglePoint || (!isForecast && isSparseObservedSeries);
+      const isolatedObservedIndexSet = new Set(
+        nonNullIndices.filter((index, idx, arr) => {
+          const prev = idx > 0 ? arr[idx - 1] : Number.NEGATIVE_INFINITY;
+          const next = idx < arr.length - 1 ? arr[idx + 1] : Number.POSITIVE_INFINITY;
+          return index - prev > 1 && next - index > 1;
+        }),
+      );
+      const hasIsolatedObservedPoints = isolatedObservedIndexSet.size > 0;
+
+      const baseSeriesId = `series-${baseSeries.id ?? baseSeries.label}`;
+      const existingCount = seriesIdCounts.get(baseSeriesId) ?? 0;
+      seriesIdCounts.set(baseSeriesId, existingCount + 1);
+      const uniqueSeriesId = existingCount === 0 ? baseSeriesId : `${baseSeriesId}-${existingCount}`;
 
       return {
-        id: `series-${baseSeries.label}`,
+        id: uniqueSeriesId,
         name: `${baseSeries.label}${filterSuffix}`,
         type: topic.chartVariant ?? 'line',
         smooth: !useLightweightRendering,
         // With exactly one observation there is no line segment; keep a marker visible.
-        showSymbol: hasSinglePoint,
-        symbolSize: hasSinglePoint ? 9 : 6,
+        showSymbol: shouldShowSymbols || hasIsolatedObservedPoints,
+        symbolSize:
+          !shouldShowSymbols && hasIsolatedObservedPoints
+            ? ((_: unknown, params: { dataIndex?: number }) => {
+                const dataIndex = params?.dataIndex ?? -1;
+                return isolatedObservedIndexSet.has(dataIndex) ? 7 : 0;
+              })
+            : hasSinglePoint
+              ? 9
+              : 6,
         emphasis: { focus: 'series' },
         areaStyle: !useLightweightRendering && !isForecast ? { opacity: 0.12 } : undefined,
         yAxisIndex,
-        data: xAxis.map((label) => pointValueByLabel.get(label) ?? null),
+        data: dataValues,
         itemStyle: {
           color: seriesColor,
         },

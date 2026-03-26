@@ -1,97 +1,83 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CatalogCodeSearch } from './CatalogCodeSearch';
-import { TOPIC_MAP, TOPICS } from '../features/dashboard/topicCatalog';
 import type { TopicDefinition } from '../features/dashboard/types';
+import { BackendStatusSummary } from './admin/BackendStatusSummary';
+import { DefaultChartsSection } from './admin/DefaultChartsSection';
+import { FetchStatsSection } from './admin/FetchStatsSection';
+import { readStats, type FetchStats } from './admin/adminStats';
 import { loadCatalogEntries, type CatalogEntry } from '../lib/catalog';
-
-export type FetchStats = Record<
-  string,
-  {
-    lastFetch: string;
-    lastForecast?: string;
-    forecastHorizon?: number;
-    forecastDisabledReason?: string;
-  }
->;
 
 export type AdminPanelProps = {
   defaultTopicIds: string[];
   setDefaultTopicIds: React.Dispatch<React.SetStateAction<string[]>>;
+  defaultChartGeoValuesByTopicId: Record<string, string[]>;
+  setDefaultChartGeoValuesByTopicId: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+  backendMode: 'checking' | 'go' | 'local';
+  backendStatusMessage: string;
+  backendBaseUrl: string;
+  onRefreshBackendStatus: () => void;
+  isRefreshingBackendStatus: boolean;
+  topics: TopicDefinition[];
+  topicMap: Record<string, TopicDefinition>;
+  defaultBuiltInTopicIds: string[];
+  catalogPath: string;
+  dashboard: string;
+  providerId: 'eurostat' | 'worldbank' | 'who' | 'openmeteo';
   onLoadDefaults: () => void;
   onClearDashboard: () => void;
   onClose: () => void;
 };
 
-const DEFAULT_TOPIC_IDS = ['population', 'unemployment-rate', 'inflation'];
-
-const STATS_STORAGE_KEY = 'estonia-statistics-dashboard.stats';
-
-function formatRelative(dateIso: string | undefined): string {
-  if (!dateIso) return '—';
-  const date = new Date(dateIso);
-  if (Number.isNaN(date.getTime())) return '—';
-
-  const deltaSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (deltaSeconds < 60) return `${deltaSeconds}s ago`;
-  const deltaMinutes = Math.floor(deltaSeconds / 60);
-  if (deltaMinutes < 60) return `${deltaMinutes}m ago`;
-  const deltaHours = Math.floor(deltaMinutes / 60);
-  if (deltaHours < 24) return `${deltaHours}h ago`;
-  const deltaDays = Math.floor(deltaHours / 24);
-  return `${deltaDays}d ago`;
-}
-
-function readStats(): FetchStats {
-  try {
-    const raw = window.localStorage.getItem(STATS_STORAGE_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) as FetchStats;
-  } catch {
-    return {};
-  }
-}
-
 export function AdminPanel({
   defaultTopicIds,
   setDefaultTopicIds,
+  defaultChartGeoValuesByTopicId,
+  setDefaultChartGeoValuesByTopicId,
+  backendMode,
+  backendStatusMessage,
+  backendBaseUrl,
+  onRefreshBackendStatus,
+  isRefreshingBackendStatus,
+  topics,
+  topicMap,
+  defaultBuiltInTopicIds,
+  catalogPath,
+  dashboard: dashboardProp,
+  providerId,
   onLoadDefaults,
   onClearDashboard,
   onClose,
 }: AdminPanelProps) {
   const [stats, setStats] = useState<FetchStats>(() => readStats());
-  const [selectedTopicId, setSelectedTopicId] = useState(defaultTopicIds[0] ?? TOPICS[0]?.id ?? '');
+  const [selectedTopicId, setSelectedTopicId] = useState(defaultTopicIds[0] ?? topics[0]?.id ?? '');
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [customCode, setCustomCode] = useState('');
-  const suggestions = useMemo(
-    () =>
-      catalog
-        .filter((entry) => {
-          const search = customCode.trim().toLowerCase();
-          if (!search) return false;
-          return entry.code.toLowerCase().includes(search) || entry.title.toLowerCase().includes(search);
-        })
-        .slice(0, 10),
-    [catalog, customCode],
-  );
 
-  const defaultTopics = useMemo(() => {
-    return defaultTopicIds
-      .map((id) =>
-        TOPIC_MAP[id] ?? {
-          id,
-          title: id,
-          description: id,
-          datasetCode: id,
-          filters: {},
-          sourceUrl: '',
-          pubmed: {
-            availability: 'unchecked',
-            searchTerm: id,
-          },
-        },
+  const enrichedTopicMap = useMemo(() => {
+    const result: Record<string, TopicDefinition> = { ...topicMap };
+    for (const topic of Object.values(topicMap)) {
+      if (topic.datasetCode && !(topic.datasetCode in result)) {
+        result[topic.datasetCode] = topic;
+      }
+    }
+    return result;
+  }, [topicMap]);
+
+  const suggestions = useMemo(() => {
+    const search = customCode.trim().toLowerCase();
+    if (!search) return [];
+
+    const seen = new Set<string>();
+    return catalog
+      .filter((entry) =>
+        entry.code.toLowerCase().includes(search) || entry.title.toLowerCase().includes(search),
       )
-      .filter(Boolean) as TopicDefinition[];
-  }, [defaultTopicIds]);
+      .filter((entry) => {
+        if (seen.has(entry.code)) return false;
+        seen.add(entry.code);
+        return true;
+      })
+      .slice(0, 10);
+  }, [catalog, customCode]);
 
   useEffect(() => {
     const listener = () => setStats(readStats());
@@ -100,12 +86,20 @@ export function AdminPanel({
   }, []);
 
   useEffect(() => {
-    loadCatalogEntries('catalog.json')
+    loadCatalogEntries(catalogPath)
       .then((entries) => setCatalog(entries))
       .catch(() => {
         /* ignore */
       });
-  }, []);
+  }, [catalogPath]);
+
+  useEffect(() => {
+    if (selectedTopicId && topicMap[selectedTopicId]) {
+      return;
+    }
+
+    setSelectedTopicId(defaultTopicIds[0] ?? topics[0]?.id ?? '');
+  }, [defaultTopicIds, selectedTopicId, topicMap, topics]);
 
   const handleAddDefault = () => {
     if (!selectedTopicId) return;
@@ -114,29 +108,220 @@ export function AdminPanel({
 
   const handleAddDefaultByCode = (code: string) => {
     if (!code) return;
-    setDefaultTopicIds((existing) => Array.from(new Set([...existing, code])));
+    const normalized = normalizeTopicId(code.trim());
+    if (!normalized) return;
+    setDefaultTopicIds((existing) => Array.from(new Set([...existing, normalized])));
   };
 
   const handleRemoveDefault = (topicId: string) => {
-    setDefaultTopicIds((existing) => existing.filter((id) => id !== topicId));
+    const normalized = normalizeTopicId(topicId);
+    setDefaultTopicIds((existing) => existing.filter((id) => id !== topicId && id !== normalized));
+    setDefaultChartGeoValuesByTopicId((existing) => {
+      const next = { ...existing };
+      delete next[topicId];
+      if (normalized !== topicId) {
+        delete next[normalized];
+      }
+      return next;
+    });
   };
 
   const handleResetDefaults = () => {
-    setDefaultTopicIds(DEFAULT_TOPIC_IDS);
+    setDefaultTopicIds(defaultBuiltInTopicIds);
+    setDefaultChartGeoValuesByTopicId({});
   };
 
-  const topicRows = TOPICS.map((topic) => {
-    const stat = stats[topic.id];
-    return (
-      <tr key={topic.id} className="border-b border-white/10">
-        <td className="px-3 py-2 text-left text-xs text-slate-100">{topic.title}</td>
-        <td className="px-3 py-2 text-right text-xs text-slate-200">{formatRelative(stat?.lastFetch)}</td>
-        <td className="px-3 py-2 text-right text-xs text-slate-200">{formatRelative(stat?.lastForecast)}</td>
-        <td className="px-3 py-2 text-right text-xs text-slate-200">{stat?.forecastHorizon ?? '—'}</td>
-        <td className="px-3 py-2 text-xs text-slate-300">{stat?.forecastDisabledReason ?? '—'}</td>
-      </tr>
-    );
-  });
+  const getFallbackTopicId = (topicId: string): string => {
+    // For OpenMeteo, allow alternate dataset code -> canonical id mapping.
+    if (topicMap[topicId]) {
+      return topicId;
+    }
+    const mapping = Object.values(topicMap).find((topic) => topic.datasetCode === topicId);
+    if (mapping) {
+      return mapping.id;
+    }
+    return topicId;
+  };
+
+  const getDefaultGeos = (topicId: string): string[] => {
+    const explicit = defaultChartGeoValuesByTopicId[topicId];
+    if (Array.isArray(explicit) && explicit.length > 0) {
+      return explicit;
+    }
+
+    const fallbackId = getFallbackTopicId(topicId);
+    const fallbackExplicit = defaultChartGeoValuesByTopicId[fallbackId];
+    if (Array.isArray(fallbackExplicit) && fallbackExplicit.length > 0) {
+      return fallbackExplicit;
+    }
+
+    const directTopic = topicMap[topicId] ?? Object.values(topicMap).find((topic) => topic.datasetCode === topicId);
+    if (directTopic && Array.isArray(directTopic.geoValues) && directTopic.geoValues.length > 0) {
+      return directTopic.geoValues;
+    }
+
+    const fallbackTopic = topicMap[fallbackId] ?? Object.values(topicMap).find((topic) => topic.datasetCode === fallbackId);
+    if (fallbackTopic && Array.isArray(fallbackTopic.geoValues) && fallbackTopic.geoValues.length > 0) {
+      return fallbackTopic.geoValues;
+    }
+
+    return [];
+  };
+
+  const handleExportDefaults = async () => {
+    try {
+      const userId = 'anonymous';
+      const dashboard = dashboardProp;
+      if (backendMode === 'go') {
+        const res = await fetch(`${backendBaseUrl}/api/default-charts/export`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, dashboard }),
+        });
+        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+        const result = await res.json();
+        alert(`Exported defaults to ${result.path || 'server export location'}`);
+        return;
+      }
+
+      // fallback: export from local state
+      const chartDefaultsByTopicId: Record<string, string[]> = {};
+      for (const topicId of defaultTopicIds) {
+        const exportTopicId = getFallbackTopicId(topicId);
+        chartDefaultsByTopicId[exportTopicId] = getDefaultGeos(topicId);
+      }
+
+      const payload = {
+        userId: 'anonymous',
+        dashboard: dashboardProp,
+        topicIds: defaultTopicIds,
+        chartDefaultsByTopicId,
+        updatedAt: new Date().toISOString(),
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${dashboardProp}-anonymous-default-charts.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+      alert('Failed to export defaults');
+    }
+  };
+
+  function normalizeTopicId(rawTopicId: string): string {
+    if (topicMap[rawTopicId]) {
+      return rawTopicId;
+    }
+
+    const mapped = Object.values(topicMap).find((topic) => topic.datasetCode === rawTopicId);
+    if (mapped) {
+      return mapped.id;
+    }
+
+    const catalogMatch = catalog.find((entry) => entry.code === rawTopicId);
+    if (catalogMatch) {
+      return catalogMatch.code;
+    }
+
+    return rawTopicId;
+  }
+
+  const handleImportDefaults = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result ?? '');
+        const parsed = JSON.parse(text) as { topicIds?: unknown; chartDefaultsByTopicId?: unknown };
+        if (!Array.isArray(parsed.topicIds)) throw new Error('Invalid file: missing topicIds array');
+
+        const topicIds = parsed.topicIds
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
+          .filter((item): item is string => item.length > 0);
+
+        const normalizedTopicIds: string[] = Array.from(new Set(topicIds.map((id) => normalizeTopicId(id))));
+
+        const chartDefaultsRaw =
+          parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object'
+            ? (parsed.chartDefaultsByTopicId as Record<string, unknown>)
+            : {};
+
+        const chartDefaults: Record<string, string[]> = {};
+
+        for (const rawTopicId of topicIds) {
+          const topicId = normalizeTopicId(rawTopicId);
+          const item = chartDefaultsRaw[topicId] ?? chartDefaultsRaw[rawTopicId];
+          if (!item) continue;
+
+          const values = Array.isArray(item)
+            ? item.filter((entry): entry is string => typeof entry === 'string')
+            : Array.isArray((item as any).geoValues)
+            ? ((item as any).geoValues as unknown[]).filter((entry): entry is string => typeof entry === 'string')
+            : [];
+
+          if (values.length === 0) continue;
+
+          const merged = Array.from(new Set([...(chartDefaults[topicId] ?? []), ...values]));
+          chartDefaults[topicId] = merged;
+
+          if (topicId !== rawTopicId) {
+            chartDefaults[rawTopicId] = merged;
+          }
+        }
+
+        // Ensure each topicId has some array, even empty.
+        normalizedTopicIds.forEach((topicId) => {
+          if (!chartDefaults[topicId]) {
+            chartDefaults[topicId] = [];
+          }
+        });
+
+        setDefaultTopicIds(normalizedTopicIds);
+        setDefaultChartGeoValuesByTopicId(chartDefaults);
+        alert('Imported defaults into local storage');
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+        alert('Failed to import defaults: invalid file');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleGeoValuesTextChange = (topicId: string, text: string) => {
+    const geoValues = text
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index)
+      .slice(0, 12);
+
+    const normalizedTopicId = normalizeTopicId(topicId);
+
+    setDefaultChartGeoValuesByTopicId((existing) => {
+      const next = { ...existing };
+
+      if (geoValues.length === 0) {
+        delete next[topicId];
+        if (normalizedTopicId !== topicId) {
+          delete next[normalizedTopicId];
+        }
+        return next;
+      }
+
+      next[topicId] = geoValues;
+      if (normalizedTopicId !== topicId) {
+        next[normalizedTopicId] = geoValues;
+      }
+
+      return next;
+    });
+  };
 
   return (
     <div className="batcave-page min-h-screen px-4 py-6 sm:px-6 lg:px-8">
@@ -145,6 +330,13 @@ export function AdminPanel({
           <div>
             <div className="text-sm font-semibold text-white">Admin</div>
             <div className="text-xs text-slate-300">Manage default charts and view dataset fetch stats.</div>
+            <BackendStatusSummary
+              backendMode={backendMode}
+              backendStatusMessage={backendStatusMessage}
+              backendBaseUrl={backendBaseUrl}
+              onRefreshBackendStatus={onRefreshBackendStatus}
+              isRefreshingBackendStatus={isRefreshingBackendStatus}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -171,121 +363,29 @@ export function AdminPanel({
           </p>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl bg-white/5 p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-300">Current defaults</h3>
-              {defaultTopics.length === 0 ? (
-                <p className="mt-2 text-xs text-slate-200">No default charts configured.</p>
-              ) : (
-                <ul className="mt-2 space-y-2">
-                  {defaultTopics.map((topic) => (
-                    <li key={topic.id} className="flex items-center justify-between gap-2 rounded-xl bg-white/5 px-3 py-2">
-                      <span className="text-xs text-slate-200">{topic.title}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveDefault(topic.id)}
-                        className="text-xs text-rose-200 hover:text-rose-100"
-                      >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <DefaultChartsSection
+              defaultTopicIds={defaultTopicIds}
+              defaultChartGeoValuesByTopicId={defaultChartGeoValuesByTopicId}
+              topics={topics}
+              topicMap={enrichedTopicMap}
+              catalog={catalog}
+              providerId={providerId}
+              selectedTopicId={selectedTopicId}
+              onSelectedTopicIdChange={setSelectedTopicId}
+              customCode={customCode}
+              onCustomCodeChange={setCustomCode}
+              suggestions={suggestions}
+              onAddDefault={handleAddDefault}
+              onAddDefaultByCode={handleAddDefaultByCode}
+              onRemoveDefault={handleRemoveDefault}
+              onGeoValuesTextChange={handleGeoValuesTextChange}
+              onResetDefaults={handleResetDefaults}
+              onLoadDefaults={onLoadDefaults}
+              onExportDefaults={handleExportDefaults}
+              onImportDefaults={handleImportDefaults}
+            />
 
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <select
-                  value={selectedTopicId}
-                  onChange={(event) => setSelectedTopicId(event.target.value)}
-                  className="bat-input w-full rounded-2xl px-3 py-2 text-sm text-white outline-none"
-                >
-                  {TOPICS.map((topic) => (
-                    <option key={topic.id} value={topic.id}>
-                      {topic.title}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleAddDefault}
-                  className="bat-btn rounded-2xl px-3 py-2 text-xs font-medium"
-                >
-                  Add
-                </button>
-              </div>
-
-              <div className="mt-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-300">
-                  Add from catalog
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <CatalogCodeSearch
-                    customCode={customCode}
-                    onCustomCodeChange={setCustomCode}
-                    suggestions={suggestions}
-                    addButtonClassName="bat-btn rounded-2xl px-3 py-2 text-xs font-medium"
-                    onSuggestionSelect={(code) => {
-                      setCustomCode(code);
-                      setSelectedTopicId(code);
-                      handleAddDefaultByCode(code);
-                    }}
-                    onAddByCode={(code) => {
-                      setSelectedTopicId(code);
-                      handleAddDefaultByCode(code);
-                      setCustomCode('');
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleResetDefaults}
-                  className="bat-btn rounded-2xl px-3 py-2 text-xs font-medium"
-                >
-                  Restore built-in defaults
-                </button>
-                <button
-                  type="button"
-                  onClick={onLoadDefaults}
-                  className="bat-btn rounded-2xl px-3 py-2 text-xs font-medium"
-                >
-                  Load defaults now
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-white/5 p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-300">Fetch stats</h3>
-              <p className="mt-1 text-xs text-slate-200">
-                Last time data was fetched and when a forecast was generated.
-              </p>
-
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="text-slate-400">
-                      <th className="px-3 py-2">Topic</th>
-                      <th className="px-3 py-2 text-right">Last fetch</th>
-                      <th className="px-3 py-2 text-right">Last forecast</th>
-                      <th className="px-3 py-2 text-right">Horizon</th>
-                      <th className="px-3 py-2">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>{topicRows}</tbody>
-                </table>
-              </div>
-
-              <div className="mt-3 text-right">
-                <button
-                  type="button"
-                  onClick={() => setStats(readStats())}
-                  className="bat-btn rounded-2xl px-3 py-2 text-xs font-medium"
-                >
-                  Refresh stats
-                </button>
-              </div>
-            </div>
+            <FetchStatsSection stats={stats} topics={topics} onRefresh={() => setStats(readStats())} />
           </div>
         </section>
       </div>

@@ -2,3 +2,14 @@ node_modules
 .vite
 dist
 .DS_Store
+backend/data/*.db
+backend/data/*.db-*
+backend/bin/
+
+# local diagnostics/logs
+debug.log
+src/components/admin/debug.log
+src/components/chart-card/debug.log
+src/components/debug.log
+src/debug.log
+src/lib/debug.log
