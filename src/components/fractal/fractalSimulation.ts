@@ -16,6 +16,9 @@ type PendingSeed = {
 const FRACTAL_CENTER: Vec2 = { x: 88, y: 88 };
 const FRACTAL_MAX_RADIUS = 84;
 
+// Faster decay multiplier for main fractal tree branches (higher = quicker fade)
+const FRACTAL_FADE_MULTIPLIER = 1.7;
+
 function normalizeValues(values: number[]): number[] {
   if (values.length === 0) return [];
   const max = Math.max(...values.map((value) => Math.abs(value)), 0.000001);
@@ -112,7 +115,7 @@ function createFractalBranches(seedPoint: SeedPoint, index: number, total: numbe
     branches.push({
       points,
       life: 1,
-      decay: 0.013 + random() * 0.01,
+      decay: (0.013 + random() * 0.01) * FRACTAL_FADE_MULTIPLIER,
       width,
       tipSize: 1.2 + intensity * 1.35,
       colorRgb: parseHexColor(seedPoint.color),
@@ -214,7 +217,7 @@ export class FractalSimulation {
   }
 
   ageAndCompact(fadeFactor: number, minLife = 0.02): void {
-    const smoothedFadeFactor = Math.max(0.65, Math.min(1.25, fadeFactor));
+    const smoothedFadeFactor = Math.max(0.85, Math.min(1.8, fadeFactor * 1.2));
     let writeIndex = 0;
     for (let readIndex = 0; readIndex < this.branches.length; readIndex += 1) {
       const branch = this.branches[readIndex];
