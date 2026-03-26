@@ -67,13 +67,6 @@ export default function OpenMeteoApp() {
     document.documentElement.setAttribute('data-theme', themeId);
   }, [themeId]);
 
-  useEffect(() => {
-    if (shouldSeedDefaultsRef.current && cards.length === 0 && defaultTopicIds.length > 0) {
-      setCards(defaultTopicIds.map((topicId) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId])));
-      shouldSeedDefaultsRef.current = false;
-    }
-  }, [cards.length, defaultTopicIds, defaultChartGeoValuesByTopicId, setCards]);
-
   function addCard() {
     setCards((currentCards) => [createCard(selectedTopicId, defaultChartGeoValuesByTopicId[selectedTopicId]), ...currentCards]);
   }
@@ -86,12 +79,12 @@ export default function OpenMeteoApp() {
     setCards([]);
   }
 
-  function addDefaultCards() {
+  const addDefaultCards = useCallback(() => {
     setCards((currentCards) => {
       if (currentCards.length > 0) return currentCards;
       return [...defaultTopicIds.map((topicId) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId]))];
     });
-  }
+  }, [defaultTopicIds, defaultChartGeoValuesByTopicId, setCards]);
 
   function normalizeTopicId(rawTopicId: string): string {
     if (rawTopicId in OPEN_METEO_TOPIC_MAP) {
@@ -106,7 +99,7 @@ export default function OpenMeteoApp() {
     return rawTopicId;
   }
 
-  async function loadDefaultsFromFileAndAddCards() {
+  const loadDefaultsFromFileAndAddCards = useCallback(async () => {
     const dashboard = 'openmeteo';
     const userId = 'anonymous';
     const candidates = createDefaultChartsCandidateUrls(basePath, dashboard, userId);
@@ -146,7 +139,23 @@ export default function OpenMeteoApp() {
     }
 
     addDefaultCards();
-  }
+  }, [addDefaultCards, basePath, normalizeTopicId, setCards, setDefaultChartGeoValuesByTopicId, setDefaultTopicIds]);
+
+  useEffect(() => {
+    if (!shouldSeedDefaultsRef.current || cards.length > 0 || isCheckingBackend) {
+      return;
+    }
+
+    const seedDefaults = async () => {
+      try {
+        await loadDefaultsFromFileAndAddCards();
+      } finally {
+        shouldSeedDefaultsRef.current = false;
+      }
+    };
+
+    void seedDefaults();
+  }, [cards.length, isCheckingBackend, loadDefaultsFromFileAndAddCards]);
 
   const removeCard = useCallback((cardId: string) => {
     setCards((currentCards) => currentCards.filter((entry) => entry.id !== cardId));

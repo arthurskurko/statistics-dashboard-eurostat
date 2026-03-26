@@ -65,21 +65,6 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', themeId);
   }, [themeId]);
 
-  useEffect(() => {
-    // Seed defaults only for fresh browser caches without existing dashboard state.
-    // Wait for backend status to settle so we use authoritative defaults when available.
-    if (!shouldSeedDefaultsRef.current || cards.length > 0 || isCheckingBackend) {
-      return;
-    }
-
-    if (defaultTopicIds.length === 0) {
-      return;
-    }
-
-    setCards(defaultTopicIds.map((topicId: string) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId])));
-    shouldSeedDefaultsRef.current = false;
-  }, [cards.length, defaultTopicIds, defaultChartGeoValuesByTopicId, isCheckingBackend, setCards]);
-
   function addCard() {
     setCards((currentCards) => [createCard(selectedTopicId, defaultChartGeoValuesByTopicId[selectedTopicId]), ...currentCards]);
   }
@@ -88,14 +73,14 @@ export default function App() {
     setCards((currentCards) => [createCard(topicId, defaultChartGeoValuesByTopicId[topicId]), ...currentCards]);
   }
 
-  function addDefaultCards() {
+  const addDefaultCards = useCallback(() => {
     setCards((currentCards) => {
       if (currentCards.length > 0) return currentCards;
       return [...defaultTopicIds.map((topicId: string) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId]))];
     });
-  }
+  }, [defaultTopicIds, defaultChartGeoValuesByTopicId, setCards]);
 
-  async function loadDefaultsFromFileAndAddCards() {
+  const loadDefaultsFromFileAndAddCards = useCallback(async () => {
     const dashboard = 'eurostat';
     const userId = 'anonymous';
     const candidates = createDefaultChartsCandidateUrls(basePath, dashboard, userId);
@@ -121,7 +106,23 @@ export default function App() {
     }
 
     addDefaultCards();
-  }
+  }, [addDefaultCards, basePath, setCards, setDefaultChartGeoValuesByTopicId, setDefaultTopicIds]);
+
+  useEffect(() => {
+    if (!shouldSeedDefaultsRef.current || cards.length > 0 || isCheckingBackend) {
+      return;
+    }
+
+    const seedDefaults = async () => {
+      try {
+        await loadDefaultsFromFileAndAddCards();
+      } finally {
+        shouldSeedDefaultsRef.current = false;
+      }
+    };
+
+    void seedDefaults();
+  }, [cards.length, isCheckingBackend, loadDefaultsFromFileAndAddCards]);
 
   const removeCard = useCallback((cardId: string) => {
     setCards((currentCards) => currentCards.filter((card) => card.id !== cardId));

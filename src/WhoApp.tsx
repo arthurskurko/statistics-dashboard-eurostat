@@ -67,13 +67,6 @@ export default function WhoApp() {
     document.documentElement.setAttribute('data-theme', themeId);
   }, [themeId]);
 
-  useEffect(() => {
-    if (shouldSeedDefaultsRef.current && cards.length === 0 && defaultTopicIds.length > 0) {
-      setCards(defaultTopicIds.map((topicId) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId])));
-      shouldSeedDefaultsRef.current = false;
-    }
-  }, [cards.length, defaultTopicIds, defaultChartGeoValuesByTopicId, setCards]);
-
   function addCard() {
     setCards((currentCards) => [createCard(selectedTopicId, defaultChartGeoValuesByTopicId[selectedTopicId]), ...currentCards]);
   }
@@ -86,14 +79,14 @@ export default function WhoApp() {
     setCards([]);
   }
 
-  function addDefaultCards() {
+  const addDefaultCards = useCallback(() => {
     setCards((currentCards) => {
       if (currentCards.length > 0) return currentCards;
       return [...defaultTopicIds.map((topicId) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId]))];
     });
-  }
+  }, [defaultTopicIds, defaultChartGeoValuesByTopicId, setCards]);
 
-  async function loadDefaultsFromFileAndAddCards() {
+  const loadDefaultsFromFileAndAddCards = useCallback(async () => {
     const dashboard = 'who';
     const userId = 'anonymous';
     const candidates = createDefaultChartsCandidateUrls(basePath, dashboard, userId);
@@ -125,7 +118,23 @@ export default function WhoApp() {
     }
 
     addDefaultCards();
-  }
+  }, [addDefaultCards, basePath, setCards, setDefaultChartGeoValuesByTopicId, setDefaultTopicIds]);
+
+  useEffect(() => {
+    if (!shouldSeedDefaultsRef.current || cards.length > 0 || isCheckingBackend) {
+      return;
+    }
+
+    const seedDefaults = async () => {
+      try {
+        await loadDefaultsFromFileAndAddCards();
+      } finally {
+        shouldSeedDefaultsRef.current = false;
+      }
+    };
+
+    void seedDefaults();
+  }, [cards.length, isCheckingBackend, loadDefaultsFromFileAndAddCards]);
 
   const removeCard = useCallback((cardId: string) => {
     setCards((currentCards) => currentCards.filter((entry) => entry.id !== cardId));
