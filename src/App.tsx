@@ -67,11 +67,18 @@ export default function App() {
 
   useEffect(() => {
     // Seed defaults only for fresh browser caches without existing dashboard state.
-    if (shouldSeedDefaultsRef.current && cards.length === 0 && defaultTopicIds.length > 0) {
-      setCards(defaultTopicIds.map((topicId: string) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId])));
-      shouldSeedDefaultsRef.current = false;
+    // Wait for backend status to settle so we use authoritative defaults when available.
+    if (!shouldSeedDefaultsRef.current || cards.length > 0 || isCheckingBackend) {
+      return;
     }
-  }, [cards.length, defaultTopicIds, setCards]);
+
+    if (defaultTopicIds.length === 0) {
+      return;
+    }
+
+    setCards(defaultTopicIds.map((topicId: string) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId])));
+    shouldSeedDefaultsRef.current = false;
+  }, [cards.length, defaultTopicIds, defaultChartGeoValuesByTopicId, isCheckingBackend, setCards]);
 
   function addCard() {
     setCards((currentCards) => [createCard(selectedTopicId, defaultChartGeoValuesByTopicId[selectedTopicId]), ...currentCards]);
@@ -97,15 +104,18 @@ export default function App() {
     if (parsed) {
       const mapped: Record<string, string[]> = {};
       if (parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object') {
-        for (const [topicId, tpl] of Object.entries(parsed.chartDefaultsByTopicId)) {
-          const geo = (tpl as any)?.geoValues;
-          if (Array.isArray(geo) && geo.length > 0) {
-            mapped[topicId] = geo.filter((v: unknown): v is string => typeof v === 'string');
+        for (const topicId of parsed.topicIds ?? []) {
+          const tpl = parsed.chartDefaultsByTopicId[topicId];
+          if (Array.isArray(tpl)) {
+            mapped[topicId] = tpl.filter((v: unknown): v is string => typeof v === 'string');
+            continue;
           }
+          const geo = (tpl as any)?.geoValues;
+          mapped[topicId] = Array.isArray(geo) ? geo.filter((v: unknown): v is string => typeof v === 'string') : [];
         }
-        setDefaultChartGeoValuesByTopicId(mapped);
       }
-
+      setDefaultChartGeoValuesByTopicId(mapped);
+      setDefaultTopicIds(parsed.topicIds);
       setCards(parsed.topicIds.map((topicId: string) => createCard(topicId, mapped[topicId])));
       return;
     }

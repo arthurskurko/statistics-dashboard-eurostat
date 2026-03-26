@@ -18,7 +18,7 @@ const DEFAULT_CHART_TOPIC_IDS = ['who-life-expectancy', 'who-obesity-adult', 'wh
 const WHO_DEFAULT_GEOS = ['EST', 'EUR'];
 const WHO_SOURCE_URL_BUILDER = (datasetCode: string) => `https://ghoapi.azureedge.net/api/${datasetCode}`;
 
-function createCard(topicId: string): DashboardCard {
+function createCard(topicId: string, defaultGeoValues?: string[]): DashboardCard {
   const id =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
@@ -28,6 +28,7 @@ function createCard(topicId: string): DashboardCard {
     id,
     topicId,
     createdAt: Date.now(),
+    defaultGeoValues,
   };
 }
 
@@ -68,17 +69,17 @@ export default function WhoApp() {
 
   useEffect(() => {
     if (shouldSeedDefaultsRef.current && cards.length === 0 && defaultTopicIds.length > 0) {
-      setCards(defaultTopicIds.map((topicId) => createCard(topicId)));
+      setCards(defaultTopicIds.map((topicId) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId])));
       shouldSeedDefaultsRef.current = false;
     }
-  }, [cards.length, defaultTopicIds, setCards]);
+  }, [cards.length, defaultTopicIds, defaultChartGeoValuesByTopicId, setCards]);
 
   function addCard() {
-    setCards((currentCards) => [createCard(selectedTopicId), ...currentCards]);
+    setCards((currentCards) => [createCard(selectedTopicId, defaultChartGeoValuesByTopicId[selectedTopicId]), ...currentCards]);
   }
 
   function addCardForTopicId(topicId: string) {
-    setCards((currentCards) => [createCard(topicId), ...currentCards]);
+    setCards((currentCards) => [createCard(topicId, defaultChartGeoValuesByTopicId[topicId]), ...currentCards]);
   }
 
   function clearCards() {
@@ -88,7 +89,7 @@ export default function WhoApp() {
   function addDefaultCards() {
     setCards((currentCards) => {
       if (currentCards.length > 0) return currentCards;
-      return [...defaultTopicIds.map((topicId) => createCard(topicId))];
+      return [...defaultTopicIds.map((topicId) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId]))];
     });
   }
 
@@ -99,10 +100,27 @@ export default function WhoApp() {
 
     const parsed = await loadDefaultChartsFromCandidates(candidates, dashboard);
     if (parsed) {
+      const mapped: Record<string, string[]> = {};
       if (parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object') {
-        setDefaultChartGeoValuesByTopicId(parsed.chartDefaultsByTopicId as Record<string, string[]>);
+        for (const topicId of parsed.topicIds ?? []) {
+          const tpl = parsed.chartDefaultsByTopicId[topicId];
+          if (Array.isArray(tpl)) {
+            mapped[topicId] = tpl.filter((v: unknown): v is string => typeof v === 'string');
+            continue;
+          }
+          const geo = (tpl as any)?.geoValues;
+          mapped[topicId] = Array.isArray(geo)
+            ? geo.filter((v: unknown): v is string => typeof v === 'string')
+            : [];
+        }
+      } else {
+        for (const topicId of parsed.topicIds ?? []) {
+          mapped[topicId] = [];
+        }
       }
-      setCards(parsed.topicIds.map((topicId: string) => createCard(topicId)));
+      setDefaultChartGeoValuesByTopicId(mapped);
+      setDefaultTopicIds(parsed.topicIds);
+      setCards(parsed.topicIds.map((topicId: string) => createCard(topicId, mapped[topicId])));
       return;
     }
 
@@ -188,7 +206,7 @@ export default function WhoApp() {
           topicMap={WHO_TOPIC_MAP}
           fetchTopicDataFn={fetchWhoTopicData}
           fetchAvailableGeosFn={fetchWhoAvailableGeosForTopic}
-          defaultGeoValues={WHO_DEFAULT_GEOS}
+          defaultGeoValues={card.defaultGeoValues && card.defaultGeoValues.length > 0 ? card.defaultGeoValues : WHO_DEFAULT_GEOS}
           fallbackDescriptionPrefix="WHO indicator"
           sourceUrlBuilder={WHO_SOURCE_URL_BUILDER}
           sourceLinkLabel="WHO indicator"

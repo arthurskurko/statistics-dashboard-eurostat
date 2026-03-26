@@ -88,8 +88,14 @@ export function useDefaultChartStorage({
       if (payload.chartDefaultsByTopicId && typeof payload.chartDefaultsByTopicId === 'object') {
         const mapped: Record<string, string[]> = {};
         for (const [topicId, tpl] of Object.entries(payload.chartDefaultsByTopicId)) {
-          if (tpl && Array.isArray(tpl.geoValues) && tpl.geoValues.length > 0) {
-            mapped[topicId] = tpl.geoValues.filter((v): v is string => typeof v === 'string');
+          if (Array.isArray(tpl)) {
+            mapped[topicId] = tpl.filter((v): v is string => typeof v === 'string');
+            continue;
+          }
+
+          const geo = tpl && typeof tpl === 'object' ? (tpl as any).geoValues : undefined;
+          if (Array.isArray(geo)) {
+            mapped[topicId] = geo.filter((v): v is string => typeof v === 'string');
           }
         }
         setDefaultChartGeoValuesByTopicId(() => mapped);

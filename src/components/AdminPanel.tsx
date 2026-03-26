@@ -108,15 +108,20 @@ export function AdminPanel({
 
   const handleAddDefaultByCode = (code: string) => {
     if (!code) return;
-    setDefaultTopicIds((existing) => Array.from(new Set([...existing, code])));
+    const normalized = normalizeTopicId(code.trim());
+    if (!normalized) return;
+    setDefaultTopicIds((existing) => Array.from(new Set([...existing, normalized])));
   };
 
   const handleRemoveDefault = (topicId: string) => {
-    setDefaultTopicIds((existing) => existing.filter((id) => id !== topicId));
+    const normalized = normalizeTopicId(topicId);
+    setDefaultTopicIds((existing) => existing.filter((id) => id !== topicId && id !== normalized));
     setDefaultChartGeoValuesByTopicId((existing) => {
-      if (!(topicId in existing)) return existing;
       const next = { ...existing };
       delete next[topicId];
+      if (normalized !== topicId) {
+        delete next[normalized];
+      }
       return next;
     });
   };
@@ -124,6 +129,43 @@ export function AdminPanel({
   const handleResetDefaults = () => {
     setDefaultTopicIds(defaultBuiltInTopicIds);
     setDefaultChartGeoValuesByTopicId({});
+  };
+
+  const getFallbackTopicId = (topicId: string): string => {
+    // For OpenMeteo, allow alternate dataset code -> canonical id mapping.
+    if (topicMap[topicId]) {
+      return topicId;
+    }
+    const mapping = Object.values(topicMap).find((topic) => topic.datasetCode === topicId);
+    if (mapping) {
+      return mapping.id;
+    }
+    return topicId;
+  };
+
+  const getDefaultGeos = (topicId: string): string[] => {
+    const explicit = defaultChartGeoValuesByTopicId[topicId];
+    if (Array.isArray(explicit) && explicit.length > 0) {
+      return explicit;
+    }
+
+    const fallbackId = getFallbackTopicId(topicId);
+    const fallbackExplicit = defaultChartGeoValuesByTopicId[fallbackId];
+    if (Array.isArray(fallbackExplicit) && fallbackExplicit.length > 0) {
+      return fallbackExplicit;
+    }
+
+    const directTopic = topicMap[topicId] ?? Object.values(topicMap).find((topic) => topic.datasetCode === topicId);
+    if (directTopic && Array.isArray(directTopic.geoValues) && directTopic.geoValues.length > 0) {
+      return directTopic.geoValues;
+    }
+
+    const fallbackTopic = topicMap[fallbackId] ?? Object.values(topicMap).find((topic) => topic.datasetCode === fallbackId);
+    if (fallbackTopic && Array.isArray(fallbackTopic.geoValues) && fallbackTopic.geoValues.length > 0) {
+      return fallbackTopic.geoValues;
+    }
+
+    return [];
   };
 
   const handleExportDefaults = async () => {
@@ -143,11 +185,17 @@ export function AdminPanel({
       }
 
       // fallback: export from local state
+      const chartDefaultsByTopicId: Record<string, string[]> = {};
+      for (const topicId of defaultTopicIds) {
+        const exportTopicId = getFallbackTopicId(topicId);
+        chartDefaultsByTopicId[exportTopicId] = getDefaultGeos(topicId);
+      }
+
       const payload = {
         userId: 'anonymous',
         dashboard: dashboardProp,
         topicIds: defaultTopicIds,
-        chartDefaultsByTopicId: defaultChartGeoValuesByTopicId,
+        chartDefaultsByTopicId,
         updatedAt: new Date().toISOString(),
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -166,24 +214,75 @@ export function AdminPanel({
     }
   };
 
+  function normalizeTopicId(rawTopicId: string): string {
+    if (topicMap[rawTopicId]) {
+      return rawTopicId;
+    }
+
+    const mapped = Object.values(topicMap).find((topic) => topic.datasetCode === rawTopicId);
+    if (mapped) {
+      return mapped.id;
+    }
+
+    const catalogMatch = catalog.find((entry) => entry.code === rawTopicId);
+    if (catalogMatch) {
+      return catalogMatch.code;
+    }
+
+    return rawTopicId;
+  }
+
   const handleImportDefaults = (file: File | null) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const text = String(reader.result ?? '');
-        const parsed = JSON.parse(text) as any;
+        const parsed = JSON.parse(text) as { topicIds?: unknown; chartDefaultsByTopicId?: unknown };
         if (!Array.isArray(parsed.topicIds)) throw new Error('Invalid file: missing topicIds array');
-      const chartDefaultsRaw = typeof parsed.chartDefaultsByTopicId === 'object' && parsed.chartDefaultsByTopicId ? parsed.chartDefaultsByTopicId : {};
-      const chartDefaults: Record<string, string[]> = {};
-      for (const [topicId, value] of Object.entries(chartDefaultsRaw)) {
-        if (Array.isArray(value)) {
-          chartDefaults[topicId] = value.filter((item): item is string => typeof item === 'string');
-        } else if (value && typeof value === 'object' && Array.isArray((value as any).geoValues)) {
-          chartDefaults[topicId] = (value as any).geoValues.filter((item: unknown): item is string => typeof item === 'string');
+
+        const topicIds = parsed.topicIds
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
+          .filter((item): item is string => item.length > 0);
+
+        const normalizedTopicIds: string[] = Array.from(new Set(topicIds.map((id) => normalizeTopicId(id))));
+
+        const chartDefaultsRaw =
+          parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object'
+            ? (parsed.chartDefaultsByTopicId as Record<string, unknown>)
+            : {};
+
+        const chartDefaults: Record<string, string[]> = {};
+
+        for (const rawTopicId of topicIds) {
+          const topicId = normalizeTopicId(rawTopicId);
+          const item = chartDefaultsRaw[topicId] ?? chartDefaultsRaw[rawTopicId];
+          if (!item) continue;
+
+          const values = Array.isArray(item)
+            ? item.filter((entry): entry is string => typeof entry === 'string')
+            : Array.isArray((item as any).geoValues)
+            ? ((item as any).geoValues as unknown[]).filter((entry): entry is string => typeof entry === 'string')
+            : [];
+
+          if (values.length === 0) continue;
+
+          const merged = Array.from(new Set([...(chartDefaults[topicId] ?? []), ...values]));
+          chartDefaults[topicId] = merged;
+
+          if (topicId !== rawTopicId) {
+            chartDefaults[rawTopicId] = merged;
+          }
         }
-      }
-        setDefaultTopicIds(parsed.topicIds);
+
+        // Ensure each topicId has some array, even empty.
+        normalizedTopicIds.forEach((topicId) => {
+          if (!chartDefaults[topicId]) {
+            chartDefaults[topicId] = [];
+          }
+        });
+
+        setDefaultTopicIds(normalizedTopicIds);
         setDefaultChartGeoValuesByTopicId(chartDefaults);
         alert('Imported defaults into local storage');
       } catch (err) {
@@ -202,17 +301,25 @@ export function AdminPanel({
       .filter((value, index, arr) => value.length > 0 && arr.indexOf(value) === index)
       .slice(0, 12);
 
+    const normalizedTopicId = normalizeTopicId(topicId);
+
     setDefaultChartGeoValuesByTopicId((existing) => {
+      const next = { ...existing };
+
       if (geoValues.length === 0) {
-        if (!(topicId in existing)) return existing;
-        const next = { ...existing };
         delete next[topicId];
+        if (normalizedTopicId !== topicId) {
+          delete next[normalizedTopicId];
+        }
         return next;
       }
-      return {
-        ...existing,
-        [topicId]: geoValues,
-      };
+
+      next[topicId] = geoValues;
+      if (normalizedTopicId !== topicId) {
+        next[normalizedTopicId] = geoValues;
+      }
+
+      return next;
     });
   };
 

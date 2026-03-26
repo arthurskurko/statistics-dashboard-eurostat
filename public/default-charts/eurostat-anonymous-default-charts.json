@@ -6,14 +6,43 @@
     "unemployment-rate",
     "inflation",
     "immigration",
-    "tgs00045",
-    "sdg_16_70"
+    "sdg_16_70",
+    "induced-abortions",
+    "ei_isset_q"
   ],
   "chartDefaultsByTopicId": {
-    "population": {
+    "ei_isset_q": {
+      "geoValues": [
+        "EE",
+        "FI"
+      ]
+    },
+    "immigration": {
+      "geoValues": [
+        "EE",
+        "DE"
+      ]
+    },
+    "induced-abortions": {
       "geoValues": [
         "EE",
         "EU27_2020",
+        "GE",
+        "LV"
+      ]
+    },
+    "inflation": {
+      "geoValues": [
+        "EE",
+        "LV",
+        "HU",
+        "PL",
+        "FR"
+      ]
+    },
+    "population": {
+      "geoValues": [
+        "EE",
         "FI",
         "UK",
         "ES"
@@ -34,5 +63,5 @@
       ]
     }
   },
-  "updatedAt": "2026-03-24T23:14:30Z"
+  "updatedAt": "2026-03-26T11:20:27Z"
 }

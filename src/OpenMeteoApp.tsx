@@ -18,7 +18,7 @@ const DEFAULT_CHART_TOPIC_IDS = ['meteo-temp-mean', 'meteo-temp-max', 'meteo-pre
 const OPEN_METEO_DEFAULT_GEOS = ['TLL', 'HEL'];
 const OPEN_METEO_SOURCE_URL_BUILDER = () => 'https://open-meteo.com/en/docs';
 
-function createCard(topicId: string): DashboardCard {
+function createCard(topicId: string, defaultGeoValues?: string[]): DashboardCard {
   const id =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
@@ -28,6 +28,7 @@ function createCard(topicId: string): DashboardCard {
     id,
     topicId,
     createdAt: Date.now(),
+    defaultGeoValues,
   };
 }
 
@@ -68,17 +69,17 @@ export default function OpenMeteoApp() {
 
   useEffect(() => {
     if (shouldSeedDefaultsRef.current && cards.length === 0 && defaultTopicIds.length > 0) {
-      setCards(defaultTopicIds.map((topicId) => createCard(topicId)));
+      setCards(defaultTopicIds.map((topicId) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId])));
       shouldSeedDefaultsRef.current = false;
     }
-  }, [cards.length, defaultTopicIds, setCards]);
+  }, [cards.length, defaultTopicIds, defaultChartGeoValuesByTopicId, setCards]);
 
   function addCard() {
-    setCards((currentCards) => [createCard(selectedTopicId), ...currentCards]);
+    setCards((currentCards) => [createCard(selectedTopicId, defaultChartGeoValuesByTopicId[selectedTopicId]), ...currentCards]);
   }
 
   function addCardForTopicId(topicId: string) {
-    setCards((currentCards) => [createCard(topicId), ...currentCards]);
+    setCards((currentCards) => [createCard(topicId, defaultChartGeoValuesByTopicId[topicId]), ...currentCards]);
   }
 
   function clearCards() {
@@ -88,8 +89,21 @@ export default function OpenMeteoApp() {
   function addDefaultCards() {
     setCards((currentCards) => {
       if (currentCards.length > 0) return currentCards;
-      return [...defaultTopicIds.map((topicId) => createCard(topicId))];
+      return [...defaultTopicIds.map((topicId) => createCard(topicId, defaultChartGeoValuesByTopicId[topicId]))];
     });
+  }
+
+  function normalizeTopicId(rawTopicId: string): string {
+    if (rawTopicId in OPEN_METEO_TOPIC_MAP) {
+      return rawTopicId;
+    }
+
+    const match = OPEN_METEO_TOPICS.find((topic) => topic.datasetCode === rawTopicId);
+    if (match) {
+      return match.id;
+    }
+
+    return rawTopicId;
   }
 
   async function loadDefaultsFromFileAndAddCards() {
@@ -99,10 +113,35 @@ export default function OpenMeteoApp() {
 
     const parsed = await loadDefaultChartsFromCandidates(candidates, dashboard);
     if (parsed) {
+      const normalizedTopicIds = Array.from(new Set((parsed.topicIds ?? []).map(normalizeTopicId)));
+      const mapped: Record<string, string[]> = {};
+
       if (parsed.chartDefaultsByTopicId && typeof parsed.chartDefaultsByTopicId === 'object') {
-        setDefaultChartGeoValuesByTopicId(parsed.chartDefaultsByTopicId as Record<string, string[]>);
+        for (const rawTopicId of parsed.topicIds ?? []) {
+          const topicId = normalizeTopicId(rawTopicId);
+          const tpl = parsed.chartDefaultsByTopicId[rawTopicId] ?? parsed.chartDefaultsByTopicId[topicId];
+
+          if (Array.isArray(tpl)) {
+            mapped[topicId] = tpl.filter((v: unknown): v is string => typeof v === 'string');
+            continue;
+          }
+
+          const geo = (tpl as any)?.geoValues;
+          mapped[topicId] = Array.isArray(geo)
+            ? geo.filter((v: unknown): v is string => typeof v === 'string')
+            : [];
+        }
       }
-      setCards(parsed.topicIds.map((topicId: string) => createCard(topicId)));
+
+      for (const topicId of normalizedTopicIds) {
+        if (!(topicId in mapped)) {
+          mapped[topicId] = [];
+        }
+      }
+
+      setDefaultChartGeoValuesByTopicId(mapped);
+      setDefaultTopicIds(normalizedTopicIds);
+      setCards(normalizedTopicIds.map((topicId: string) => createCard(topicId, mapped[topicId])));
       return;
     }
 
@@ -188,7 +227,7 @@ export default function OpenMeteoApp() {
           topicMap={OPEN_METEO_TOPIC_MAP}
           fetchTopicDataFn={fetchOpenMeteoTopicData}
           fetchAvailableGeosFn={fetchOpenMeteoAvailableGeosForTopic}
-          defaultGeoValues={OPEN_METEO_DEFAULT_GEOS}
+          defaultGeoValues={card.defaultGeoValues && card.defaultGeoValues.length > 0 ? card.defaultGeoValues : OPEN_METEO_DEFAULT_GEOS}
           fallbackDescriptionPrefix="Open-Meteo variable"
           sourceUrlBuilder={OPEN_METEO_SOURCE_URL_BUILDER}
           sourceLinkLabel="Open-Meteo docs"
