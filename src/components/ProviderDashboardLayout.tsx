@@ -103,6 +103,21 @@ export function ProviderDashboardLayout<T extends { id: string }>({
         ) : null}
       </div>
       <GlobalMusicTransport />
+
+      <div className="fixed right-4 top-4 z-50">
+        <div className="group relative">
+          <button
+            type="button"
+            aria-label="Tech stack info"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/30 bg-slate-900/80 text-sm font-semibold text-white backdrop-blur transition hover:bg-slate-800"
+          >
+            i
+          </button>
+          <div className="pointer-events-none absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-white/20 bg-slate-900/95 px-3 py-2 text-xs text-slate-100 opacity-0 shadow-lg transition duration-200 group-hover:opacity-100">
+            Built with React, TypeScript, Vite, Tailwind CSS, ECharts, React Query, Python (forecast scripts), and a Node/Go backend (Eurostat+WHO+WorldBank/Open-Meteo data).
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
