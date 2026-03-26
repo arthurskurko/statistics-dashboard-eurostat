@@ -106,7 +106,8 @@ export default defineConfig({
         target: 'https://ghoapi.azureedge.net',
         changeOrigin: true,
         secure: true,
-        rewrite: (path) => path.replace(/^\/api\/who/, ''),
+        // keep /api prefix for WHO endpoint; client uses /api/who/.. and we translate to /api/..
+        rewrite: (path) => path.replace(/^\/api\/who/, '/api'),
       },
     },
   },

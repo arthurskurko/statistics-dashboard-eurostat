@@ -237,11 +237,13 @@ function createWhoUrl(path: string): URL {
 
 function toProxiedWhoUrl(url: string, proxyRoot: string): string {
   if (url.startsWith(WHO_REMOTE_BASE)) {
-    return `${proxyRoot}/api${url.slice(WHO_REMOTE_BASE.length)}`;
+    // For WHO proxy root `/api/who`, this yields `/api/who/WHOSIS_...` (without double `/api`).
+    return `${proxyRoot}${url.slice(WHO_REMOTE_BASE.length)}`;
   }
 
   if (url.startsWith('/api/')) {
-    return `${proxyRoot}${url}`;
+    // Allow generic API path rewrite via proxy root.
+    return `${proxyRoot}${url.slice('/api'.length)}`;
   }
 
   return url;
