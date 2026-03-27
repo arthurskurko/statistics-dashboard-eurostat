@@ -1,5 +1,6 @@
 import React from 'react';
 import { FractalEngine, type FractalStepInfo } from './fractal/fractalEngine';
+import { FractalFaceVisualizer } from './fractal/FractalFaceVisualizer';
 
 type GlobalMusicState = {
   cardId: string;
@@ -24,6 +25,8 @@ export function GlobalMusicTransport() {
   const [playingCount, setPlayingCount] = React.useState(0);
   const [lastCardId, setLastCardId] = React.useState<string | null>(null);
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [fractalMode, setFractalMode] = React.useState<'2d' | '3d'>('2d');
+  const [musicAudioData, setMusicAudioData] = React.useState<number[]>([]);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const modalCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const fractalEngineRef = React.useRef(new FractalEngine());
@@ -93,6 +96,11 @@ export function GlobalMusicTransport() {
       if (nextPlayingCount !== playingCountRef.current) {
         playingCountRef.current = nextPlayingCount;
         setPlayingCount(nextPlayingCount);
+      }
+
+      if (detail.stepInfo && Array.isArray(detail.stepInfo.points)) {
+        const normalized = detail.stepInfo.points.map((p) => Math.min(1, Math.max(0, p.value / 100)));
+        setMusicAudioData(normalized);
       }
 
       if (detail.playing && detail.stepInfo && modalOpenRef.current) {
@@ -315,7 +323,22 @@ export function GlobalMusicTransport() {
         <div className="pointer-events-auto fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/80 p-4">
           <div className="relative w-full max-w-[600px] overflow-hidden rounded-3xl border border-amber-400/30 bg-slate-950/90 shadow-2xl shadow-amber-900/30">
             <div className="flex items-center justify-between border-b border-amber-400/20 px-4 py-3 text-amber-100">
-              <div className="text-sm uppercase tracking-[0.15em] text-amber-200/90">Fractal Forest</div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFractalMode('2d')}
+                  className={`rounded-md px-2 py-1 text-xs font-semibold ${fractalMode === '2d' ? 'bg-amber-300/20 text-amber-100' : 'text-amber-200/80 hover:text-amber-100'}`}
+                >
+                  Forest (2D)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFractalMode('3d')}
+                  className={`rounded-md px-2 py-1 text-xs font-semibold ${fractalMode === '3d' ? 'bg-amber-300/20 text-amber-100' : 'text-amber-200/80 hover:text-amber-100'}`}
+                >
+                  Faces 3D
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
@@ -326,7 +349,18 @@ export function GlobalMusicTransport() {
               </button>
             </div>
             <div className="relative h-[420px] w-full bg-slate-950/95">
-              <canvas ref={modalCanvasRef} className="h-full w-full" aria-hidden />
+              {fractalMode === '2d' ? (
+                <canvas ref={modalCanvasRef} className="h-full w-full" aria-hidden />
+              ) : (
+                <div className="h-full w-full">
+                  <FractalFaceVisualizer
+                    audioData={musicAudioData}
+                    pointCount={6500}
+                    recursionDepth={2}
+                    noiseAmount={0.5}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
