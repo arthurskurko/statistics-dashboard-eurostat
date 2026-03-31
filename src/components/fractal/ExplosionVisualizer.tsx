@@ -7,7 +7,8 @@ export type ExplosionVisualizerProps = {
   fullScreen?: boolean;
   explosionTrigger?: number;
   explosionSeed?: number;
-  explosionColor?: string;
+  explosionColors?: string[];
+  activeChartCount?: number;
 };
 
 const DEFAULT_MAX_PARTICLES = 5500;
@@ -26,13 +27,15 @@ export function ExplosionVisualizer({
   fullScreen = false,
   explosionTrigger = 0,
   explosionSeed = 1800,
-  explosionColor = '#9fe0ff',
+  explosionColors = ['#9fe0ff'],
+  activeChartCount = 1,
 }: ExplosionVisualizerProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const rendererRef = React.useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = React.useRef<THREE.Scene | null>(null);
   const cameraRef = React.useRef<THREE.PerspectiveCamera | null>(null);
   const animRef = React.useRef<number | null>(null);
+  const onResizeRef = React.useRef<(() => void) | null>(null);
 
   const particles = React.useRef({
     count: 0,
@@ -59,10 +62,10 @@ export function ExplosionVisualizer({
   React.useEffect(() => {
     if (explosionTrigger > explosionTriggerRef.current) {
       const seed = Math.max(8, Math.min(DEFAULT_MAX_PARTICLES, Math.floor(explosionSeed ?? 1800)));
-      spawnExplosionRef.current(seed, explosionColor);
+      spawnExplosionRef.current(seed);
     }
     explosionTriggerRef.current = explosionTrigger;
-  }, [explosionTrigger, explosionSeed, explosionColor]);
+  }, [explosionTrigger, explosionSeed, explosionColors]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -112,13 +115,19 @@ export function ExplosionVisualizer({
     cameraRef.current = camera;
     rendererRef.current = renderer;
 
-    const spawnExplosion = (seedValue: number, accentColor?: string) => {
+    const spawnExplosion = (seedValue: number) => {
       const clamped = Math.max(1, Math.min(DEFAULT_MAX_PARTICLES, Math.floor(seedValue)));
       // Max sensible per explosion so beats combine smoothly.
       const effectiveSpawn = Math.min(clamped, 260);
-      const center = randomVector3(4.0);
+      // Explosion origin is always randomized and not controlled by previous attractor.
+      const center = randomVector3(4.5);
 
-      const color = new THREE.Color(accentColor || explosionColor || '#9fe0ff');
+
+      const palette = explosionColors.length > 0 ? explosionColors : ['#9fe0ff'];
+      const piecewiseColor = (i: number) => {
+        const base = new THREE.Color(palette[i % palette.length]);
+        return base.offsetHSL((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.30, (Math.random() - 0.5) * 0.28);
+      };
 
       const getFreeIndex = () => {
         if (particles.current.count < pointCount) {
@@ -145,7 +154,7 @@ export function ExplosionVisualizer({
         particles.current.velocities[idx + 1] = direction.y * speed;
         particles.current.velocities[idx + 2] = direction.z * speed;
 
-        const shade = new THREE.Color(color).offsetHSL((Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2);
+        const shade = piecewiseColor(i);
         particles.current.baseColors[idx] = shade.r;
         particles.current.baseColors[idx + 1] = shade.g;
         particles.current.baseColors[idx + 2] = shade.b;
@@ -161,8 +170,9 @@ export function ExplosionVisualizer({
       particles.current.attractors.unshift({ position: center.clone(), strength: 1.4, age: 0 });
       if (particles.current.attractors.length > 8) particles.current.attractors.pop();
       // Move the global target instantly to the latest explosion center for pronounced pull.
+      // Main attractor jumps to explosion center immediately.
       particles.current.target.copy(center);
-      particles.current.attractionStrength = Math.min(0.070, particles.current.attractionStrength + 0.018);
+      particles.current.attractionStrength = Math.min(0.220, particles.current.attractionStrength + 0.04);
       particles.current.lastExplosion = performance.now();
     };
 
@@ -203,42 +213,45 @@ export function ExplosionVisualizer({
           lifeVal = 0;
         }
 
-        // attraction to all recent explosion points
-        let attractionX = 0;
-        let attractionY = 0;
-        let attractionZ = 0;
+        // Older particles stay influenced, but new particles pull strongly to the main target.
+        const dx = particles.current.target.x - px;
+        const dy = particles.current.target.y - py;
+        const dz = particles.current.target.z - pz;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.0001;
+
+        const targetPull = 0.075 + particles.current.attractionStrength * 1.2;
+        const ageFactor = 0.35 + (1 - lifeVal) * 0.95;
+
+        vx += (dx / distance) * targetPull * ageFactor * 1.4;
+        vy += (dy / distance) * targetPull * ageFactor * 1.4;
+        vz += (dz / distance) * targetPull * ageFactor * 1.4;
+
+        // decaying attractor list for fast point repositioning.
         for (let a = 0; a < particles.current.attractors.length; a += 1) {
           const attractor = particles.current.attractors[a];
-          const dx = attractor.position.x - px;
-          const dy = attractor.position.y - py;
-          const dz = attractor.position.z - pz;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.0001;
-          const influence = (attractor.strength / (0.3 + dist)) * (1 - Math.min(1, attractor.age * 0.65));
-          attractionX += dx * influence;
-          attractionY += dy * influence;
-          attractionZ += dz * influence;
-
-          attractor.age += dt * 0.3;
-          attractor.strength = Math.max(0, attractor.strength - dt * 0.16);
+          attractor.age += dt * 0.35;
+          attractor.strength = Math.max(0, attractor.strength - dt * 0.20);
         }
-
-        vx += attractionX * 0.95;
-        vy += attractionY * 0.95;
-        vz += attractionZ * 0.95;
 
         // Great attractor at origin + additional pulsing from recent explosion centers.
         const gx = -px;
         const gy = -py;
         const gz = -pz;
         const gdist = Math.sqrt(gx * gx + gy * gy + gz * gz) + 0.0001;
-        const gforce = Math.min(0.12, 0.75 / (gdist * (1 + particles.current.attractors.length * 0.06)));
-        vx += gx / gdist * gforce;
-        vy += gy / gdist * gforce;
-        vz += gz / gdist * gforce;
+        const gforce = Math.min(0.14, 0.95 / (gdist * (1 + particles.current.attractors.length * 0.04)));
+        const globalScale = 0.25 + (1 - lifeVal) * 0.95; // allow fresh particles to escape initial center lock
+        vx += gx / gdist * gforce * globalScale;
+        vy += gy / gdist * gforce * globalScale;
+        vz += gz / gdist * gforce * globalScale;
 
-        // Keep target moveable, not static, to “drift to latest explosion”.
-        particles.current.target.lerp(particles.current.attractors[0]?.position || particles.current.target, 0.28);
-
+        // Main attractor gets set once per frame from latest explosion center and stays strong.
+        if (particles.current.attractors.length > 0) {
+          const activeAttractor = particles.current.attractors[0];
+          const wobble = randomVector3(0.15);
+          particles.current.target.copy(activeAttractor.position).add(wobble);
+        } else {
+          particles.current.target.lerp(new THREE.Vector3(0, 0, 0), 0.12);
+        }
 
         // swirling fractal motion (per-point vortex around latest target)
         const dxT = particles.current.target.x - px;
@@ -250,7 +263,7 @@ export function ExplosionVisualizer({
         vz += (-dxT * 0.14 + dyT * 0.12) * twist;
 
         // Additional soft swirl based on target direction.
-        const swirlStrength = 0.001 + Math.min(0.006, particles.current.attractionStrength);
+        const swirlStrength = 0.041 + Math.min(0.006, particles.current.attractionStrength);
         vx += (-dyT * 0.35 + dzT * 0.18) * swirlStrength;
         vy += (dxT * 0.35 - dzT * 0.14) * swirlStrength;
         vz += (-dxT * 0.18 + dyT * 0.14) * swirlStrength;
@@ -290,7 +303,8 @@ export function ExplosionVisualizer({
         particles.current.velocities[ix + 2] = vz;
 
         // life / fade logic per particle
-        let currentLife = Math.max(0, particles.current.life[i] - 0.00012);
+        const fadeRate = 0.00112 + Math.min(0.00044, activeChartCount * 0.00008);
+        let currentLife = Math.max(0, particles.current.life[i] - fadeRate);
         particles.current.life[i] = currentLife;
 
         const br = particles.current.baseColors[ix];
@@ -332,7 +346,13 @@ export function ExplosionVisualizer({
       rendererRef.current.setSize(width, height);
     };
 
+    // Keep a stable resize callback reference for full-screen toggles
+    onResizeRef.current = onResize;
+
     window.addEventListener('resize', onResize);
+
+    // set initial size
+    onResize();
 
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current);
@@ -347,26 +367,67 @@ export function ExplosionVisualizer({
     };
   }, [maxParticles]);
 
-  const wrapperClass = fullScreen ? 'fixed inset-0 z-50 h-screen w-screen bg-black' : 'relative h-full w-full';
+  const [fullScreenMode, setFullScreenMode] = React.useState(fullScreen);
+  const wrapperRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    const onFullScreenChange = () => {
+      const fsElement = document.fullscreenElement || (document as any).webkitFullscreenElement || (document as any).mozFullScreenElement || (document as any).msFullscreenElement;
+      setFullScreenMode(Boolean(fsElement));
+      if (onResizeRef.current) onResizeRef.current();
+    };
+
+    window.addEventListener('fullscreenchange', onFullScreenChange);
+    window.addEventListener('webkitfullscreenchange', onFullScreenChange);
+    window.addEventListener('mozfullscreenchange', onFullScreenChange);
+    window.addEventListener('MSFullscreenChange', onFullScreenChange);
+
+    return () => {
+      window.removeEventListener('fullscreenchange', onFullScreenChange);
+      window.removeEventListener('webkitfullscreenchange', onFullScreenChange);
+      window.removeEventListener('mozfullscreenchange', onFullScreenChange);
+      window.removeEventListener('MSFullscreenChange', onFullScreenChange);
+    };
+  }, []);
+
+  const wrapperClass = fullScreenMode ? 'fixed inset-0 z-50 h-screen w-screen bg-black' : 'relative h-full w-full';
+
+  const toggleFullScreen = async () => {
+    if (!wrapperRef.current) return;
+
+    if (!fullScreenMode) {
+      const el = wrapperRef.current;
+      if (el.requestFullscreen) {
+        await el.requestFullscreen();
+      } else if ((el as any).webkitRequestFullscreen) {
+        await (el as any).webkitRequestFullscreen();
+      } else if ((el as any).mozRequestFullScreen) {
+        await (el as any).mozRequestFullScreen();
+      } else if ((el as any).msRequestFullscreen) {
+        await (el as any).msRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if ((document as any).webkitExitFullscreen) {
+        await (document as any).webkitExitFullscreen();
+      } else if ((document as any).mozCancelFullScreen) {
+        await (document as any).mozCancelFullScreen();
+      } else if ((document as any).msExitFullscreen) {
+        await (document as any).msExitFullscreen();
+      }
+    }
+  };
 
   return (
-    <div className={wrapperClass}>
-      <div className="absolute top-3 left-3 z-20 rounded-lg bg-black/55 p-2 text-xs text-white">
-        <div className="mb-2 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              const seed = Math.floor(1 + Math.random() * 5500);
-              spawnExplosionRef.current(seed);
-            }}
-            className="rounded bg-white/15 px-2 py-1 text-[10px] font-bold uppercase hover:bg-white/25"
-          >
-            Trigger Explosion
-          </button>
-          <span className="text-[10px]">Particles: {particles.current.count}/{DEFAULT_MAX_PARTICLES}</span>
-        </div>
-        <p className="text-[10px]">Auto explosion on beat (audio energy &gt; 0.22).</p>
-      </div>
+    <div ref={wrapperRef} className={wrapperClass}>
+      <button
+        type="button"
+        onClick={toggleFullScreen}
+        className="absolute top-3 right-3 z-30 rounded-md border border-white/20 bg-black/70 px-2 py-1 text-xs font-semibold text-white backdrop-blur-sm hover:bg-black/90"
+      >
+        {fullScreenMode ? 'Exit fullscreen' : 'Fullscreen'}
+      </button>
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );

@@ -30,7 +30,9 @@ export function GlobalMusicTransport() {
   const [musicAudioData, setMusicAudioData] = React.useState<number[]>([]);
   const [explosionTrigger, setExplosionTrigger] = React.useState(0);
   const [explosionSeed, setExplosionSeed] = React.useState(1800);
-  const [explosionColor, setExplosionColor] = React.useState('#9fe0ff');
+  const [explosionColors, setExplosionColors] = React.useState<string[]>(['#9fe0ff']);
+  const [activeChartCount, setActiveChartCount] = React.useState(0);
+  const chartAudioMapRef = React.useRef<Record<string, number[]>>({});
   const lastExplosionRef = React.useRef(0);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const modalCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -95,25 +97,83 @@ export function GlobalMusicTransport() {
         }
       } else {
         playingCardIdsRef.current.delete(detail.cardId);
+        delete chartAudioMapRef.current[detail.cardId];
       }
 
       const nextPlayingCount = playingCardIdsRef.current.size;
       if (nextPlayingCount !== playingCountRef.current) {
         playingCountRef.current = nextPlayingCount;
         setPlayingCount(nextPlayingCount);
+        setActiveChartCount(nextPlayingCount);
       }
 
       if (detail.stepInfo && Array.isArray(detail.stepInfo.points)) {
         const normalized = detail.stepInfo.points.map((p) => Math.min(1, Math.max(0, p.value / 100)));
-        setMusicAudioData(normalized);
+        chartAudioMapRef.current[detail.cardId] = normalized;
 
-        // Trigger explosion once per small interval when multiple charts are playing.
-        const energy = normalized.reduce((sum, v) => sum + v, 0) / Math.max(1, normalized.length);
+        // Combine all currently playing chart audio into one aggregated profile.
+        const allAudio = Object.values(chartAudioMapRef.current);
+        const combinedLength = Math.max(1, Math.max(...allAudio.map((a) => a.length)));
+        const mergedAudio: number[] = Array.from({ length: combinedLength }, (_, i) => {
+          let sum = 0;
+          let count = 0;
+          for (const audio of allAudio) {
+            const val = audio[Math.min(i, audio.length - 1)];
+            if (typeof val === 'number') {
+              sum += val;
+              count += 1;
+            }
+          }
+          return count > 0 ? sum / count : 0;
+        });
+        setMusicAudioData(mergedAudio);
+
+        const energy = mergedAudio.reduce((sum, v) => sum + v, 0) / Math.max(1, mergedAudio.length);
         const seed = Math.max(100, Math.min(5500, Math.round(energy * 5500)));
 
-        // Inherit chart color from points if available.
-        const chartColor = detail.stepInfo.points[0]?.color || '#9fe0ff';
-        setExplosionColor(chartColor);
+        // Note mapping using octave-ish labels (if available), otherwise fallback weighted index.
+        let pitch = 0.5;
+        const octaveMatches: number[] = [];
+
+        detail.stepInfo.points.forEach((item) => {
+          if (item.seriesLabel) {
+            const match = item.seriesLabel.match(/([A-G](?:#|b)?)(\d+)/i);
+            if (match) {
+              const octave = Number(match[2]);
+              if (!Number.isNaN(octave)) octaveMatches.push(octave);
+            }
+          }
+        });
+
+        if (octaveMatches.length > 0) {
+          const minOctave = Math.min(...octaveMatches);
+          const maxOctave = Math.max(...octaveMatches);
+          const avgOctave = octaveMatches.reduce((a, b) => a + b, 0) / octaveMatches.length;
+          pitch = minOctave === maxOctave ? 0.5 : (avgOctave - minOctave) / (maxOctave - minOctave);
+        } else {
+          const totalValue = detail.stepInfo.points.reduce((total, item) => total + (item.value || 0), 0);
+          if (totalValue > 0) {
+            const weightedIndex = detail.stepInfo.points.reduce(
+              (acc, item, idx) => acc + (item.value || 0) * idx,
+              0,
+            );
+            pitch = weightedIndex / (totalValue * Math.max(1, detail.stepInfo.points.length - 1));
+          } else {
+            pitch = detail.stepInfo.points.length > 1 ? 0.5 : 0.5;
+          }
+        }
+
+        pitch = Math.max(0, Math.min(1, pitch));
+
+        // Inherit color palette from all points.
+        const palette = Array.from(
+          new Set(
+            detail.stepInfo.points
+              .map((p) => p.color)
+              .filter((c): c is string => typeof c === 'string' && c.trim().length > 0),
+          ),
+        );
+        setExplosionColors(palette.length ? palette : ['#9fe0ff']);
 
         const now = performance.now();
         if (now - lastExplosionRef.current > 120) {
@@ -394,7 +454,8 @@ export function GlobalMusicTransport() {
                     maxParticles={5500}
                     explosionTrigger={explosionTrigger}
                     explosionSeed={explosionSeed}
-                    explosionColor={explosionColor}
+                    explosionColors={explosionColors}
+                    activeChartCount={activeChartCount}
                   />
                 </div>
               )}
