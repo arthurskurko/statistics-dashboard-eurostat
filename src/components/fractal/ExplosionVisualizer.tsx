@@ -172,7 +172,7 @@ export function ExplosionVisualizer({
       // Move the global target instantly to the latest explosion center for pronounced pull.
       // Main attractor jumps to explosion center immediately.
       particles.current.target.copy(center);
-      particles.current.attractionStrength = Math.min(0.220, particles.current.attractionStrength + 0.04);
+      particles.current.attractionStrength = Math.min(0.120, particles.current.attractionStrength + 0.04);
       particles.current.lastExplosion = performance.now();
     };
 
