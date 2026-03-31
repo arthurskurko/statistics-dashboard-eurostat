@@ -1,6 +1,7 @@
 import React from 'react';
 import { FractalEngine, type FractalStepInfo } from './fractal/fractalEngine';
 import { FractalFaceVisualizer } from './fractal/FractalFaceVisualizer';
+import { ExplosionVisualizer } from './fractal/ExplosionVisualizer';
 
 type GlobalMusicState = {
   cardId: string;
@@ -25,8 +26,12 @@ export function GlobalMusicTransport() {
   const [playingCount, setPlayingCount] = React.useState(0);
   const [lastCardId, setLastCardId] = React.useState<string | null>(null);
   const [modalOpen, setModalOpen] = React.useState(false);
-  const [fractalMode, setFractalMode] = React.useState<'2d' | '3d'>('2d');
+  const [fractalMode, setFractalMode] = React.useState<'2d' | '3d' | 'explosions'>('2d');
   const [musicAudioData, setMusicAudioData] = React.useState<number[]>([]);
+  const [explosionTrigger, setExplosionTrigger] = React.useState(0);
+  const [explosionSeed, setExplosionSeed] = React.useState(1800);
+  const [explosionColor, setExplosionColor] = React.useState('#9fe0ff');
+  const lastExplosionRef = React.useRef(0);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const modalCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const fractalEngineRef = React.useRef(new FractalEngine());
@@ -101,6 +106,21 @@ export function GlobalMusicTransport() {
       if (detail.stepInfo && Array.isArray(detail.stepInfo.points)) {
         const normalized = detail.stepInfo.points.map((p) => Math.min(1, Math.max(0, p.value / 100)));
         setMusicAudioData(normalized);
+
+        // Trigger explosion once per small interval when multiple charts are playing.
+        const energy = normalized.reduce((sum, v) => sum + v, 0) / Math.max(1, normalized.length);
+        const seed = Math.max(100, Math.min(5500, Math.round(energy * 5500)));
+
+        // Inherit chart color from points if available.
+        const chartColor = detail.stepInfo.points[0]?.color || '#9fe0ff';
+        setExplosionColor(chartColor);
+
+        const now = performance.now();
+        if (now - lastExplosionRef.current > 120) {
+          setExplosionSeed(seed);
+          setExplosionTrigger((value) => value + 1);
+          lastExplosionRef.current = now;
+        }
       }
 
       if (detail.playing && detail.stepInfo && modalOpenRef.current) {
@@ -338,6 +358,13 @@ export function GlobalMusicTransport() {
                 >
                   Faces 3D
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setFractalMode('explosions')}
+                  className={`rounded-md px-2 py-1 text-xs font-semibold ${fractalMode === 'explosions' ? 'bg-amber-300/20 text-amber-100' : 'text-amber-200/80 hover:text-amber-100'}`}
+                >
+                  Explosions 3D
+                </button>
               </div>
               <button
                 type="button"
@@ -351,13 +378,23 @@ export function GlobalMusicTransport() {
             <div className="relative h-[420px] w-full bg-slate-950/95">
               {fractalMode === '2d' ? (
                 <canvas ref={modalCanvasRef} className="h-full w-full" aria-hidden />
-              ) : (
+              ) : fractalMode === '3d' ? (
                 <div className="h-full w-full">
                   <FractalFaceVisualizer
                     audioData={musicAudioData}
                     pointCount={6500}
                     recursionDepth={2}
                     noiseAmount={0.5}
+                  />
+                </div>
+              ) : (
+                <div className="h-full w-full">
+                  <ExplosionVisualizer
+                    audioData={musicAudioData}
+                    maxParticles={5500}
+                    explosionTrigger={explosionTrigger}
+                    explosionSeed={explosionSeed}
+                    explosionColor={explosionColor}
                   />
                 </div>
               )}
