@@ -109,6 +109,16 @@ export default defineConfig({
         // keep /api prefix for WHO endpoint; client uses /api/who/.. and we translate to /api/..
         rewrite: (path) => path.replace(/^\/api\/who/, '/api'),
       },
+      '/api/news': {
+        target: 'http://127.0.0.1:8090',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/api/news-proxy.php': {
+        target: 'http://127.0.0.1:8090',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   preview: {

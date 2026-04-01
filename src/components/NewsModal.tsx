@@ -146,20 +146,55 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
           const common = `?keyword=${encodeURIComponent(query)}`;
           const primary = (import.meta.env.VITE_NEWS_PROXY_URL || '').trim();
           if (primary) {
-            // primary can be e.g. http://localhost:8090/api/news (Go) or http://localhost:8000/news-proxy.php (PHP)
             return [`${primary.replace(/\/+$/, '')}${common}`];
           }
 
-          const goBackendUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8090').replace(/\/+$/,'');
-          // In dist deploy, fallback PHP proxy is placed inside /api/news-proxy.php
-          const phpBackendUrl = (import.meta.env.VITE_PHP_BACKEND_URL || '').replace(/\/+$/,'');
+          const goBackendUrlCandidate = (import.meta.env.VITE_BACKEND_URL || '').trim();
+          const phpBackendUrlCandidate = (import.meta.env.VITE_PHP_BACKEND_URL || '').trim();
 
-          const candidates = [`${goBackendUrl}/api/news${common}`];
-          candidates.push(`${phpBackendUrl || ''}/api/news-proxy.php${common}`);
-          return candidates.filter(Boolean);
+          const normalizedGo = goBackendUrlCandidate.replace(/\/+$/, '');
+          const normalizedPhp = phpBackendUrlCandidate.replace(/\/+$/, '');
+
+          // Priority: direct override (high), then PHP backend URL, then Go backend URL, then fallback.
+          if (normalizedPhp) {
+            let phpUrl = normalizedPhp;
+            if (phpUrl.endsWith('/api')) {
+              phpUrl = `${phpUrl}/news-proxy.php`;
+            } else if (phpUrl.endsWith('/news-proxy.php')) {
+              // already good
+            } else if (/\/api\/?$/.test(phpUrl)) {
+              phpUrl = phpUrl.replace(/\/api\/?$/, '/api/news-proxy.php');
+            } else {
+              phpUrl = `${phpUrl}/news-proxy.php`;
+            }
+            return [`${phpUrl}${common}`];
+          }
+
+          if (normalizedGo) {
+            let newsUrl = normalizedGo;
+            if (newsUrl.endsWith('/api/news')) {
+              // already good
+            } else if (newsUrl.endsWith('/api')) {
+              newsUrl = `${newsUrl}/news`;
+            } else if (/\/api\/?$/.test(newsUrl)) {
+              newsUrl = newsUrl.replace(/\/api\/?$/, '/api/news');
+            } else if (newsUrl.includes('/api/')) {
+              newsUrl = newsUrl.replace(/\/api\/.*/, '/api/news');
+            } else {
+              newsUrl = `${newsUrl}/api/news`;
+            }
+            return [`${newsUrl}${common}`];
+          }
+
+          // no explicit environment provided => best fallback list
+          return [`/api/news${common}`, `/api/news-proxy.php${common}`];
         }
 
         const apiCandidates = buildNewsApiCandidates(formattedQuery);
+
+        if (import.meta.env.DEV) {
+          console.debug('NewsModal apiCandidates', apiCandidates);
+        }
 
         let text = '';
         let lastError: Error | null = null;
