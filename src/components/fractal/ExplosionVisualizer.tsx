@@ -58,6 +58,32 @@ export function ExplosionVisualizer({
   const explosionColorsRef = React.useRef<string[]>(explosionColors);
   const explosionWeightRef = React.useRef<number>(explosionWeight);
 
+  const [baseAttraction, setBaseAttraction] = React.useState(0.12);
+  const [baseSwirl, setBaseSwirl] = React.useState(0.051);
+  const [trailsEnabled, setTrailsEnabled] = React.useState(true);
+  const [trailDecay, setTrailDecay] = React.useState(0.74);
+
+  const baseAttractionRef = React.useRef<number>(baseAttraction);
+  const baseSwirlRef = React.useRef<number>(baseSwirl);
+  const trailsEnabledRef = React.useRef<boolean>(trailsEnabled);
+  const trailDecayRef = React.useRef<number>(trailDecay);
+
+  React.useEffect(() => {
+    baseAttractionRef.current = baseAttraction;
+  }, [baseAttraction]);
+
+  React.useEffect(() => {
+    baseSwirlRef.current = baseSwirl;
+  }, [baseSwirl]);
+
+  React.useEffect(() => {
+    trailsEnabledRef.current = trailsEnabled;
+  }, [trailsEnabled]);
+
+  React.useEffect(() => {
+    trailDecayRef.current = trailDecay;
+  }, [trailDecay]);
+
   React.useEffect(() => {
     audioDataRef.current = audioData;
   }, [audioData]);
@@ -85,6 +111,7 @@ export function ExplosionVisualizer({
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x020512);
+
     const camera = new THREE.PerspectiveCamera(60, container.clientWidth / Math.max(1, container.clientHeight), 0.1, 260);
     camera.position.set(0, 0, 12);
 
@@ -93,6 +120,50 @@ export function ExplosionVisualizer({
     const pointsGeometry = new THREE.BufferGeometry();
     pointsGeometry.setAttribute('position', new THREE.BufferAttribute(particles.current.positions, 3));
     pointsGeometry.setAttribute('color', new THREE.BufferAttribute(particles.current.colors, 3));
+
+    // Full-screen blend quad for post-process trails
+    const blendScene = new THREE.Scene();
+    const blendCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+    const particleRenderTarget = new THREE.WebGLRenderTarget(container.clientWidth, container.clientHeight, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      format: THREE.RGBAFormat,
+    });
+    let trailRenderTarget = particleRenderTarget.clone();
+    let blendRenderTarget = particleRenderTarget.clone();
+
+    const blendUniforms = {
+      uCurrent: { value: null as THREE.Texture | null },
+      uPrevious: { value: null as THREE.Texture | null },
+      uDecay: { value: 0.74 },
+    };
+
+    const blendMaterial = new THREE.ShaderMaterial({
+      uniforms: blendUniforms,
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uCurrent;
+        uniform sampler2D uPrevious;
+        uniform float uDecay;
+        varying vec2 vUv;
+        void main() {
+          vec4 current = texture2D(uCurrent, vUv);
+          vec4 previous = texture2D(uPrevious, vUv) * uDecay;
+          gl_FragColor = max(current, previous);
+        }
+      `,
+      transparent: true,
+    });
+
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blendMaterial);
+    blendScene.add(quad);
 
     // Initially there are no particles, but we create the buffer full size.
     for (let i = 0; i < pointCount; i += 1) {
@@ -107,12 +178,14 @@ export function ExplosionVisualizer({
     }
 
     const material = new THREE.PointsMaterial({
-      size: 0.07,
+      size: 0.08,
       vertexColors: true,
       transparent: true,
       opacity: 1.0,
       sizeAttenuation: true,
-      depthWrite: true,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
     });
 
     const points = new THREE.Points(pointsGeometry, material);
@@ -185,7 +258,8 @@ export function ExplosionVisualizer({
       // Move the global target instantly to the latest explosion center for pronounced pull.
       // Main attractor jumps to explosion center immediately.
       particles.current.target.copy(center);
-      particles.current.attractionStrength = Math.min(0.120, particles.current.attractionStrength + 0.04 * explosionWeight);
+      const baseAttractionCurrent = baseAttractionRef.current;
+      particles.current.attractionStrength = Math.min(baseAttractionCurrent, particles.current.attractionStrength + 0.04 * explosionWeight);
       particles.current.lastExplosion = performance.now();
     };
 
@@ -276,7 +350,8 @@ export function ExplosionVisualizer({
         vz += (-dxT * 0.14 + dyT * 0.12) * twist;
 
         // Additional soft swirl based on target direction.
-        const swirlStrength = 0.051 + Math.min(0.006, particles.current.attractionStrength);
+        const baseSwirlCurrent = baseSwirlRef.current;
+        const swirlStrength = baseSwirlCurrent + Math.min(0.006, particles.current.attractionStrength);
         vx += (-dyT * 0.35 + dzT * 0.18) * swirlStrength;
         vy += (dxT * 0.35 - dzT * 0.14) * swirlStrength;
         vz += (-dxT * 0.18 + dyT * 0.14) * swirlStrength;
@@ -325,7 +400,7 @@ export function ExplosionVisualizer({
         const br = particles.current.baseColors[ix];
         const bg = particles.current.baseColors[ix + 1];
         const bb = particles.current.baseColors[ix + 2];
-        const fade = 0.5 + 0.5 * currentLife;
+        const fade = 0.75 + 0.25 * currentLife;
         // const fade = 1;
 
         colorAttr.array[ix] = br * fade;
@@ -347,7 +422,35 @@ export function ExplosionVisualizer({
         cameraRef.current.lookAt(0, 0, 0);
       }
 
-      rendererRef.current?.render(scene, camera);
+      const renderer = rendererRef.current;
+      if (renderer) {
+        if (trailsEnabledRef.current) {
+          // render particles to distinct texture
+          blendUniforms.uDecay.value = trailDecayRef.current;
+          renderer.setRenderTarget(particleRenderTarget);
+          renderer.clear();
+          renderer.render(scene, camera);
+
+          // blend particle+trail into output
+          blendUniforms.uCurrent.value = particleRenderTarget.texture;
+          blendUniforms.uPrevious.value = trailRenderTarget.texture;
+          renderer.setRenderTarget(blendRenderTarget);
+          renderer.clear();
+          renderer.render(blendScene, blendCamera);
+
+          // copy blend result to screen
+          renderer.setRenderTarget(null);
+          renderer.render(blendScene, blendCamera);
+
+          // swap trail buffer for next frame
+          const tmp = trailRenderTarget;
+          trailRenderTarget = blendRenderTarget;
+          blendRenderTarget = tmp;
+        } else {
+          renderer.setRenderTarget(null);
+          renderer.render(scene, camera);
+        }
+      }
       animRef.current = requestAnimationFrame(animate);
     };
 
@@ -360,6 +463,9 @@ export function ExplosionVisualizer({
       cameraRef.current.aspect = width / Math.max(1, height);
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(width, height);
+      particleRenderTarget.setSize(width, height);
+      trailRenderTarget.setSize(width, height);
+      blendRenderTarget.setSize(width, height);
     };
 
     // Keep a stable resize callback reference for full-screen toggles
@@ -436,6 +542,57 @@ export function ExplosionVisualizer({
       >
         {fullScreenMode ? 'Exit fullscreen' : 'Fullscreen'}
       </button>
+      <div className="absolute left-3 bottom-3 z-30 rounded-lg border border-white/20 bg-black/70 p-2 text-xs text-white backdrop-blur-sm">
+        <div className="mb-2">
+          <label className="flex items-center gap-2">
+            <span>Trails</span>
+            <input
+              type="checkbox"
+              checked={trailsEnabled}
+              onChange={(e) => setTrailsEnabled(e.target.checked)}
+              className="h-4 w-4"
+            />
+          </label>
+        </div>
+        <div className="mb-2">
+          <label className="block">Base Attraction: {baseAttraction.toFixed(2)}</label>
+          <input
+            type="range"
+            min={0.05}
+            max={0.3}
+            step={0.01}
+            value={baseAttraction}
+            onChange={(e) => setBaseAttraction(Number(e.target.value))}
+            className="w-full"
+          />
+        </div>
+        <div className="mb-2">
+          <label className="block">Base Swirl: {baseSwirl.toFixed(2)}</label>
+          <input
+            type="range"
+            min={0.02}
+            max={0.1}
+            step={0.01}
+            value={baseSwirl}
+            onChange={(e) => setBaseSwirl(Number(e.target.value))}
+            className="w-full"
+          />
+        </div>
+        {trailsEnabled && (
+          <div>
+            <label className="block">Trail Decay: {trailDecay.toFixed(2)}</label>
+            <input
+              type="range"
+              min={0.5}
+              max={0.98}
+              step={0.01}
+              value={trailDecay}
+              onChange={(e) => setTrailDecay(Number(e.target.value))}
+              className="w-full"
+            />
+          </div>
+        )}
+      </div>
       <div ref={containerRef} className="h-full w-full" />
     </div>
   );
