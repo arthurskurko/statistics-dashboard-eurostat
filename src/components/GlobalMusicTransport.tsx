@@ -422,17 +422,17 @@ export function GlobalMusicTransport() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFractalMode('3d')}
-                  className={`rounded-md px-2 py-1 text-xs font-semibold ${fractalMode === '3d' ? 'bg-amber-300/20 text-amber-100' : 'text-amber-200/80 hover:text-amber-100'}`}
-                >
-                  Faces 3D
-                </button>
-                <button
-                  type="button"
                   onClick={() => setFractalMode('explosions')}
                   className={`rounded-md px-2 py-1 text-xs font-semibold ${fractalMode === 'explosions' ? 'bg-amber-300/20 text-amber-100' : 'text-amber-200/80 hover:text-amber-100'}`}
                 >
                   Explosions 3D
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFractalMode('3d')}
+                  className={`rounded-md px-2 py-1 text-xs font-semibold ${fractalMode === '3d' ? 'bg-amber-300/20 text-amber-100' : 'text-amber-200/80 hover:text-amber-100'}`}
+                >
+                  Chaos 3D
                 </button>
               </div>
               <button

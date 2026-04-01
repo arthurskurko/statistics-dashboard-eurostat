@@ -1,10 +1,12 @@
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 
 type NewsItem = {
   title: string;
   link: string;
   pubDate: Date;
   source: string;
+  imageUrl?: string;
 };
 
 type NewsModalProps = {
@@ -40,6 +42,8 @@ function parseGoogleNewsRSS(rss: string): NewsItem[] {
       const linkNode = item.querySelector('link');
       const pubDateNode = item.querySelector('pubDate');
       const sourceNode = item.querySelector('source');
+      const mediaNode = item.querySelector('enclosure') || item.getElementsByTagName('media:content')[0] || item.getElementsByTagName('media\:content')[0];
+      const descriptionNode = item.querySelector('description');
 
       if (!titleNode || !linkNode || !pubDateNode) return null;
 
@@ -47,11 +51,21 @@ function parseGoogleNewsRSS(rss: string): NewsItem[] {
       const parsedDate = new Date(pubDateString);
       if (Number.isNaN(parsedDate.getTime())) return null;
 
+      let imageUrl = undefined;
+      if (mediaNode instanceof Element) {
+        imageUrl = mediaNode.getAttribute('url') || undefined;
+      }
+      if (!imageUrl && descriptionNode?.textContent) {
+        const match = descriptionNode.textContent.match(/<img[^>]+src=['"]([^'"]+)['"]/i);
+        if (match && match[1]) imageUrl = match[1];
+      }
+
       return {
         title: titleNode.textContent?.trim() ?? 'Untitled',
         link: linkNode.textContent?.trim() ?? '',
         pubDate: parsedDate,
         source: sourceNode?.textContent?.trim() ?? 'Unknown',
+        imageUrl,
       } as NewsItem;
     })
     .filter((value): value is NewsItem => value !== null)
@@ -66,13 +80,25 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = React.useState(keyword);
+  const [searchQuery, setSearchQuery] = React.useState(keyword);
+  const [timeRange, setTimeRange] = React.useState<'1d' | '7d' | '30d' | '360d' | 'all'>('30d');
+  const [queryRevision, setQueryRevision] = React.useState(0);
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
+    if (open) {
+      setSearchTerm(keyword);
+      setSearchQuery(keyword);
+      setQueryRevision((prev) => prev + 1);
+    }
+  }, [open, keyword]);
+
+  React.useEffect(() => {
     if (!open) return;
 
-    const normalizedKeyword = keyword.trim();
+    const normalizedKeyword = searchQuery.trim();
     if (!normalizedKeyword) {
       setAllItems([]);
       setVisibleItems([]);
@@ -80,15 +106,16 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
       return;
     }
 
-    function formatKeywordForGoogle(query: string) {
+    function formatKeywordForGoogle(query: string, timeframe: '1d' | '7d' | '30d' | '360d' | 'all') {
       const words = query
         .replace(/[\W_]+/g, ' ')
         .trim()
         .split(/\s+/)
         .filter(Boolean);
       if (words.length === 0) return '';
-      const searchQuery = `${words.join(' AND ')} when:30d`;
-      return searchQuery;
+      const base = words.join(' AND ');
+      if (timeframe === 'all') return base;
+      return `${base} when:${timeframe}`;
     }
 
     async function fetchData() {
@@ -96,8 +123,9 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
       setError(null);
 
       try {
-        if (cache.has(normalizedKeyword)) {
-          const cached = cache.get(normalizedKeyword) || [];
+        const cacheKey = `${normalizedKeyword}::${timeRange}`;
+        if (cache.has(cacheKey)) {
+          const cached = cache.get(cacheKey) || [];
           setAllItems(cached);
           setVisibleItems(cached.slice(0, PAGE_SIZE));
           setCurrentIndex(Math.min(PAGE_SIZE, cached.length));
@@ -105,7 +133,7 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
           return;
         }
 
-        const formattedQuery = formatKeywordForGoogle(normalizedKeyword);
+        const formattedQuery = formatKeywordForGoogle(normalizedKeyword, timeRange);
         if (!formattedQuery) {
           setAllItems([]);
           setVisibleItems([]);
@@ -156,7 +184,7 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
 
         const parsed = parseGoogleNewsRSS(text);
 
-        cache.set(normalizedKeyword, parsed);
+        cache.set(`${normalizedKeyword}::${timeRange}`, parsed);
 
         setAllItems(parsed);
         setVisibleItems(parsed.slice(0, PAGE_SIZE));
@@ -172,7 +200,7 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
     }
 
     fetchData();
-  }, [open, keyword]);
+  }, [open, searchQuery, timeRange, queryRevision]);
 
   const loadMore = React.useCallback(() => {
     if (currentIndex >= allItems.length) return;
@@ -207,13 +235,13 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
 
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="relative h-[80vh] w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl">
-        <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white p-4">
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-black/80 px-4 py-4 sm:py-6">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-white/20 bg-slate-950/95 shadow-2xl">
+        <div className="flex items-start justify-between border-b border-white/10 px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold">News for "{keyword}"</h2>
-            <p className="text-xs text-slate-500">{allItems.length} articles matched</p>
+            <h2 className="text-lg font-semibold">News search</h2>
+            <p className="text-xs text-slate-500">{allItems.length} articles found</p>
           </div>
           <button
             onClick={onClose}
@@ -224,7 +252,46 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
           </button>
         </div>
 
-        <div ref={containerRef} className="h-[calc(80vh-72px)] overflow-y-auto p-4">
+          <div className="sticky top-16 z-10 border-b border-white/10 bg-slate-950/95 p-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSearchQuery(searchTerm);
+              setQueryRevision((prev) => prev + 1);
+            }}
+            className="flex flex-col gap-2"
+          >
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+              placeholder="Search news keywords"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={timeRange}
+                onChange={(e) => setTimeRange(e.target.value as '1d' | '7d' | '30d' | '360d' | 'all')}
+                className="w-full rounded border border-slate-300 px-2 py-2 text-sm outline-none sm:w-auto"
+                aria-label="Time range"
+              >
+                <option value="1d">1 day</option>
+                <option value="7d">7 days</option>
+                <option value="30d">30 days</option>
+                <option value="360d">360 days</option>
+                <option value="all">Unlimited</option>
+              </select>
+              <button
+                type="submit"
+                className="w-full rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 sm:w-auto"
+              >
+              Search
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div ref={containerRef} className="h-[calc(80vh-112px)] overflow-y-auto p-4">
           {isLoading && (
             <div className="flex justify-center py-10">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
@@ -268,4 +335,6 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
