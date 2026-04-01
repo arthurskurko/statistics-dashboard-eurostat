@@ -14,6 +14,7 @@ import { ChartCardHeader } from './chart-card/ChartCardHeader';
 import { computeLatestValues, findDimensionValueLabel, type DimensionOption } from './chart-card/helpers';
 import { LatestValuesGrid } from './chart-card/LatestValuesGrid';
 import { MusicSettingsModal } from './chart-card/MusicSettingsModal';
+import { NewsModal } from './NewsModal';
 import { useChartMusic, type MusicVisualStepInfo } from './chart-card/useChartMusic';
 import { useCompactMobileLayout } from './chart-card/useCompactMobileLayout';
 
@@ -536,6 +537,9 @@ function ChartCardComponent({
     onVisualStep: applyMusicStepHighlights,
   });
 
+  const [newsModalOpen, setNewsModalOpen] = React.useState(false);
+  const [newsKeyword, setNewsKeyword] = React.useState('');
+
   const chartBuild = useMemo(() => {
     if (!filteredTopicData || filteredTopicData.series.length === 0 || renderSafetyWarning) {
       return { option: undefined, error: null as string | null };
@@ -667,6 +671,10 @@ function ChartCardComponent({
         availableGeoCandidates={availableGeoCandidates}
         isLoadingAvailableGeos={isLoadingAvailableGeos}
         onFetchAvailableGeos={fetchAndApplyAvailableGeos}
+        onOpenNews={(keyword) => {
+          setNewsKeyword(keyword);
+          setNewsModalOpen(true);
+        }}
       />
 
       {query.isLoading ? (
@@ -770,14 +778,25 @@ function ChartCardComponent({
 
           <div className="min-h-[22rem] min-w-0 flex-1 overflow-hidden rounded-3xl border border-border bg-slate-950/60 p-3">
             <ReactECharts
-            ref={chartRef}
-            option={chartBuild.option}
-            notMerge
-            lazyUpdate
-            autoResize
-            style={{ width: '100%', maxWidth: '100%', height: '100%', minHeight: '22rem' }}
-          />
+              ref={chartRef}
+              option={chartBuild.option}
+              notMerge
+              lazyUpdate
+              autoResize
+              onEvents={{
+                click: (params: any) => {
+                  if (params && typeof params.name === 'string') {
+                    const keyword = `${displayTitle}`.trim() || params.name;
+                    setNewsKeyword(keyword);
+                    setNewsModalOpen(true);
+                  }
+                },
+              }}
+              style={{ width: '100%', maxWidth: '100%', height: '100%', minHeight: '22rem' }}
+            />
           </div>
+
+          <NewsModal open={newsModalOpen} keyword={newsKeyword} onClose={() => setNewsModalOpen(false)} />
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-400">
             <span className="min-w-0 break-words">{query.data.subtitle}</span>

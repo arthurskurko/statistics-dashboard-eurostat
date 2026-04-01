@@ -26,6 +26,7 @@ type ChartCardHeaderProps = {
   availableGeoCandidates: Array<{ code: string; label: string }>;
   isLoadingAvailableGeos: boolean;
   onFetchAvailableGeos: () => void;
+  onOpenNews: (keyword: string) => void;
 };
 
 export function ChartCardHeader({
@@ -52,6 +53,7 @@ export function ChartCardHeader({
   availableGeoCandidates,
   isLoadingAvailableGeos,
   onFetchAvailableGeos,
+  onOpenNews,
 }: ChartCardHeaderProps) {
   const [geoInput, setGeoInput] = React.useState('');
   const hasDimensionFilters = Object.values(dimensionFilters).some((value) => Boolean(value));
@@ -129,13 +131,23 @@ export function ChartCardHeader({
               Search related studies
             </a>
           ) : null}
-
-          {!pubmedSearchUrl && (pubmed.references?.length ?? 0) === 0 ? (
-            <span className="text-slate-400">No curated PubMed references yet.</span>
-          ) : null}
-
-          {pubmed.note ? <span className="text-slate-400">{pubmed.note}</span> : null}
         </div>
+
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenNews(title)}
+            className="rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-1 text-indigo-200 transition hover:bg-indigo-500/20"
+          >
+            Open news modal
+          </button>
+        </div>
+
+        {!pubmedSearchUrl && (pubmed.references?.length ?? 0) === 0 ? (
+          <div className="text-slate-400">No curated PubMed references yet.</div>
+        ) : null}
+
+        {pubmed.note ? <div className="text-slate-400">{pubmed.note}</div> : null}
       </div>
 
       {forecastDisabledReason ? (

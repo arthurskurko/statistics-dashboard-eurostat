@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +37,7 @@ func NewServer(defaults *store.DefaultChartStore, forecastJobs *jobs.Manager, al
 	mux.HandleFunc("/api/default-charts/export", s.handleDefaultChartsExport)
 	mux.HandleFunc("/api/forecasts/run", s.handleForecastRun)
 	mux.HandleFunc("/api/forecasts/jobs/", s.handleForecastJobByID)
+	mux.HandleFunc("/api/news", s.handleNewsProxy)
 
 	return s.withMiddleware(mux)
 }
@@ -224,6 +226,45 @@ func (s *Server) handleForecastJobByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, job)
+}
+
+func (s *Server) handleNewsProxy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+
+	keyword := strings.TrimSpace(r.URL.Query().Get("keyword"))
+	if keyword == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "keyword required"})
+		return
+	}
+
+	terms := strings.Fields(strings.ReplaceAll(keyword, "%20", " "))
+	if len(terms) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid keyword"})
+		return
+	}
+
+	searchQuery := strings.Join(terms, " AND ") + " when:1d"
+	googleURL := fmt.Sprintf("https://news.google.com/rss/search?q=%s&hl=en-US&gl=US&ceid=US:en", url.QueryEscape(searchQuery))
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(googleURL)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		writeJSON(w, resp.StatusCode, map[string]string{"error": fmt.Sprintf("news service returned %d", resp.StatusCode)})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, resp.Body)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
