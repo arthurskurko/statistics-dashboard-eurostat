@@ -151,12 +151,12 @@ export function NewsModal({ open, keyword, onClose }: NewsModalProps) {
           }
 
           const goBackendUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:8090').replace(/\/+$/,'');
-          const phpBackendUrl = (import.meta.env.VITE_PHP_BACKEND_URL || 'http://localhost:8000').replace(/\/+$/,'');
+          // In dist deploy, fallback PHP proxy is placed inside /api/news-proxy.php
+          const phpBackendUrl = (import.meta.env.VITE_PHP_BACKEND_URL || '').replace(/\/+$/,'');
 
-          return [
-            `${goBackendUrl}/api/news${common}`,
-            `${phpBackendUrl}/news-proxy.php${common}`,
-          ];
+          const candidates = [`${goBackendUrl}/api/news${common}`];
+          candidates.push(`${phpBackendUrl || ''}/api/news-proxy.php${common}`);
+          return candidates.filter(Boolean);
         }
 
         const apiCandidates = buildNewsApiCandidates(formattedQuery);

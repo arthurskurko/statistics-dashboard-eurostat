@@ -1,6 +1,6 @@
 {
   "target": "stage",
-  "assetVersion": 362,
+  "assetVersion": 363,
   "baseByTarget": {
     "local": "/",
     "test": "/statistics/",
