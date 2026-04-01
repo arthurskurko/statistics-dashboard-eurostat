@@ -8,6 +8,7 @@ export type ExplosionVisualizerProps = {
   explosionTrigger?: number;
   explosionSeed?: number;
   explosionColors?: string[];
+  explosionWeight?: number;
   activeChartCount?: number;
 };
 
@@ -28,6 +29,7 @@ export function ExplosionVisualizer({
   explosionTrigger = 0,
   explosionSeed = 1800,
   explosionColors = ['#9fe0ff'],
+  explosionWeight = 1,
   activeChartCount = 1,
 }: ExplosionVisualizerProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -54,6 +56,7 @@ export function ExplosionVisualizer({
 
   const audioDataRef = React.useRef<number[]>(audioData);
   const explosionColorsRef = React.useRef<string[]>(explosionColors);
+  const explosionWeightRef = React.useRef<number>(explosionWeight);
 
   React.useEffect(() => {
     audioDataRef.current = audioData;
@@ -62,6 +65,10 @@ export function ExplosionVisualizer({
   React.useEffect(() => {
     explosionColorsRef.current = explosionColors;
   }, [explosionColors]);
+
+  React.useEffect(() => {
+    explosionWeightRef.current = explosionWeight;
+  }, [explosionWeight]);
 
   const explosionTriggerRef = React.useRef(0);
   React.useEffect(() => {
@@ -129,6 +136,7 @@ export function ExplosionVisualizer({
 
       const palette = explosionColorsRef.current.length > 0 ? explosionColorsRef.current : ['#9fe0ff'];
       const explosionBaseColor = palette[Math.floor(Math.random() * palette.length)];
+      const explosionWeight = Math.max(0.6, Math.min(2.5, explosionWeightRef.current));
       const piecewiseColor = () => {
         const base = new THREE.Color(explosionBaseColor);
         return base; // exact picked color
@@ -177,7 +185,7 @@ export function ExplosionVisualizer({
       // Move the global target instantly to the latest explosion center for pronounced pull.
       // Main attractor jumps to explosion center immediately.
       particles.current.target.copy(center);
-      particles.current.attractionStrength = Math.min(0.120, particles.current.attractionStrength + 0.04);
+      particles.current.attractionStrength = Math.min(0.120, particles.current.attractionStrength + 0.04 * explosionWeight);
       particles.current.lastExplosion = performance.now();
     };
 
@@ -224,7 +232,7 @@ export function ExplosionVisualizer({
         const dz = particles.current.target.z - pz;
         const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.0001;
 
-        const targetPull = 0.075 + particles.current.attractionStrength * 1.2;
+        const targetPull = (0.075 + particles.current.attractionStrength * 1.2) * (1 + particles.current.attractionStrength * 0.45);
         const ageFactor = 0.35 + (1 - lifeVal) * 0.95;
 
         vx += (dx / distance) * targetPull * ageFactor * 1.4;
@@ -244,7 +252,7 @@ export function ExplosionVisualizer({
         const gz = -pz;
         const gdist = Math.sqrt(gx * gx + gy * gy + gz * gz) + 0.0001;
         const gforce = Math.min(0.14, 0.95 / (gdist * (1 + particles.current.attractors.length * 0.04)));
-        const globalScale = 0.25 + (1 - lifeVal) * 0.95; // allow fresh particles to escape initial center lock
+        const globalScale = 1.25 + (1 - lifeVal) * 0.95; // allow fresh particles to escape initial center lock
         vx += gx / gdist * gforce * globalScale;
         vy += gy / gdist * gforce * globalScale;
         vz += gz / gdist * gforce * globalScale;
@@ -268,7 +276,7 @@ export function ExplosionVisualizer({
         vz += (-dxT * 0.14 + dyT * 0.12) * twist;
 
         // Additional soft swirl based on target direction.
-        const swirlStrength = 0.041 + Math.min(0.006, particles.current.attractionStrength);
+        const swirlStrength = 0.051 + Math.min(0.006, particles.current.attractionStrength);
         vx += (-dyT * 0.35 + dzT * 0.18) * swirlStrength;
         vy += (dxT * 0.35 - dzT * 0.14) * swirlStrength;
         vz += (-dxT * 0.18 + dyT * 0.14) * swirlStrength;
@@ -311,6 +319,8 @@ export function ExplosionVisualizer({
         const fadeRate = 0.00112 + Math.min(0.00044, activeChartCountRef.current * 0.00008);
         const currentLife = Math.max(0, particles.current.life[i] - fadeRate);
         particles.current.life[i] = currentLife;
+        // const tempexpand = 0.0001;
+        // particles.current.life[i] = currentLife - tempexpand;
 
         const br = particles.current.baseColors[ix];
         const bg = particles.current.baseColors[ix + 1];

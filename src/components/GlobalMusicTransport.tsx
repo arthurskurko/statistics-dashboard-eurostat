@@ -31,6 +31,7 @@ export function GlobalMusicTransport() {
   const [explosionTrigger, setExplosionTrigger] = React.useState(0);
   const [explosionSeed, setExplosionSeed] = React.useState(1800);
   const [explosionColors, setExplosionColors] = React.useState<string[]>(['#9fe0ff']);
+  const [explosionWeight, setExplosionWeight] = React.useState(1); // 1 = normal, >1 = heavy attraction
   const [activeChartCount, setActiveChartCount] = React.useState(0);
   const chartAudioMapRef = React.useRef<Record<string, number[]>>({});
   const chartColorMapRef = React.useRef<Record<string, string[]>>({});
@@ -132,6 +133,38 @@ export function GlobalMusicTransport() {
 
         const energy = mergedAudio.reduce((sum, v) => sum + v, 0) / Math.max(1, mergedAudio.length);
         const seed = Math.max(100, Math.min(5500, Math.round(energy * 5500)));
+
+        // Determine heaviness from highest note (pitch) in playing chart.
+        let pitch = 0.5;
+        const octaveMatches: number[] = [];
+        detail.stepInfo.points.forEach((item) => {
+          if (item.seriesLabel) {
+            const match = item.seriesLabel.match(/([A-G](?:#|b)?)(\d+)/i);
+            if (match) {
+              const octave = Number(match[2]);
+              if (!Number.isNaN(octave)) octaveMatches.push(octave);
+            }
+          }
+        });
+
+        if (octaveMatches.length > 0) {
+          const minOctave = Math.min(...octaveMatches);
+          const maxOctave = Math.max(...octaveMatches);
+          const avgOctave = octaveMatches.reduce((a, b) => a + b, 0) / octaveMatches.length;
+          pitch = minOctave === maxOctave ? 0.5 : (avgOctave - minOctave) / (maxOctave - minOctave);
+        } else {
+          const totalValue = detail.stepInfo.points.reduce((total, item) => total + (item.value || 0), 0);
+          if (totalValue > 0) {
+            const weightedIndex = detail.stepInfo.points.reduce(
+              (acc, item, idx) => acc + (item.value || 0) * idx,
+              0,
+            );
+            pitch = weightedIndex / (totalValue * Math.max(1, detail.stepInfo.points.length - 1));
+          }
+        }
+
+        pitch = Math.max(0, Math.min(1, pitch));
+        setExplosionWeight(0.8 + 1.4 * pitch); // 0.8..2.2
 
         // Inherit color palette from this chart’s points.
         const palette = Array.from(
@@ -431,6 +464,7 @@ export function GlobalMusicTransport() {
                     explosionTrigger={explosionTrigger}
                     explosionSeed={explosionSeed}
                     explosionColors={explosionColors}
+                    explosionWeight={explosionWeight}
                     activeChartCount={activeChartCount}
                   />
                 </div>
