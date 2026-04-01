@@ -53,10 +53,15 @@ export function ExplosionVisualizer({
   const spawnExplosionRef = React.useRef<(seedValue: number, accentColor?: string) => void>(() => {});
 
   const audioDataRef = React.useRef<number[]>(audioData);
+  const explosionColorsRef = React.useRef<string[]>(explosionColors);
 
   React.useEffect(() => {
     audioDataRef.current = audioData;
   }, [audioData]);
+
+  React.useEffect(() => {
+    explosionColorsRef.current = explosionColors;
+  }, [explosionColors]);
 
   const explosionTriggerRef = React.useRef(0);
   React.useEffect(() => {
@@ -95,12 +100,12 @@ export function ExplosionVisualizer({
     }
 
     const material = new THREE.PointsMaterial({
-      size: 0.045,
+      size: 0.07,
       vertexColors: true,
       transparent: true,
-      opacity: 0.83,
+      opacity: 1.0,
       sizeAttenuation: true,
-      depthWrite: false,
+      depthWrite: true,
     });
 
     const points = new THREE.Points(pointsGeometry, material);
@@ -122,11 +127,11 @@ export function ExplosionVisualizer({
       // Explosion origin is always randomized and not controlled by previous attractor.
       const center = randomVector3(4.5);
 
-
-      const palette = explosionColors.length > 0 ? explosionColors : ['#9fe0ff'];
-      const piecewiseColor = (i: number) => {
-        const base = new THREE.Color(palette[i % palette.length]);
-        return base.offsetHSL((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.30, (Math.random() - 0.5) * 0.28);
+      const palette = explosionColorsRef.current.length > 0 ? explosionColorsRef.current : ['#9fe0ff'];
+      const explosionBaseColor = palette[Math.floor(Math.random() * palette.length)];
+      const piecewiseColor = () => {
+        const base = new THREE.Color(explosionBaseColor);
+        return base; // exact picked color
       };
 
       const getFreeIndex = () => {
@@ -154,7 +159,7 @@ export function ExplosionVisualizer({
         particles.current.velocities[idx + 1] = direction.y * speed;
         particles.current.velocities[idx + 2] = direction.z * speed;
 
-        const shade = piecewiseColor(i);
+        const shade = piecewiseColor();
         particles.current.baseColors[idx] = shade.r;
         particles.current.baseColors[idx + 1] = shade.g;
         particles.current.baseColors[idx + 2] = shade.b;
@@ -303,14 +308,15 @@ export function ExplosionVisualizer({
         particles.current.velocities[ix + 2] = vz;
 
         // life / fade logic per particle
-        const fadeRate = 0.00112 + Math.min(0.00044, activeChartCount * 0.00008);
-        let currentLife = Math.max(0, particles.current.life[i] - fadeRate);
+        const fadeRate = 0.00112 + Math.min(0.00044, activeChartCountRef.current * 0.00008);
+        const currentLife = Math.max(0, particles.current.life[i] - fadeRate);
         particles.current.life[i] = currentLife;
 
         const br = particles.current.baseColors[ix];
         const bg = particles.current.baseColors[ix + 1];
         const bb = particles.current.baseColors[ix + 2];
-        const fade = 0.16 + 0.84 * currentLife;
+        const fade = 0.5 + 0.5 * currentLife;
+        // const fade = 1;
 
         colorAttr.array[ix] = br * fade;
         colorAttr.array[ix + 1] = bg * fade;
@@ -369,10 +375,15 @@ export function ExplosionVisualizer({
 
   const [fullScreenMode, setFullScreenMode] = React.useState(fullScreen);
   const wrapperRef = React.useRef<HTMLDivElement | null>(null);
+  const activeChartCountRef = React.useRef(activeChartCount);
+
+  React.useEffect(() => {
+    activeChartCountRef.current = activeChartCount;
+  }, [activeChartCount]);
 
   React.useEffect(() => {
     const onFullScreenChange = () => {
-      const fsElement = document.fullscreenElement || (document as any).webkitFullscreenElement || (document as any).mozFullScreenElement || (document as any).msFullscreenElement;
+      const fsElement = document.fullscreenElement;
       setFullScreenMode(Boolean(fsElement));
       if (onResizeRef.current) onResizeRef.current();
     };
@@ -396,25 +407,12 @@ export function ExplosionVisualizer({
     if (!wrapperRef.current) return;
 
     if (!fullScreenMode) {
-      const el = wrapperRef.current;
-      if (el.requestFullscreen) {
-        await el.requestFullscreen();
-      } else if ((el as any).webkitRequestFullscreen) {
-        await (el as any).webkitRequestFullscreen();
-      } else if ((el as any).mozRequestFullScreen) {
-        await (el as any).mozRequestFullScreen();
-      } else if ((el as any).msRequestFullscreen) {
-        await (el as any).msRequestFullscreen();
+      if (wrapperRef.current?.requestFullscreen) {
+        await wrapperRef.current.requestFullscreen();
       }
     } else {
       if (document.exitFullscreen) {
         await document.exitFullscreen();
-      } else if ((document as any).webkitExitFullscreen) {
-        await (document as any).webkitExitFullscreen();
-      } else if ((document as any).mozCancelFullScreen) {
-        await (document as any).mozCancelFullScreen();
-      } else if ((document as any).msExitFullscreen) {
-        await (document as any).msExitFullscreen();
       }
     }
   };
